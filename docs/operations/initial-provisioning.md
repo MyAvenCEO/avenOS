@@ -163,9 +163,17 @@ If the Object Storage provider creates one of this generation's deterministic bu
 fails before Pulumi records ownership, the same apply exports the failed checkpoint, checks
 the two exact bucket names with a signed request, imports only an existing untracked bucket,
 and continues. A process interruption is handled by the same reconciliation when the saved
-setup resumes. Each exact bucket can enter this recovery path only once per apply, so an
-unrelated or persistent provider failure remains a visible error instead of becoming an
-unbounded retry. The setup never lists, guesses, or adopts an unrelated bucket name.
+setup resumes. Only an exact, independently confirmed bucket can enter this recovery path,
+and its provider-visibility retry is bounded. An unrelated or persistent provider failure
+therefore remains a visible error. The setup never lists, guesses, or adopts an unrelated
+bucket name.
+
+Hetzner can return the new bucket through its signed S3 API before the infrastructure
+provider's import read sees it. When that exact mismatch occurs, the setup keeps the current
+stage open and retries the import with increasing delays over an approximately five-minute
+window. The progress line names the confirmed bucket, delay, and retry count. Every retry
+repeats the signed exact-name check; a missing bucket, different name, permission failure,
+or any other provider error still stops immediately.
 
 The bootstrap applies Object Storage resources one at a time. This avoids concurrent bucket
 creation through the MinIO provider. The exact-state reconciliation above is still required

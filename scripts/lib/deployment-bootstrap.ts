@@ -125,6 +125,9 @@ export interface PolarWebhookRecord {
 export const BOOTSTRAP_PROGRESS_PREFIX = '::avenos-bootstrap-progress::'
 export const BOOTSTRAP_BUCKET_KINDS = ['state', 'backup'] as const
 export type BootstrapBucketKind = (typeof BOOTSTRAP_BUCKET_KINDS)[number]
+export const BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS = [
+	2_000, 4_000, 8_000, 15_000, 30_000, 30_000, 30_000, 60_000, 60_000, 60_000
+] as const
 
 export function pulumiStackIsListed(names: readonly string[], expected: string): boolean {
 	const shortName = expected.split('/').at(-1)
@@ -189,6 +192,18 @@ export function providerCreatedBootstrapBucketKinds(
 	return BOOTSTRAP_BUCKET_KINDS.filter((kind) => logicalNames.has(`${target}-${kind}`))
 }
 
+export function providerMissingImportedBootstrapBucketKinds(
+	output: string,
+	expected: Record<BootstrapBucketKind, string>
+): BootstrapBucketKind[] {
+	const missing = new Set<string>()
+	for (const match of output.matchAll(
+		/import error:\s+Preview failed:\s+resource '([^']+)' does not exist/gi
+	))
+		missing.add(match[1] as string)
+	return BOOTSTRAP_BUCKET_KINDS.filter((kind) => missing.has(expected[kind]))
+}
+
 export function trackedBootstrapBucketKinds(
 	stack: {
 		deployment?: { resources?: Array<{ type?: unknown; urn?: unknown }> }
@@ -216,11 +231,21 @@ export async function reconcileBootstrapBucketUpdate(options: {
 	inspect: () => Promise<BootstrapBucketSnapshot>
 	apply: (adopt: readonly BootstrapBucketKind[]) => Promise<void>
 	onAdopt?: (kinds: readonly BootstrapBucketKind[]) => void
+	onProviderVisibilityWait?: (options: {
+		kinds: readonly BootstrapBucketKind[]
+		retry: number
+		maxRetries: number
+		delayMs: number
+	}) => void
+	sleep?: (delayMs: number) => Promise<void>
 }): Promise<void> {
 	const attempted = new Set<BootstrapBucketKind>()
 	let providerReported: BootstrapBucketKind[] = []
 	let precedingError: unknown
 	let applyAttempts = 0
+	let allowRepeatedCandidates = false
+	let visibilityRetryKey = ''
+	let visibilityRetries = 0
 
 	for (;;) {
 		const snapshot = await options.inspect()
@@ -229,11 +254,16 @@ export async function reconcileBootstrapBucketUpdate(options: {
 			(kind) =>
 				!tracked.has(kind) && (snapshot.existing.includes(kind) || providerReported.includes(kind))
 		)
-		if (candidates.some((kind) => attempted.has(kind))) throw precedingError
+		if (candidates.some((kind) => attempted.has(kind)) && !allowRepeatedCandidates)
+			throw precedingError
+		const visibilityRetry = allowRepeatedCandidates
+		allowRepeatedCandidates = false
 		for (const kind of candidates) attempted.add(kind)
 		if (candidates.length > 0) options.onAdopt?.(candidates)
-		if (applyAttempts >= BOOTSTRAP_BUCKET_KINDS.length + 1) throw precedingError
-		applyAttempts += 1
+		if (!visibilityRetry) {
+			if (applyAttempts >= BOOTSTRAP_BUCKET_KINDS.length + 1) throw precedingError
+			applyAttempts += 1
+		}
 
 		try {
 			await options.apply(candidates)
@@ -250,10 +280,41 @@ export async function reconcileBootstrapBucketUpdate(options: {
 							])
 						]
 					: []
+			const providerInvisible =
+				typeof output === 'string'
+					? providerMissingImportedBootstrapBucketKinds(output, options.expected)
+					: []
+			const afterFailure =
+				providerReported.length === 0 || providerInvisible.length > 0
+					? await options.inspect()
+					: undefined
+			const afterTracked = new Set(afterFailure?.tracked ?? [])
+			const recoverable = (afterFailure?.existing ?? []).filter((kind) => !afterTracked.has(kind))
+			const exactImportsStillVisible =
+				candidates.length > 0 &&
+				candidates.every((kind) => providerInvisible.includes(kind) && recoverable.includes(kind))
+			if (exactImportsStillVisible) {
+				const key = candidates.join(',')
+				if (key !== visibilityRetryKey) {
+					visibilityRetryKey = key
+					visibilityRetries = 0
+				}
+				if (visibilityRetries >= BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length) throw error
+				const delayMs = BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS[visibilityRetries] as number
+				visibilityRetries += 1
+				options.onProviderVisibilityWait?.({
+					kinds: candidates,
+					retry: visibilityRetries,
+					maxRetries: BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length,
+					delayMs
+				})
+				await (options.sleep ?? ((delay) => new Promise((resolve) => setTimeout(resolve, delay))))(
+					delayMs
+				)
+				allowRepeatedCandidates = true
+				continue
+			}
 			if (providerReported.length === 0) {
-				const afterFailure = await options.inspect()
-				const afterTracked = new Set(afterFailure.tracked)
-				const recoverable = afterFailure.existing.filter((kind) => !afterTracked.has(kind))
 				if (recoverable.length === 0 || recoverable.every((kind) => attempted.has(kind)))
 					throw error
 			}

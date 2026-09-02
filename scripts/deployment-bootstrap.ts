@@ -326,6 +326,10 @@ for (const target of selectedTargets) {
 			onAdopt: (bucketsToAdopt) =>
 				updateProgress(
 					`Adopting the exact existing, untracked ${target} ${bucketsToAdopt.join(' and ')} bucket, then continuing the same apply.`
+				),
+			onProviderVisibilityWait: ({ kinds, retry, maxRetries, delayMs }) =>
+				updateProgress(
+					`Hetzner confirms the ${target} ${kinds.join(' and ')} bucket, but the infrastructure provider cannot see it yet; retrying in ${Math.ceil(delayMs / 1_000)}s (${retry}/${maxRetries}).`
 				)
 		})
 		const exportPath = resolve(outputDirectory, `bootstrap-state-${target}.json`)

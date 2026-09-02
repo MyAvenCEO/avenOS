@@ -82,9 +82,10 @@ bun run test:recovery
 - `test:bootstrap` proves bucket-policy isolation, namespaced GitHub configuration,
   all-event Polar webhook and product-manifest reconciliation, live-model catalog
   conversion, mode-`0600` recovery output, bounded recovery from either provider create
-  order, replacement of an orphaned salt-only Pulumi stack file without removing operator
-  settings, and exact-bucket teardown planning across every partial checkpoint state without
-  contacting a provider.
+  order, bounded retry while an exact signed bucket read leads the provider's import
+  visibility, replacement of an orphaned salt-only Pulumi stack file without removing
+  operator settings, and exact-bucket teardown planning across every partial checkpoint
+  state without contacting a provider.
 - `test:deploy` validates shell scripts, production Compose files, Caddy
   configuration, dependency order, non-root images, and secret-safe build contexts.
 - `test:recovery` creates source databases, takes encrypted backups, restores fresh

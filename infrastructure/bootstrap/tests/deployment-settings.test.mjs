@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import {
+	BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS,
 	bootstrapPulumiUpArgs,
 	collidingBootstrapBucketKinds,
 	deploymentConfigurationTargets,
@@ -16,6 +17,7 @@ import {
 	isRetryableGitHubError,
 	parseBootstrapProgress,
 	providerCreatedBootstrapBucketKinds,
+	providerMissingImportedBootstrapBucketKinds,
 	pulumiStackConfigFileName,
 	pulumiStackIsListed,
 	reconcileBootstrapBucketUpdate,
@@ -97,6 +99,34 @@ urn:pulumi:production::aven-bootstrap::minio:index/s3Bucket:S3Bucket::production
 	)
 })
 
+test('recognizes delayed import visibility only for exact expected bucket names', () => {
+	const expected = {
+		state: 'avenos-0123456789-1234567-identity-state',
+		backup: 'avenos-0123456789-1234567-identity-backup'
+	}
+	assert.deepEqual(
+		providerMissingImportedBootstrapBucketKinds(
+			"= minio:index:S3Bucket identity-state import error: Preview failed: resource 'avenos-0123456789-1234567-identity-state' does not exist",
+			expected
+		),
+		['state']
+	)
+	assert.deepEqual(
+		providerMissingImportedBootstrapBucketKinds(
+			"Preview failed: resource 'avenos-0123456789-1234567-identity-state' does not exist",
+			expected
+		),
+		[]
+	)
+	assert.deepEqual(
+		providerMissingImportedBootstrapBucketKinds(
+			"import error: Preview failed: resource 'someone-elses-bucket' does not exist",
+			expected
+		),
+		[]
+	)
+})
+
 test('converges after either bucket is created without entering the failed checkpoint', async () => {
 	for (const orphan of ['state', 'backup']) {
 		const physical = new Set()
@@ -145,6 +175,138 @@ test('adopts every exact untracked bucket left by an interrupted process', async
 		}
 	})
 	assert.deepEqual(calls, [['state']])
+})
+
+test('waits for provider visibility when signed reads still prove an exact bucket exists', async () => {
+	const calls = []
+	const waits = []
+	const tracked = new Set()
+	let failures = 2
+	await reconcileBootstrapBucketUpdate({
+		target: 'identity',
+		expected: { state: 'expected-state', backup: 'expected-backup' },
+		inspect: async () => ({ existing: ['state'], tracked: [...tracked] }),
+		apply: async (adopt) => {
+			calls.push([...adopt])
+			if (failures > 0) {
+				failures -= 1
+				const error = new Error('provider visibility is delayed')
+				error.commandOutput =
+					"= minio:index:S3Bucket identity-state import error: Preview failed: resource 'expected-state' does not exist"
+				throw error
+			}
+			tracked.add('state')
+		},
+		onProviderVisibilityWait: (event) => waits.push(event),
+		sleep: async (delayMs) => waits.push({ slept: delayMs })
+	})
+	assert.deepEqual(calls, [['state'], ['state'], ['state']])
+	assert.deepEqual(waits, [
+		{
+			kinds: ['state'],
+			retry: 1,
+			maxRetries: BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length,
+			delayMs: 2_000
+		},
+		{ slept: 2_000 },
+		{
+			kinds: ['state'],
+			retry: 2,
+			maxRetries: BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length,
+			delayMs: 4_000
+		},
+		{ slept: 4_000 }
+	])
+})
+
+test('converges when both serialized creates require delayed adoption', async () => {
+	const calls = []
+	const physical = new Set()
+	const tracked = new Set()
+	const invisibleOnce = new Set(['state', 'backup'])
+	await reconcileBootstrapBucketUpdate({
+		target: 'production',
+		expected: { state: 'expected-state', backup: 'expected-backup' },
+		inspect: async () => ({ existing: [...physical], tracked: [...tracked] }),
+		apply: async (adopt) => {
+			calls.push([...adopt])
+			if (adopt.length === 0) {
+				physical.add('state')
+				const error = new Error('state create lost its result')
+				error.commandOutput =
+					'expected non-nil error with nil state during Create of urn:pulumi:production::aven-bootstrap::minio:index/s3Bucket:S3Bucket::production-state'
+				throw error
+			}
+			const kind = adopt[0]
+			if (invisibleOnce.delete(kind)) {
+				const error = new Error(`${kind} import visibility is delayed`)
+				error.commandOutput = `= minio:index:S3Bucket production-${kind} import error: Preview failed: resource 'expected-${kind}' does not exist`
+				throw error
+			}
+			tracked.add(kind)
+			if (kind === 'state') {
+				physical.add('backup')
+				const error = new Error('backup create lost its result')
+				error.commandOutput =
+					'expected non-nil error with nil state during Create of urn:pulumi:production::aven-bootstrap::minio:index/s3Bucket:S3Bucket::production-backup'
+				throw error
+			}
+		},
+		sleep: async () => {}
+	})
+	assert.deepEqual(calls, [[], ['state'], ['state'], ['backup'], ['backup']])
+	assert.deepEqual([...physical].sort(), ['backup', 'state'])
+	assert.deepEqual([...tracked].sort(), ['backup', 'state'])
+})
+
+test('stops after the bounded provider-visibility window', async () => {
+	let calls = 0
+	let waits = 0
+	const original = new Error('provider visibility never converged')
+	original.commandOutput =
+		"= minio:index:S3Bucket identity-state import error: Preview failed: resource 'expected-state' does not exist"
+	await assert.rejects(
+		reconcileBootstrapBucketUpdate({
+			target: 'identity',
+			expected: { state: 'expected-state', backup: 'expected-backup' },
+			inspect: async () => ({ existing: ['state'], tracked: [] }),
+			apply: async () => {
+				calls += 1
+				throw original
+			},
+			sleep: async () => {
+				waits += 1
+			}
+		}),
+		(error) => error === original
+	)
+	assert.equal(calls, BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length + 1)
+	assert.equal(waits, BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length)
+})
+
+test('does not retry when the independent signed read no longer finds the import target', async () => {
+	let calls = 0
+	let inspections = 0
+	const original = new Error('provider cannot find an absent bucket')
+	original.commandOutput =
+		"= minio:index:S3Bucket identity-state import error: Preview failed: resource 'expected-state' does not exist"
+	await assert.rejects(
+		reconcileBootstrapBucketUpdate({
+			target: 'identity',
+			expected: { state: 'expected-state', backup: 'expected-backup' },
+			inspect: async () => {
+				inspections += 1
+				return { existing: inspections === 1 ? ['state'] : [], tracked: [] }
+			},
+			apply: async () => {
+				calls += 1
+				throw original
+			},
+			sleep: async () => assert.fail('an absent bucket must not enter the visibility wait')
+		}),
+		(error) => error === original
+	)
+	assert.equal(calls, 1)
 })
 
 test('derives exact adoption from every physical and checkpoint subset', async () => {
