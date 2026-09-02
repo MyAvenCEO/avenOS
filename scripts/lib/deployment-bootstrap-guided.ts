@@ -196,8 +196,13 @@ export function workflowFailureSummary(log: string): string | undefined {
 			(conflict) =>
 				`${conflict.name} ${conflict.type} blocks ${[...conflict.required].sort().join(' and ')}`
 		)
-		return `Hetzner DNS conflict: ${descriptions.join('; ')}. Remove the obsolete conflicting record(s) in the aven.ceo zone, then retry.`
+		const automatic = [...conflicts.values()].every(({ type }) => type === 'CNAME')
+		return automatic
+			? `Hetzner DNS conflict: ${descriptions.join('; ')}. Retry with the current setup; it removes only those obsolete CNAME record sets before applying the managed addresses.`
+			: `Hetzner DNS conflict: ${descriptions.join('; ')}. Remove the obsolete conflicting record(s) in the aven.ceo zone, then retry.`
 	}
+	if (/RRSet\(s\) already exist\(s\).*uniqueness_error/is.test(normalized))
+		return 'Hetzner DNS record sets already exist outside this Pulumi stack. Retry with the current setup; it adopts and updates the exact managed A and AAAA record sets automatically.'
 
 	const useful = normalized
 		.split(/\r?\n/)

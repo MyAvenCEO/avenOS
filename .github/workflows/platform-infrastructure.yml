@@ -81,6 +81,37 @@ jobs:
           [[ "$STATE_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]]
           test "$STATE_REGION" = hel1
           test "$STACK_NAME" = "organization/aven-platform/$TARGET"
+      - name: Install Pulumi CLI for DNS adoption
+        if: inputs.command == 'up' && matrix.target != 'identity'
+        uses: pulumi/actions@8e5e406f4007fca908480587cb9893c07090f58d # v7
+        with:
+          pulumi-version: 3.256.0
+      - name: Adopt existing managed DNS
+        if: inputs.command == 'up' && matrix.target != 'identity'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.PULUMI_STATE_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PULUMI_STATE_S3_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.PULUMI_STATE_S3_REGION }}
+          AWS_DEFAULT_REGION: ${{ vars.PULUMI_STATE_S3_REGION }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          PULUMI_BACKEND_URL: "s3://${{ vars.PULUMI_STATE_S3_BUCKET }}/avenos/platform?endpoint=${{ vars.PULUMI_STATE_S3_REGION }}.your-objectstorage.com&region=${{ vars.PULUMI_STATE_S3_REGION }}&s3ForcePathStyle=true&awssdk=v2"
+          PULUMI_STACK: ${{ vars.PULUMI_STACK }}
+          HETZNER_COMPUTE_TOKEN: ${{ secrets.HETZNER_COMPUTE_TOKEN }}
+          HETZNER_DNS_TOKEN: ${{ secrets.HETZNER_DNS_TOKEN }}
+          HETZNER_LOCATION: ${{ vars.HETZNER_LOCATION }}
+          HETZNER_SERVER_TYPE: ${{ vars.HETZNER_SERVER_TYPE }}
+          HETZNER_SERVER_ARCHITECTURE: amd64
+          HETZNER_OS_IMAGE: ${{ vars.HETZNER_OS_IMAGE }}
+          IDENTITY_SERVER_TYPE: ${{ vars.IDENTITY_SERVER_TYPE }}
+          PLATFORM_SERVER_TYPE: ${{ vars.PLATFORM_SERVER_TYPE }}
+          IDENTITY_VOLUME_SIZE_GB: ${{ vars.IDENTITY_VOLUME_SIZE_GB }}
+          PLATFORM_VOLUME_SIZE_GB: ${{ vars.PLATFORM_VOLUME_SIZE_GB }}
+          SSH_ALLOWED_CIDRS: ${{ vars.SSH_ALLOWED_CIDRS }}
+          DEPLOYMENT_TARGET: platform
+          DEPLOYMENT_ENVIRONMENT: ${{ matrix.target }}
+          PULUMI_SKIP_UPDATE_CHECK: "true"
+        run: node infrastructure/platform/src/adopt-dns.mjs
       - name: ${{ inputs.command }} infrastructure
         uses: pulumi/actions@8e5e406f4007fca908480587cb9893c07090f58d # v7
         env:
