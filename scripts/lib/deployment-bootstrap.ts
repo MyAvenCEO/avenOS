@@ -155,6 +155,44 @@ export async function ensureBootstrapBucketExists(options: {
 	)
 }
 
+export function isRetryableBootstrapStateBackendError(error: unknown): boolean {
+	const candidate = error as { commandOutput?: unknown; message?: unknown }
+	const output = [candidate.message, candidate.commandOutput]
+		.filter((value): value is string => typeof value === 'string')
+		.join('\n')
+	return (
+		/NoSuchBucket/i.test(output) &&
+		/(?:ListObjectsV2|could not (?:create stack|list bucket|list stacks))/i.test(output)
+	)
+}
+
+export async function retryBootstrapStateBackendMigration<T>(options: {
+	migrate: () => Promise<T>
+	onVisibilityWait?: (options: { retry: number; maxRetries: number; delayMs: number }) => void
+	sleep?: (delayMs: number) => Promise<void>
+}): Promise<T> {
+	for (let attempt = 0; ; attempt += 1) {
+		try {
+			return await options.migrate()
+		} catch (error) {
+			if (
+				!isRetryableBootstrapStateBackendError(error) ||
+				attempt >= BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length
+			)
+				throw error
+			const delayMs = BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS[attempt] as number
+			options.onVisibilityWait?.({
+				retry: attempt + 1,
+				maxRetries: BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length,
+				delayMs
+			})
+			await (options.sleep ?? ((delay) => new Promise((resolve) => setTimeout(resolve, delay))))(
+				delayMs
+			)
+		}
+	}
+}
+
 export function pulumiStackIsListed(names: readonly string[], expected: string): boolean {
 	const shortName = expected.split('/').at(-1)
 	return names.some((name) => name === expected || name === shortName)
@@ -249,6 +287,34 @@ export function trackedBootstrapBucketKinds(
 export interface BootstrapBucketSnapshot {
 	existing: readonly BootstrapBucketKind[]
 	tracked: readonly BootstrapBucketKind[]
+}
+
+export function bootstrapStackReadyForMigration(
+	stack: {
+		deployment?: {
+			pending_operations?: unknown[]
+			resources?: Array<{ type?: unknown; urn?: unknown; initErrors?: unknown[] }>
+		}
+	},
+	target: Target
+): boolean {
+	if ((stack.deployment?.pending_operations ?? []).length > 0) return false
+	const resources = stack.deployment?.resources ?? []
+	if (resources.some((resource) => (resource.initErrors ?? []).length > 0)) return false
+	const identities = new Set(
+		resources.flatMap((resource) => {
+			if (typeof resource.type !== 'string' || typeof resource.urn !== 'string') return []
+			return [`${resource.type}::${resource.urn.split('::').at(-1)}`]
+		})
+	)
+	return [
+		['pulumi:providers:minio', 'hetzner-object-storage'],
+		['minio:index/s3Bucket:S3Bucket', `${target}-state`],
+		['minio:index/s3Bucket:S3Bucket', `${target}-backup`],
+		['minio:index/s3BucketVersioning:S3BucketVersioning', `${target}-state-versioning`],
+		['minio:index/s3BucketPolicy:S3BucketPolicy', `${target}-state-policy`],
+		['minio:index/s3BucketPolicy:S3BucketPolicy', `${target}-backup-policy`]
+	].every(([type, name]) => identities.has(`${type}::${name}`))
 }
 
 export async function reconcileBootstrapBucketUpdate(options: {

@@ -6,6 +6,7 @@ import {
 	type BootstrapBucketKind,
 	type BootstrapInput,
 	bootstrapPulumiUpArgs,
+	bootstrapStackReadyForMigration,
 	deploymentConfigurationTargets,
 	encodeBootstrapProgress,
 	ensureBootstrapBucketExists,
@@ -21,6 +22,7 @@ import {
 	reconcileBootstrapBucketUpdate,
 	recoveryCsv,
 	removeSaltOnlyPulumiStackConfig,
+	retryBootstrapStateBackendMigration,
 	saveGeneratedSecrets,
 	selectedDeploymentTargets,
 	TARGETS,
@@ -321,40 +323,52 @@ for (const target of selectedTargets) {
 		updateProgress(
 			`Importing both exact ${target} buckets into Pulumi and applying access policies.`
 		)
-		await reconcileBootstrapBucketUpdate({
-			target,
-			expected: expectedBuckets,
-			confirmedExisting: confirmedBuckets,
-			inspect: async () => {
-				const currentStack = JSON.parse(
-					await run('pulumi', ['stack', 'export', '--stack', stack, '--cwd', bootstrapCwd], {
-						env: bootstrapEnvironment,
-						quiet: true
+		const localStack = JSON.parse(
+			await run('pulumi', ['stack', 'export', '--stack', stack, '--cwd', bootstrapCwd], {
+				env: bootstrapEnvironment,
+				quiet: true
+			})
+		) as unknown
+		if (bootstrapStackReadyForMigration(localStack as never, target)) {
+			updateProgress(
+				`Complete local ${target} bootstrap state found; resuming its remote migration without repeating the provider update.`
+			)
+		} else {
+			await reconcileBootstrapBucketUpdate({
+				target,
+				expected: expectedBuckets,
+				confirmedExisting: confirmedBuckets,
+				inspect: async () => {
+					const currentStack = JSON.parse(
+						await run('pulumi', ['stack', 'export', '--stack', stack, '--cwd', bootstrapCwd], {
+							env: bootstrapEnvironment,
+							quiet: true
+						})
+					) as unknown
+					return {
+						existing: await existingBootstrapBucketKinds(expectedBuckets, storage),
+						tracked: trackedBootstrapBucketKinds(currentStack as never, target)
+					}
+				},
+				apply: async (bucketsToAdopt) => {
+					await run('pulumi', bootstrapPulumiUpArgs(stack, bootstrapCwd), {
+						env: {
+							...bootstrapEnvironment,
+							OBJECT_STORAGE_ADOPT_EXISTING_BUCKETS: bucketsToAdopt.join(',')
+						},
+						capture: true
 					})
-				) as unknown
-				return {
-					existing: await existingBootstrapBucketKinds(expectedBuckets, storage),
-					tracked: trackedBootstrapBucketKinds(currentStack as never, target)
-				}
-			},
-			apply: async (bucketsToAdopt) => {
-				await run('pulumi', bootstrapPulumiUpArgs(stack, bootstrapCwd), {
-					env: {
-						...bootstrapEnvironment,
-						OBJECT_STORAGE_ADOPT_EXISTING_BUCKETS: bucketsToAdopt.join(',')
-					},
-					capture: true
-				})
-			},
-			onAdopt: (bucketsToAdopt) =>
-				updateProgress(
-					`Adopting the exact existing, untracked ${target} ${bucketsToAdopt.join(' and ')} bucket, then continuing the same apply.`
-				),
-			onProviderVisibilityWait: ({ kinds, retry, maxRetries, delayMs }) =>
-				updateProgress(
-					`Hetzner confirms the ${target} ${kinds.join(' and ')} bucket, but the infrastructure provider cannot see it yet; retrying in ${Math.ceil(delayMs / 1_000)}s (${retry}/${maxRetries}).`
-				)
-		})
+				},
+				onAdopt: (bucketsToAdopt) =>
+					updateProgress(
+						`Adopting the exact existing, untracked ${target} ${bucketsToAdopt.join(' and ')} bucket, then continuing the same apply.`
+					),
+				onProviderVisibilityWait: ({ kinds, retry, maxRetries, delayMs }) =>
+					updateProgress(
+						`Hetzner confirms the ${target} ${kinds.join(' and ')} bucket, but the infrastructure provider cannot see it yet; retrying in ${Math.ceil(delayMs / 1_000)}s (${retry}/${maxRetries}).`
+					)
+			})
+		}
 		const exportPath = resolve(outputDirectory, `bootstrap-state-${target}.json`)
 		await run(
 			'pulumi',
@@ -363,13 +377,21 @@ for (const target of selectedTargets) {
 		)
 		chmodSync(exportPath, 0o600)
 		updateProgress(`Moving the ${target} bootstrap state into its private state bucket.`)
-		await run('pulumi', ['login', remoteBackend], { env: bootstrapEnvironment })
-		await openPulumiStack(stack, bootstrapCwd, bootstrapEnvironment)
-		await run(
-			'pulumi',
-			['stack', 'import', '--stack', stack, '--cwd', bootstrapCwd, '--file', exportPath],
-			{ env: bootstrapEnvironment }
-		)
+		await retryBootstrapStateBackendMigration({
+			migrate: async () => {
+				await run('pulumi', ['login', remoteBackend], { env: bootstrapEnvironment })
+				await openPulumiStack(stack, bootstrapCwd, bootstrapEnvironment)
+				await run(
+					'pulumi',
+					['stack', 'import', '--stack', stack, '--cwd', bootstrapCwd, '--file', exportPath],
+					{ env: bootstrapEnvironment }
+				)
+			},
+			onVisibilityWait: ({ retry, maxRetries, delayMs }) =>
+				updateProgress(
+					`The new ${target} state backend is not consistently visible yet; retrying its idempotent migration in ${Math.ceil(delayMs / 1_000)}s (${retry}/${maxRetries}).`
+				)
+		})
 		writeFileSync(migratedMarker, `${remoteBackend}\n`, { mode: 0o600, flag: 'wx' })
 	} else {
 		updateProgress(`Remote ${target} bootstrap state found; reconciling it in place.`)
