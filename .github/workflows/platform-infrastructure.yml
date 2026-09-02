@@ -81,13 +81,13 @@ jobs:
           [[ "$STATE_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]]
           test "$STATE_REGION" = hel1
           test "$STACK_NAME" = "organization/aven-platform/$TARGET"
-      - name: Install Pulumi CLI for DNS adoption
-        if: inputs.command == 'up' && matrix.target != 'identity'
+      - name: Install Pulumi CLI for DNS reconciliation
+        if: matrix.target != 'identity'
         uses: pulumi/actions@8e5e406f4007fca908480587cb9893c07090f58d # v7
         with:
           pulumi-version: 3.256.0
-      - name: Adopt existing managed DNS
-        if: inputs.command == 'up' && matrix.target != 'identity'
+      - name: Reconcile managed DNS ownership
+        if: matrix.target != 'identity'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.PULUMI_STATE_S3_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.PULUMI_STATE_S3_SECRET_ACCESS_KEY }}
@@ -110,6 +110,7 @@ jobs:
           SSH_ALLOWED_CIDRS: ${{ vars.SSH_ALLOWED_CIDRS }}
           DEPLOYMENT_TARGET: platform
           DEPLOYMENT_ENVIRONMENT: ${{ matrix.target }}
+          DNS_RECONCILIATION_MODE: ${{ inputs.command == 'preview' && 'state-only' || 'full' }}
           PULUMI_SKIP_UPDATE_CHECK: "true"
         run: node infrastructure/platform/src/adopt-dns.mjs
       - name: ${{ inputs.command }} infrastructure

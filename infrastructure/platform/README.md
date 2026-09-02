@@ -16,8 +16,10 @@ platform stack generates its own identity provisioning credential. The shared
 identity deployment admits both credentials without giving either platform access to
 identity state or to the other platform's state.
 
-Before a real `up`, the workflow reconciles the six exact DNS record sets owned by that
-platform environment. Matching A and AAAA sets left by an earlier deployment are imported
+Before preview, the workflow first applies state-only ownership migrations, including
+releasing the former `my` checkout records without contacting the DNS API. Before a real
+`up`, it then reconciles the six exact DNS record sets owned by that platform environment.
+Matching A and AAAA sets left by an earlier deployment are imported
 into the current stack and updated in place. A stale CNAME on one of those exact hostnames is
 removed because it cannot coexist with the required address records. Records outside the
 environment's `api`, `portal`, and apex names are never adopted or removed. Legacy

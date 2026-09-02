@@ -23,10 +23,10 @@ tokens from `https://aven.id`. Each platform stack generates its own internal
 provisioning credential. The shared identity deployment admits both; neither platform
 deployment receives identity-state or cross-platform-state access.
 
-The `my.aven.ceo` and `my.next.aven.ceo` names are outside avenOS ownership. During
-the first update from the former checkout hostname, automation removes only the old
-RRsets' Pulumi state entries and leaves the DNS records themselves unchanged. All new
-checkout traffic and DNS management use `portal.aven.ceo` and
+The `my.aven.ceo` and `my.next.aven.ceo` names are outside avenOS ownership. Before
+the first preview after the hostname change, automation removes only the old RRsets'
+Pulumi state entries and makes no DNS-provider request. The DNS records remain
+unchanged. All new checkout traffic and DNS management use `portal.aven.ceo` and
 `portal.next.aven.ceo`.
 
 ## Before the first deployment

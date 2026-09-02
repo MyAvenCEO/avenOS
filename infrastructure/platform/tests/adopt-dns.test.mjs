@@ -164,9 +164,8 @@ test('prepares the explicit provider, removes conflicts, and imports unmanaged r
 	assert.match(output.at(-1), /2 existing RRSet\(s\) adopted; 1 obsolete CNAME/)
 })
 
-test('releases legacy my records from state without deleting them at Hetzner', async () => {
+test('releases legacy my records before preview without contacting Hetzner', async () => {
 	const commands = []
-	const removed = []
 	const output = []
 	const provider = dnsProviderUrn('organization/aven-platform/next')
 	const legacy = ['A', 'AAAA'].map((type) =>
@@ -183,7 +182,7 @@ test('releases legacy my records from state without deleting them at Hetzner', a
 			DEPLOYMENT_ENVIRONMENT: 'next',
 			PULUMI_STACK: 'organization/aven-platform/next',
 			PULUMI_BACKEND_URL: 's3://state/example',
-			HETZNER_DNS_TOKEN: 'test-token'
+			DNS_RECONCILIATION_MODE: 'state-only'
 		},
 		run(args) {
 			commands.push(args)
@@ -196,10 +195,10 @@ test('releases legacy my records from state without deleting them at Hetzner', a
 				: [{ type: 'pulumi:providers:hcloud', urn: provider }]
 		},
 		async list() {
-			return [zoneResource('my.next', 'A'), zoneResource('my.next', 'AAAA')]
+			throw new Error('state-only migration must not list provider records')
 		},
-		async remove(zone, name, type) {
-			removed.push({ zone, name, type })
+		async remove() {
+			throw new Error('state-only migration must not remove provider records')
 		},
 		write(message) {
 			output.push(message)
@@ -216,12 +215,11 @@ test('releases legacy my records from state without deleting them at Hetzner', a
 	assert.ok(
 		commands.filter((args) => args[0] === 'state').every((args) => args.includes('--force'))
 	)
-	assert.deepEqual(removed, [])
 	assert.equal(
-		commands.some((args) => args[0] === 'import'),
+		commands.some((args) => ['up', 'import'].includes(args[0])),
 		false
 	)
-	assert.match(output.at(-1), /2 legacy RRSet\(s\) released without deletion/)
+	assert.match(output.at(-1), /2 legacy RRSet\(s\) released without provider changes/)
 })
 
 test('rejects a target and stack mismatch before contacting either provider', async () => {
