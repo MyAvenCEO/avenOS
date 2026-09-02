@@ -115,6 +115,8 @@ The platform Compose stack receives generated secrets and Pulumi outputs:
 - `SITE_HOST_MAX_FILES`: defaults to 10000;
 - `SITE_HOST_MAX_BYTES`: defaults to 268435456;
 - `SITE_HOST_MAX_CONCURRENT_SYNCS`: defaults to 4; and
+- `SITE_HOST_DNS_SERVERS`: optional comma-separated DNS servers used for
+  verification; production normally leaves this unset and uses the host resolver; and
 - `SYSTEM_SITES_JSON`: operator-owned site declarations.
 
 Persistent releases and the last-known-good managed state live in
@@ -122,8 +124,9 @@ Persistent releases and the last-known-good managed state live in
 
 ## Verification
 
-The local platform E2E automatically verifies authenticated CRUD, ownership,
-reserved-host rejection, forged identity-header stripping, private-directory
+The local platform E2E uses an isolated DNS fixture, so it does not depend on the
+currently deployed `aven.ceo` records. It automatically verifies authenticated CRUD,
+ownership, reserved-host rejection, forged identity-header stripping, private-directory
 authentication, a real shallow fetch of the `aven-brands` production and
 `deploy/production` branches, source-revision matching, and HTTP serving.
 

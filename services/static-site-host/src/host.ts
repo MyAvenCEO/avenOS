@@ -1,8 +1,9 @@
+import * as dns from 'node:dns/promises'
 import { readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { type DirectoryBinding, validateBinding } from './binding.js'
 import type { SiteHostConfig } from './config.js'
-import { verifyDns } from './dns.js'
+import { type DnsResolver, verifyDns } from './dns.js'
 import { materialize } from './repository.js'
 
 type ActiveSite = { binding: DirectoryBinding; root: string }
@@ -25,7 +26,10 @@ export class StaticSiteHost {
 	private ready = false
 	private reconciling: Promise<void> | null = null
 
-	constructor(private config: SiteHostConfig) {}
+	constructor(
+		private config: SiteHostConfig,
+		private resolver: DnsResolver = dns
+	) {}
 
 	async loadPersistedState(): Promise<void> {
 		const state = JSON.parse(
@@ -107,7 +111,8 @@ export class StaticSiteHost {
 				binding.verification_token_hash,
 				this.config.allowedIpv4,
 				this.config.allowedIpv6,
-				binding.verification_mode
+				binding.verification_mode,
+				this.resolver
 			)
 			if (!dns.ok) {
 				const verifiedAt = binding.verified_at ? Date.parse(binding.verified_at) : 0

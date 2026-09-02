@@ -12,6 +12,16 @@ describe('site host configuration', () => {
 		const config = loadConfig(validEnvironment)
 		expect(config.statusUrl).toBe('http://app:3000/internal/v1/static-sites/status')
 		expect(config.maxConcurrentSyncs).toBe(4)
+		expect(config.dnsServers).toEqual([])
+	})
+
+	test('accepts explicit DNS servers for deterministic or split-horizon resolution', () => {
+		expect(
+			loadConfig({
+				...validEnvironment,
+				SITE_HOST_DNS_SERVERS: '127.0.0.1:5353, [2001:db8::53]:5353'
+			}).dnsServers
+		).toEqual(['127.0.0.1:5353', '[2001:db8::53]:5353'])
 	})
 
 	test('does not send the directory token to a different origin', () => {

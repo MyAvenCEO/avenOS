@@ -482,6 +482,7 @@ services:
   static-site-host:
     profiles: [hosting]
     image: ${E2E_STATIC_SITE_HOST_IMAGE:-aven-e2e-static-site-host:local}
+    command: [sh, -c, "bun /e2e/dns-mock.ts & exec bun src/index.ts"]
     depends_on:
       api:
         condition: service_healthy
@@ -495,12 +496,14 @@ services:
       SITE_HOST_DIRECTORY_BEARER_TOKEN: site-host-directory-token-for-e2e-only
       SITE_HOST_ALLOWED_IPV4: ${E2E_AVEN_CEO_IPV4:-127.0.0.1}
       SITE_HOST_ALLOWED_IPV6: ${E2E_AVEN_CEO_IPV6:-}
+      SITE_HOST_DNS_SERVERS: 127.0.0.1:5353
       SITE_HOST_POLL_SECONDS: "2"
       SITE_HOST_DNS_GRACE_SECONDS: "2"
     ports:
       - 127.0.0.1:${E2E_STATIC_HOST_PORT:-18093}:18093
     volumes:
       - static-sites:/data
+      - ./dns-mock.ts:/e2e/dns-mock.ts:ro
     healthcheck:
       test: [CMD, bun, -e, "fetch('http://127.0.0.1:18093/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 3s
