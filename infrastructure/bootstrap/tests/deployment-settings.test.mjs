@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { chmodSync, mkdtempSync, readFileSync, statSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -16,8 +16,11 @@ import {
 	isRetryableGitHubError,
 	parseBootstrapProgress,
 	providerCreatedBootstrapBucketKinds,
+	pulumiStackConfigFileName,
+	pulumiStackIsListed,
 	reconcileBootstrapBucketUpdate,
 	recoveryCsv,
+	removeSaltOnlyPulumiStackConfig,
 	trackedBootstrapBucketKinds,
 	validateBootstrapInput,
 	writeRecoveryCsv
@@ -253,6 +256,40 @@ test('serializes bootstrap storage mutations through Pulumi', () => {
 			'/repo/bootstrap'
 		]
 	)
+})
+
+test('matches Pulumi DIY and fully qualified stack names', () => {
+	assert.equal(pulumiStackIsListed(['production'], 'organization/aven-bootstrap/production'), true)
+	assert.equal(
+		pulumiStackIsListed(
+			['organization/aven-bootstrap/production'],
+			'organization/aven-bootstrap/production'
+		),
+		true
+	)
+	assert.equal(pulumiStackIsListed(['next'], 'organization/aven-bootstrap/production'), false)
+})
+
+test('removes only a salt-only config before changing Pulumi backends', () => {
+	const directory = mkdtempSync(join(tmpdir(), 'aven-bootstrap-stack-config-test-'))
+	const stack = 'organization/aven-bootstrap/identity'
+	const path = join(directory, pulumiStackConfigFileName(stack))
+	writeFileSync(path, 'encryptionsalt: v1:old-generation\n')
+	assert.equal(removeSaltOnlyPulumiStackConfig(directory, stack), true)
+	assert.equal(existsSync(path), false)
+	assert.equal(removeSaltOnlyPulumiStackConfig(directory, stack), false)
+})
+
+test('preserves a stale Pulumi config when it contains operator settings', () => {
+	const directory = mkdtempSync(join(tmpdir(), 'aven-bootstrap-stack-config-test-'))
+	const stack = 'organization/aven-bootstrap/identity'
+	const path = join(directory, pulumiStackConfigFileName(stack))
+	writeFileSync(path, 'encryptionsalt: v1:old-generation\nconfig:\n  example: retained\n')
+	assert.throws(
+		() => removeSaltOnlyPulumiStackConfig(directory, stack),
+		/contains Pulumi settings; refusing to remove it automatically/
+	)
+	assert.equal(existsSync(path), true)
 })
 
 test('round-trips machine-readable bootstrap progress without accepting ordinary output', () => {

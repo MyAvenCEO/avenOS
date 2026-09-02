@@ -11,6 +11,8 @@ import {
 	isRetryableGitHubError,
 	loadOrCreateGeneratedSecrets,
 	objectStorageBucketName,
+	pulumiStackIsListed,
+	removeSaltOnlyPulumiStackConfig,
 	selectedDeploymentTargets,
 	type Target,
 	trackedBootstrapBucketKinds,
@@ -27,7 +29,6 @@ import {
 	ownedPolarCatalogResources,
 	platformProtectionTargetUrns,
 	platformStackName,
-	pulumiStackIsListed,
 	uninstallSummary,
 	uninstallTargets
 } from './lib/deployment-uninstall.js'
@@ -546,6 +547,7 @@ async function removeStorage(target: Target): Promise<void> {
 		objectStorageBucketName(input, generated, target, kind)
 	)
 	await run('pulumi', ['login', localTeardownBackend], { env, quiet: true })
+	removeSaltOnlyPulumiStackConfig(bootstrapCwd, stack)
 	const localStacks = await stackNames(bootstrapCwd, env)
 	const initiallyExisting = await existingBucketKinds(target)
 	if (initiallyExisting.length === 0) {
@@ -558,9 +560,10 @@ async function removeStorage(target: Target): Promise<void> {
 		completeProgress(`${target} state and backup buckets are already absent.`)
 		return
 	}
-	if (!pulumiStackIsListed(localStacks, stack))
+	if (!pulumiStackIsListed(localStacks, stack)) {
 		await run('pulumi', ['stack', 'init', stack, '--cwd', bootstrapCwd], { env, quiet: true })
-	else await run('pulumi', ['stack', 'select', stack, '--cwd', bootstrapCwd], { env, quiet: true })
+	} else
+		await run('pulumi', ['stack', 'select', stack, '--cwd', bootstrapCwd], { env, quiet: true })
 
 	const exportPath = resolve(outputDirectory, `uninstall-bootstrap-${target}.json`)
 	let deployment = await exportStack(stack, bootstrapCwd, env, exportPath)

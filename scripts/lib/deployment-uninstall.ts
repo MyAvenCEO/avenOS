@@ -119,11 +119,6 @@ export function platformProtectionTargetUrns(stack: PulumiDeploymentExport): str
 	return resourceUrnsByType(stack, PLATFORM_PROTECTION_RESOURCE_TYPES)
 }
 
-export function pulumiStackIsListed(names: readonly string[], expected: string): boolean {
-	const shortName = expected.split('/').at(-1)
-	return names.some((name) => name === expected || name === shortName)
-}
-
 interface PulumiBucketDeploymentExport extends PulumiDeploymentExport {
 	deployment?: {
 		resources?: Array<{

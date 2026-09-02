@@ -188,6 +188,16 @@ replaced before Apply; otherwise the latest relevant saved station opens. Exit l
 file untouched. A CSV without both companion files is preserved and produces a clear error
 instead of being overwritten or partially reconstructed.
 
+Pulumi also writes ignored `Pulumi.<stack>.yaml` files beside the bootstrap program. Their
+encryption salt belongs to one generated passphrase and backend, so a retained checkout can
+outlive or switch away from the generation that created one. Before opening a backend, the
+bootstrap removes only a salt-only stack file, lists that backend, then selects the existing
+stack or initializes a fresh one with the saved generation's passphrase. Pulumi keeps an
+existing stack's encryption metadata in its checkpoint. A file containing any Pulumi
+settings is preserved and reported as an error for operator review. This makes uninstall
+followed by reuse, an interrupted first apply, and switching between saved generations in
+the same checkout follow the same safe path.
+
 On a fresh run, the wizard starts at the first field. A saved non-secret value is shown and
 can be edited; a saved secret remains hidden and an empty field keeps and rechecks it. A
 failed provider-bootstrap or interrupted run ends with `ERROR`. Its cleanup screen requires
