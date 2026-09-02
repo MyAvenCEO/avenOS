@@ -254,6 +254,7 @@ export interface BootstrapBucketSnapshot {
 export async function reconcileBootstrapBucketUpdate(options: {
 	target: Target
 	expected: Record<BootstrapBucketKind, string>
+	confirmedExisting?: readonly BootstrapBucketKind[]
 	inspect: () => Promise<BootstrapBucketSnapshot>
 	apply: (adopt: readonly BootstrapBucketKind[]) => Promise<void>
 	onAdopt?: (kinds: readonly BootstrapBucketKind[]) => void
@@ -265,6 +266,7 @@ export async function reconcileBootstrapBucketUpdate(options: {
 	}) => void
 	sleep?: (delayMs: number) => Promise<void>
 }): Promise<void> {
+	const confirmedExisting = new Set(options.confirmedExisting ?? [])
 	const attempted = new Set<BootstrapBucketKind>()
 	let providerReported: BootstrapBucketKind[] = []
 	let precedingError: unknown
@@ -278,7 +280,10 @@ export async function reconcileBootstrapBucketUpdate(options: {
 		const tracked = new Set(snapshot.tracked)
 		const candidates = BOOTSTRAP_BUCKET_KINDS.filter(
 			(kind) =>
-				!tracked.has(kind) && (snapshot.existing.includes(kind) || providerReported.includes(kind))
+				!tracked.has(kind) &&
+				(confirmedExisting.has(kind) ||
+					snapshot.existing.includes(kind) ||
+					providerReported.includes(kind))
 		)
 		if (
 			candidates.length > 0 &&
@@ -322,7 +327,10 @@ export async function reconcileBootstrapBucketUpdate(options: {
 			const recoverable = (afterFailure?.existing ?? []).filter((kind) => !afterTracked.has(kind))
 			const exactImportsStillVisible =
 				providerInvisible.length > 0 &&
-				providerInvisible.every((kind) => candidates.includes(kind) && recoverable.includes(kind))
+				providerInvisible.every(
+					(kind) =>
+						candidates.includes(kind) && (confirmedExisting.has(kind) || recoverable.includes(kind))
+				)
 			if (exactImportsStillVisible) {
 				const key = candidates.join(',')
 				if (key !== visibilityRetryKey) {

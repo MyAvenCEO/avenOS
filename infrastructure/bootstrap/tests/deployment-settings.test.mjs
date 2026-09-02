@@ -222,6 +222,39 @@ test('retries the full import when only one pre-created bucket lags in the provi
 	])
 })
 
+test('keeps both exact pre-created buckets in the import when signed visibility briefly flaps', async () => {
+	const calls = []
+	let inspections = 0
+	let first = true
+	await reconcileBootstrapBucketUpdate({
+		target: 'next',
+		expected: { state: 'expected-state', backup: 'expected-backup' },
+		confirmedExisting: ['state', 'backup'],
+		inspect: async () => {
+			inspections += 1
+			return {
+				existing: inspections === 1 ? ['backup'] : [],
+				tracked: []
+			}
+		},
+		apply: async (adopt) => {
+			calls.push([...adopt])
+			if (first) {
+				first = false
+				const error = new Error('backup import visibility is delayed')
+				error.commandOutput =
+					"= minio:index:S3Bucket next-backup import error: Preview failed: resource 'expected-backup' does not exist"
+				throw error
+			}
+		},
+		sleep: async () => {}
+	})
+	assert.deepEqual(calls, [
+		['state', 'backup'],
+		['state', 'backup']
+	])
+})
+
 test('converges after either bucket is created without entering the failed checkpoint', async () => {
 	for (const orphan of ['state', 'backup']) {
 		const physical = new Set()

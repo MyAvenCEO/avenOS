@@ -171,12 +171,13 @@ Pulumi import. Only this generation's two derived names can enter the path. The 
 lists, guesses, or adopts an unrelated bucket name.
 
 Hetzner can acknowledge the signed create before a signed read sees the new bucket, and its
-infrastructure provider can lag behind the signed read during import. Each exact mismatch
-has a bounded retry window with increasing delays. The progress line names the target,
-bucket kind, delay, and retry count. Every provider-import retry repeats the signed exact-name
-check. A missing bucket, different name, permission failure, or unrelated provider error
-stops immediately. Both confirmed buckets remain in the same atomic Pulumi import so a
-failed update cannot silently turn the other bucket back into a provider create.
+infrastructure provider can lag behind the signed read during import. Signed visibility can
+also briefly disappear again while the provider converges. Each exact mismatch has a bounded
+retry window with increasing delays. The progress line names the target, bucket kind, delay,
+and retry count. Once this run has created or independently confirmed both exact names, a
+transient negative read cannot turn either one back into a provider create. Both remain in
+the same atomic Pulumi import until it succeeds or the bounded retry window ends. A different
+name, permission failure, or unrelated provider error still stops immediately.
 
 On a terminal smaller than 60 columns by 20 rows it automatically uses the accessible
 plain wizard. Force that mode in any terminal with:
