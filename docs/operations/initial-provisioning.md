@@ -159,26 +159,24 @@ its detail, elapsed time, and recent completed operations. The owner-only
 `bootstrap-apply.log` keeps redacted command diagnostics for a failed retry. Local command
 checks time out with a retryable error instead of leaving a stale button on screen.
 
-If the Object Storage provider creates one of this generation's deterministic buckets but
-fails before Pulumi records ownership, the same apply exports the failed checkpoint, checks
-the two exact bucket names with a signed request, imports only an existing untracked bucket,
-and continues. A process interruption is handled by the same reconciliation when the saved
-setup resumes. Only an exact, independently confirmed bucket can enter this recovery path,
-and its provider-visibility retry is bounded. An unrelated or persistent provider failure
-therefore remains a visible error. The setup never lists, guesses, or adopts an unrelated
-bucket name.
+The bootstrap does not ask the infrastructure provider to create its own state and backup
+buckets. It sends a signed S3 `PUT` for each deterministic, private bucket, confirms the
+exact name with a separately signed read, and then imports both buckets into Pulumi in one
+update. Pulumi owns their access policies and state versioning from that point onward. This
+order avoids relying on a provider create result before the state backend itself exists.
 
-Hetzner can return the new bucket through its signed S3 API before the infrastructure
-provider's import read sees it. When that exact mismatch occurs, the setup keeps the current
-stage open and retries the import with increasing delays over an approximately five-minute
-window. The progress line names the confirmed bucket, delay, and retry count. Every retry
-repeats the signed exact-name check; a missing bucket, different name, permission failure,
-or any other provider error still stops immediately.
+A process interruption follows the same sequence when the saved setup resumes. An existing
+exact bucket is not created again; it is independently confirmed and included in the next
+Pulumi import. Only this generation's two derived names can enter the path. The setup never
+lists, guesses, or adopts an unrelated bucket name.
 
-The bootstrap applies Object Storage resources one at a time. This avoids concurrent bucket
-creation through the MinIO provider. The exact-state reconciliation above is still required
-because the provider can lose the result of an individual successful create. The later
-targets remain in the same unattended bootstrap sequence.
+Hetzner can acknowledge the signed create before a signed read sees the new bucket, and its
+infrastructure provider can lag behind the signed read during import. Each exact mismatch
+has a bounded retry window with increasing delays. The progress line names the target,
+bucket kind, delay, and retry count. Every provider-import retry repeats the signed exact-name
+check. A missing bucket, different name, permission failure, or unrelated provider error
+stops immediately. Both confirmed buckets remain in the same atomic Pulumi import so a
+failed update cannot silently turn the other bucket back into a provider create.
 
 On a terminal smaller than 60 columns by 20 rows it automatically uses the accessible
 plain wizard. Force that mode in any terminal with:

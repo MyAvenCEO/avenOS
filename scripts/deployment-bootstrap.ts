@@ -8,6 +8,7 @@ import {
 	bootstrapPulumiUpArgs,
 	deploymentConfigurationTargets,
 	encodeBootstrapProgress,
+	ensureBootstrapBucketExists,
 	ensurePrivateDirectory,
 	githubConfiguration,
 	githubEnvironmentProtection,
@@ -28,7 +29,7 @@ import {
 	validateBootstrapInput,
 	writeRecoveryCsv
 } from './lib/deployment-bootstrap.js'
-import { signedS3ReadRequest } from './lib/deployment-bootstrap-guided.js'
+import { createExactS3Bucket, exactS3BucketExists } from './lib/deployment-bootstrap-guided.js'
 import { ensurePolarCatalog } from './lib/polar-catalog.js'
 import { ensurePolarWebhook } from './lib/polar-webhook.js'
 import { fetchRedpillPhalaCatalog } from './lib/redpill-model-catalog.js'
@@ -227,21 +228,13 @@ async function existingBootstrapBucketKinds(
 ): Promise<BootstrapBucketKind[]> {
 	const checks = await Promise.all(
 		(['state', 'backup'] as const).map(async (kind) => {
-			const request = signedS3ReadRequest({
+			const exists = await exactS3BucketExists({
 				region: input.objectStorage.region,
 				accessKeyId: storage.bootstrapCredential.accessKeyId,
 				secretAccessKey: storage.bootstrapCredential.secretAccessKey,
 				bucket: expected[kind]
 			})
-			const response = await fetch(request.url, {
-				headers: request.headers,
-				signal: AbortSignal.timeout(20_000)
-			})
-			if (response.ok) return kind
-			if (response.status === 404) return undefined
-			throw new Error(
-				`Hetzner Object Storage returned HTTP ${response.status} while checking the exact ${kind} bucket for interrupted-bootstrap recovery.`
-			)
+			return exists ? kind : undefined
 		})
 	)
 	return checks.filter((kind): kind is BootstrapBucketKind => kind !== undefined)
@@ -299,6 +292,33 @@ for (const target of selectedTargets) {
 			state: objectStorageBucketName(input, generated, target, 'state'),
 			backup: objectStorageBucketName(input, generated, target, 'backup')
 		}
+		for (const kind of ['state', 'backup'] as const) {
+			const bucket = expectedBuckets[kind]
+			updateProgress(`Ensuring the exact private ${target} ${kind} bucket exists.`)
+			await ensureBootstrapBucketExists({
+				exists: () =>
+					exactS3BucketExists({
+						region: input.objectStorage.region,
+						accessKeyId: storage.bootstrapCredential.accessKeyId,
+						secretAccessKey: storage.bootstrapCredential.secretAccessKey,
+						bucket
+					}),
+				create: () =>
+					createExactS3Bucket({
+						region: input.objectStorage.region,
+						accessKeyId: storage.bootstrapCredential.accessKeyId,
+						secretAccessKey: storage.bootstrapCredential.secretAccessKey,
+						bucket
+					}),
+				onVisibilityWait: ({ retry, maxRetries, delayMs }) =>
+					updateProgress(
+						`Hetzner accepted the ${target} ${kind} bucket; waiting ${Math.ceil(delayMs / 1_000)}s for signed visibility (${retry}/${maxRetries}).`
+					)
+			})
+		}
+		updateProgress(
+			`Importing both exact ${target} buckets into Pulumi and applying access policies.`
+		)
 		await reconcileBootstrapBucketUpdate({
 			target,
 			expected: expectedBuckets,

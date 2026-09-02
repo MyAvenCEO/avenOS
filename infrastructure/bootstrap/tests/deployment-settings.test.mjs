@@ -9,6 +9,7 @@ import {
 	collidingBootstrapBucketKinds,
 	deploymentConfigurationTargets,
 	encodeBootstrapProgress,
+	ensureBootstrapBucketExists,
 	ensurePrivateDirectory,
 	generateBootstrapSecrets,
 	githubConfiguration,
@@ -125,6 +126,100 @@ test('recognizes delayed import visibility only for exact expected bucket names'
 		),
 		[]
 	)
+})
+
+test('creates an absent exact bucket once and waits for signed visibility', async () => {
+	let checks = 0
+	let creates = 0
+	const waits = []
+	assert.equal(
+		await ensureBootstrapBucketExists({
+			exists: async () => {
+				checks += 1
+				return checks >= 4
+			},
+			create: async () => {
+				creates += 1
+			},
+			onVisibilityWait: (event) => waits.push(event),
+			sleep: async (delayMs) => waits.push({ slept: delayMs })
+		}),
+		'created'
+	)
+	assert.equal(creates, 1)
+	assert.equal(checks, 4)
+	assert.deepEqual(waits, [
+		{ retry: 1, maxRetries: BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length, delayMs: 2_000 },
+		{ slept: 2_000 },
+		{ retry: 2, maxRetries: BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length, delayMs: 4_000 },
+		{ slept: 4_000 }
+	])
+})
+
+test('does not create an exact bucket that already exists', async () => {
+	assert.equal(
+		await ensureBootstrapBucketExists({
+			exists: async () => true,
+			create: async () => assert.fail('an existing bucket must not be created again')
+		}),
+		'existing'
+	)
+})
+
+test('fails after a bounded bucket visibility wait', async () => {
+	let checks = 0
+	let waits = 0
+	await assert.rejects(
+		ensureBootstrapBucketExists({
+			exists: async () => {
+				checks += 1
+				return false
+			},
+			create: async () => {},
+			sleep: async () => {
+				waits += 1
+			}
+		}),
+		/did not become visible/
+	)
+	assert.equal(checks, BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length + 2)
+	assert.equal(waits, BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length)
+})
+
+test('imports both pre-created buckets on the first Pulumi update', async () => {
+	const calls = []
+	await reconcileBootstrapBucketUpdate({
+		target: 'next',
+		expected: { state: 'expected-state', backup: 'expected-backup' },
+		inspect: async () => ({ existing: ['state', 'backup'], tracked: [] }),
+		apply: async (adopt) => calls.push([...adopt])
+	})
+	assert.deepEqual(calls, [['state', 'backup']])
+})
+
+test('retries the full import when only one pre-created bucket lags in the provider', async () => {
+	const calls = []
+	let first = true
+	await reconcileBootstrapBucketUpdate({
+		target: 'next',
+		expected: { state: 'expected-state', backup: 'expected-backup' },
+		inspect: async () => ({ existing: ['state', 'backup'], tracked: [] }),
+		apply: async (adopt) => {
+			calls.push([...adopt])
+			if (first) {
+				first = false
+				const error = new Error('state import visibility is delayed')
+				error.commandOutput =
+					"= minio:index:S3Bucket next-state import error: Preview failed: resource 'expected-state' does not exist"
+				throw error
+			}
+		},
+		sleep: async () => {}
+	})
+	assert.deepEqual(calls, [
+		['state', 'backup'],
+		['state', 'backup']
+	])
 })
 
 test('converges after either bucket is created without entering the failed checkpoint', async () => {
@@ -256,6 +351,42 @@ test('converges when both serialized creates require delayed adoption', async ()
 	})
 	assert.deepEqual(calls, [[], ['state'], ['state'], ['backup'], ['backup']])
 	assert.deepEqual([...physical].sort(), ['backup', 'state'])
+	assert.deepEqual([...tracked].sort(), ['backup', 'state'])
+})
+
+test('reimports the full batch when a failed update rolls an earlier import back', async () => {
+	const calls = []
+	const physical = new Set()
+	const tracked = new Set()
+	let update = 0
+	await reconcileBootstrapBucketUpdate({
+		target: 'next',
+		expected: { state: 'expected-state', backup: 'expected-backup' },
+		inspect: async () => ({ existing: [...physical], tracked: [...tracked] }),
+		apply: async (adopt) => {
+			calls.push([...adopt])
+			update += 1
+			if (update === 1) {
+				physical.add('backup')
+				const error = new Error('backup create lost its result')
+				error.commandOutput =
+					'expected non-nil error with nil state during Create of urn:pulumi:next::aven-bootstrap::minio:index/s3Bucket:S3Bucket::next-backup'
+				throw error
+			}
+			if (update === 2) {
+				assert.deepEqual(adopt, ['backup'])
+				physical.add('state')
+				// Pulumi rolls the backup import out of its checkpoint when this update fails.
+				tracked.clear()
+				const error = new Error('state create lost its result')
+				error.commandOutput =
+					'expected non-nil error with nil state during Create of urn:pulumi:next::aven-bootstrap::minio:index/s3Bucket:S3Bucket::next-state'
+				throw error
+			}
+			for (const kind of adopt) tracked.add(kind)
+		}
+	})
+	assert.deepEqual(calls, [[], ['backup'], ['state', 'backup']])
 	assert.deepEqual([...tracked].sort(), ['backup', 'state'])
 })
 
