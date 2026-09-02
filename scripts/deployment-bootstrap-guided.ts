@@ -44,12 +44,11 @@ import {
 	POLAR_API_KEY_SCOPES,
 	retryableGitHubCliFailure,
 	S3_CREDENTIAL_STEPS,
-	s3ErrorCode,
 	savedWizardResumeIndex,
 	savedWizardVerificationIndexes,
 	setValueAt,
-	signedS3ReadRequest,
 	unseenWorkflowRunId,
+	validateS3ProjectCredential,
 	valueAt,
 	workflowFailureSummary,
 	workflowRunIdFromDispatchOutput
@@ -1180,23 +1179,11 @@ async function validateS3Credential(input: {
 	accessKeyId: string
 	secretAccessKey: string
 }): Promise<void> {
-	const request = signedS3ReadRequest({
+	const bucketCount = await validateS3ProjectCredential({
 		region: input.region,
 		accessKeyId: input.accessKeyId,
 		secretAccessKey: input.secretAccessKey
 	})
-	const response = await fetch(request.url, {
-		headers: request.headers,
-		signal: AbortSignal.timeout(20_000)
-	})
-	const body = await response.text()
-	if (!response.ok)
-		throw new Error(
-			`Object Storage returned HTTP ${response.status}${s3ErrorCode(body) ? ` (${s3ErrorCode(body)})` : ''}.`
-		)
-	if (!body.includes('<ListAllMyBucketsResult'))
-		throw new Error('Object Storage returned an unexpected list-buckets response.')
-	const bucketCount = (body.match(/<Bucket>/g) ?? []).length
 	reportStatus(
 		`✓ ${input.label}: authenticated ${input.region} Object Storage project access; ${bucketCount} bucket(s) currently visible. Role isolation is installed by the bootstrap.\n`
 	)

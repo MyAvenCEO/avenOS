@@ -277,22 +277,27 @@ function hmac(key: string | Buffer, value: string): Buffer {
 	return createHmac('sha256', key).update(value).digest()
 }
 
-function signedS3Request(input: {
+type SignedS3RequestInput = {
 	region: string
 	accessKeyId: string
 	secretAccessKey: string
-	bucket: string
-	method: 'DELETE' | 'GET' | 'PUT'
 	now?: Date
-}): { url: string; headers: Record<string, string> } {
+} & ({ method: 'GET'; bucket?: string } | { method: 'DELETE' | 'PUT'; bucket: string })
+
+function signedS3Request(input: SignedS3RequestInput): {
+	url: string
+	headers: Record<string, string>
+} {
 	if (!/^[a-z0-9-]+$/.test(input.region)) throw new Error('Invalid Object Storage region.')
 	if (!input.accessKeyId || !input.secretAccessKey)
 		throw new Error('Both Object Storage credential values are required.')
-	if (!/^[a-z0-9][a-z0-9.-]+[a-z0-9]$/.test(input.bucket))
+	if (input.method !== 'GET' && !input.bucket)
+		throw new Error('An Object Storage bucket name is required for this request.')
+	if (input.bucket && !/^[a-z0-9][a-z0-9.-]+[a-z0-9]$/.test(input.bucket))
 		throw new Error('Invalid Object Storage bucket name.')
 	const host = `${input.region}.your-objectstorage.com`
-	const path = `/${input.bucket}`
-	const query = input.method === 'GET' ? 'list-type=2&max-keys=0' : ''
+	const path = input.bucket ? `/${input.bucket}` : '/'
+	const query = input.method === 'GET' && input.bucket ? 'list-type=2&max-keys=0' : ''
 	const now = input.now ?? new Date()
 	const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '')
 	const date = amzDate.slice(0, 8)
@@ -322,6 +327,38 @@ function signedS3Request(input: {
 			'x-amz-date': amzDate
 		}
 	}
+}
+
+export function signedS3ListBucketsRequest(input: {
+	region: string
+	accessKeyId: string
+	secretAccessKey: string
+	now?: Date
+}): { url: string; headers: Record<string, string> } {
+	return signedS3Request({ ...input, method: 'GET' })
+}
+
+export async function validateS3ProjectCredential(
+	input: {
+		region: string
+		accessKeyId: string
+		secretAccessKey: string
+	},
+	fetcher: typeof fetch = fetch
+): Promise<number> {
+	const request = signedS3ListBucketsRequest(input)
+	const response = await fetcher(request.url, {
+		headers: request.headers,
+		signal: AbortSignal.timeout(20_000)
+	})
+	const body = await response.text()
+	if (!response.ok)
+		throw new Error(
+			`Object Storage returned HTTP ${response.status}${s3ErrorCode(body) ? ` (${s3ErrorCode(body)})` : ''}.`
+		)
+	if (!body.includes('<ListAllMyBucketsResult'))
+		throw new Error('Object Storage returned an unexpected list-buckets response.')
+	return (body.match(/<Bucket>/g) ?? []).length
 }
 
 export function signedS3ReadRequest(input: {
