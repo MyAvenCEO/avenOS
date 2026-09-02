@@ -6,6 +6,7 @@ import test from 'node:test'
 import {
 	BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS,
 	bootstrapPulumiUpArgs,
+	bootstrapStackReadyForMigration,
 	collidingBootstrapBucketKinds,
 	deploymentConfigurationTargets,
 	encodeBootstrapProgress,
@@ -15,6 +16,7 @@ import {
 	githubConfiguration,
 	githubEnvironmentProtection,
 	githubEnvironmentVariableChanges,
+	isRetryableBootstrapStateBackendError,
 	isRetryableGitHubError,
 	parseBootstrapProgress,
 	providerCreatedBootstrapBucketKinds,
@@ -24,6 +26,7 @@ import {
 	reconcileBootstrapBucketUpdate,
 	recoveryCsv,
 	removeSaltOnlyPulumiStackConfig,
+	retryBootstrapStateBackendMigration,
 	trackedBootstrapBucketKinds,
 	validateBootstrapInput,
 	writeRecoveryCsv
@@ -183,6 +186,128 @@ test('fails after a bounded bucket visibility wait', async () => {
 		/did not become visible/
 	)
 	assert.equal(checks, BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length + 2)
+	assert.equal(waits, BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length)
+})
+
+test('retries an idempotent state-backend migration only for transient missing-bucket reads', async () => {
+	let attempts = 0
+	const waits = []
+	assert.equal(
+		await retryBootstrapStateBackendMigration({
+			migrate: async () => {
+				attempts += 1
+				if (attempts < 3) {
+					const error = new Error('pulumi failed')
+					error.commandOutput =
+						'could not create stack: could not list bucket: operation error S3: ListObjectsV2, code=NotFound, NoSuchBucket'
+					throw error
+				}
+				return 'migrated'
+			},
+			onVisibilityWait: (event) => waits.push(event),
+			sleep: async (delayMs) => waits.push({ slept: delayMs })
+		}),
+		'migrated'
+	)
+	assert.equal(attempts, 3)
+	assert.deepEqual(waits, [
+		{ retry: 1, maxRetries: BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length, delayMs: 2_000 },
+		{ slept: 2_000 },
+		{ retry: 2, maxRetries: BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length, delayMs: 4_000 },
+		{ slept: 4_000 }
+	])
+})
+
+test('skips a repeated provider update only for a complete settled local bootstrap stack', () => {
+	const resource = (type, name, extra = {}) => ({
+		type,
+		urn: `urn:pulumi:production::aven-bootstrap::${type}::${name}`,
+		...extra
+	})
+	const resources = [
+		resource('pulumi:pulumi:Stack', 'aven-bootstrap-production'),
+		resource('pulumi:providers:minio', 'hetzner-object-storage'),
+		resource('minio:index/s3Bucket:S3Bucket', 'production-state'),
+		resource('minio:index/s3Bucket:S3Bucket', 'production-backup'),
+		resource('minio:index/s3BucketVersioning:S3BucketVersioning', 'production-state-versioning'),
+		resource('minio:index/s3BucketPolicy:S3BucketPolicy', 'production-state-policy'),
+		resource('minio:index/s3BucketPolicy:S3BucketPolicy', 'production-backup-policy')
+	]
+	assert.equal(bootstrapStackReadyForMigration({ deployment: { resources } }, 'production'), true)
+	for (const missing of resources.slice(1)) {
+		assert.equal(
+			bootstrapStackReadyForMigration(
+				{ deployment: { resources: resources.filter((candidate) => candidate !== missing) } },
+				'production'
+			),
+			false
+		)
+	}
+	assert.equal(
+		bootstrapStackReadyForMigration(
+			{ deployment: { resources, pending_operations: [{}] } },
+			'production'
+		),
+		false
+	)
+	assert.equal(
+		bootstrapStackReadyForMigration(
+			{
+				deployment: {
+					resources: resources.map((candidate) =>
+						candidate.type === 'minio:index/s3Bucket:S3Bucket'
+							? { ...candidate, initErrors: ['incomplete'] }
+							: candidate
+					)
+				}
+			},
+			'production'
+		),
+		false
+	)
+})
+
+test('does not reinterpret state-backend permission or passphrase failures as visibility lag', async () => {
+	for (const original of [
+		Object.assign(new Error('pulumi failed'), { commandOutput: 'AccessDenied' }),
+		Object.assign(new Error('incorrect passphrase'), { commandOutput: 'incorrect passphrase' }),
+		Object.assign(new Error('missing object'), { commandOutput: 'NoSuchBucket' })
+	]) {
+		assert.equal(isRetryableBootstrapStateBackendError(original), false)
+		let attempts = 0
+		await assert.rejects(
+			retryBootstrapStateBackendMigration({
+				migrate: async () => {
+					attempts += 1
+					throw original
+				},
+				sleep: async () => assert.fail('non-visibility failures must not wait')
+			}),
+			(error) => error === original
+		)
+		assert.equal(attempts, 1)
+	}
+})
+
+test('bounds state-backend visibility retries and preserves the original error', async () => {
+	let attempts = 0
+	let waits = 0
+	const original = Object.assign(new Error('pulumi failed'), {
+		commandOutput: 'could not list stacks: operation error S3: ListObjectsV2, NoSuchBucket'
+	})
+	await assert.rejects(
+		retryBootstrapStateBackendMigration({
+			migrate: async () => {
+				attempts += 1
+				throw original
+			},
+			sleep: async () => {
+				waits += 1
+			}
+		}),
+		(error) => error === original
+	)
+	assert.equal(attempts, BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length + 1)
 	assert.equal(waits, BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length)
 })
 

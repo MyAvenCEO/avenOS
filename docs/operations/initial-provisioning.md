@@ -179,6 +179,16 @@ transient negative read cannot turn either one back into a provider create. Both
 the same atomic Pulumi import until it succeeds or the bounded retry window ends. A different
 name, permission failure, or unrelated provider error still stops immediately.
 
+After the import, Pulumi moves the local bootstrap checkpoint into the new state bucket.
+That backend can encounter the same short `NoSuchBucket` window even after provider import
+succeeds. Login, select-or-create, and checkpoint import therefore run as one idempotent,
+bounded retry. A partially created remote stack is selected on the next attempt. Permission,
+passphrase, and other backend failures are not retried as visibility lag, and the local
+checkpoint remains available until the remote marker is written after a successful import.
+If the local checkpoint already contains the provider, both buckets, versioning, and both
+policies with no pending operation or initialization error, resume skips the completed
+provider update and continues at this migration boundary.
+
 On a terminal smaller than 60 columns by 20 rows it automatically uses the accessible
 plain wizard. Force that mode in any terminal with:
 
