@@ -47,6 +47,7 @@ test('loads and serves a last-known-good site without the identity API', async (
 		bearerToken: 'a'.repeat(32),
 		allowedIpv4: new Set(['192.0.2.10']),
 		allowedIpv6: new Set(),
+		dnsServers: [],
 		pollMilliseconds: 60_000,
 		dnsGraceMilliseconds: 86_400_000
 	}

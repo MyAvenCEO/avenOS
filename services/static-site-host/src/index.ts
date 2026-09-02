@@ -1,10 +1,13 @@
+import { Resolver } from 'node:dns/promises'
 import { mkdir } from 'node:fs/promises'
 import { loadConfig } from './config.js'
 import { StaticSiteHost } from './host.js'
 
 const config = loadConfig()
 await mkdir(config.dataRoot, { recursive: true })
-const host = new StaticSiteHost(config)
+const resolver = config.dnsServers.length > 0 ? new Resolver() : undefined
+resolver?.setServers(config.dnsServers)
+const host = new StaticSiteHost(config, resolver)
 
 await host.loadPersistedState().catch(() => {})
 

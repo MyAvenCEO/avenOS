@@ -12,6 +12,7 @@ export interface SiteHostConfig {
 	bearerToken: string
 	allowedIpv4: Set<string>
 	allowedIpv6: Set<string>
+	dnsServers: string[]
 	pollMilliseconds: number
 	dnsGraceMilliseconds: number
 }
@@ -74,6 +75,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SiteHostConfig
 		bearerToken: token,
 		allowedIpv4: addresses(required(env, 'SITE_HOST_ALLOWED_IPV4'), 4),
 		allowedIpv6: env.SITE_HOST_ALLOWED_IPV6 ? addresses(env.SITE_HOST_ALLOWED_IPV6, 6) : new Set(),
+		dnsServers: (env.SITE_HOST_DNS_SERVERS ?? '')
+			.split(',')
+			.map((server) => server.trim())
+			.filter(Boolean),
 		pollMilliseconds: positive(env.SITE_HOST_POLL_SECONDS, 60) * 1000,
 		dnsGraceMilliseconds: positive(env.SITE_HOST_DNS_GRACE_SECONDS, 86400) * 1000
 	}

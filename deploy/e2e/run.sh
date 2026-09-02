@@ -87,18 +87,8 @@ if [ ! -x "$E2E_TAURI_APPLICATION" ] || [ ! -x "$E2E_TAURI_DRIVER" ]; then
 fi
 export E2E_TAURI_APPLICATION E2E_TAURI_DRIVER E2E_TAURI_FIXTURE
 
-E2E_AVEN_CEO_IPV4=""
-attempt=0
-while [ -z "$E2E_AVEN_CEO_IPV4" ] && [ "$attempt" -lt 5 ]; do
-  E2E_AVEN_CEO_IPV4=$(getent ahostsv4 aven.ceo 2>/dev/null | awk 'NR == 1 { print $1; exit }')
-  attempt=$((attempt + 1))
-  [ -n "$E2E_AVEN_CEO_IPV4" ] || sleep 1
-done
-if [ -z "$E2E_AVEN_CEO_IPV4" ]; then
-  echo "aven.ceo must resolve before the static-host E2E test can run." >&2
-  exit 1
-fi
-E2E_AVEN_CEO_IPV6=$(bun -e "import {resolve6} from 'node:dns/promises'; console.log((await resolve6('aven.ceo').catch(()=>[])).join(','))")
+E2E_AVEN_CEO_IPV4="192.0.2.10"
+E2E_AVEN_CEO_IPV6=""
 export E2E_AVEN_CEO_IPV4 E2E_AVEN_CEO_IPV6
 
 if [ "${E2E_SKIP_IMAGE_BUILD:-false}" != "true" ]; then
