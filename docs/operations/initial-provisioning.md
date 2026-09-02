@@ -145,6 +145,9 @@ Use Tab or the arrow keys to move between fields and the Back/Next buttons, Ente
 and Ctrl+C or Escape to cancel. An S3 access key and secret key share one form and one
 station: Enter moves from the first field to the second and then submits the pair. Color
 distinguishes headings, verified values, and errors; all meaning is also present in text.
+A startup palette check gives typed input an explicit foreground with the strongest
+available contrast against its input background. Terminals that cannot report their
+palette use an explicit bright-text fallback instead of inheriting an ambiguous default.
 A valid provider check reports useful identity such as the project, region, zone,
 organization, or model count in a compact evidence area belonging only to the current
 chapter. Evidence never leaks into unrelated chapters, repeated evidence collapses, and

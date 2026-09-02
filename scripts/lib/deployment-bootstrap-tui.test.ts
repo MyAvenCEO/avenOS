@@ -5,8 +5,10 @@ import {
 	isProviderNameLine,
 	navigationButtons,
 	progressChipText,
+	selectInputColors,
 	stationTreeRows,
 	TUI_TEXT_INPUT_KEY_BINDINGS,
+	terminalColorContrast,
 	wrapTerminalText
 } from './deployment-bootstrap-tui.js'
 
@@ -32,6 +34,43 @@ describe('deployment bootstrap terminal forms', () => {
 			{ content: '< Back', value: 'back' }
 		])
 		expect(TUI_TEXT_INPUT_KEY_BINDINGS).toEqual({ ENTER: 'submit', KP_ENTER: 'submit' })
+	})
+
+	test('selects the terminal palette color with strongest input-background contrast', () => {
+		const darkBluePalette = Array.from({ length: 16 }, () => ({ r: 120, g: 120, b: 120 }))
+		darkBluePalette[0] = { r: 0, g: 0, b: 0 }
+		darkBluePalette[4] = { r: 0, g: 0, b: 170 }
+		darkBluePalette[15] = { r: 255, g: 255, b: 255 }
+		expect(selectInputColors(darkBluePalette)).toEqual({
+			color: 15,
+			bgColor: 4,
+			contrast: terminalColorContrast(darkBluePalette[15], darkBluePalette[4])
+		})
+
+		const paleBluePalette = darkBluePalette.map((color) => ({ ...color }))
+		paleBluePalette[4] = { r: 220, g: 235, b: 255 }
+		expect(selectInputColors(paleBluePalette).color).toBe(0)
+		expect(selectInputColors(paleBluePalette).contrast).toBeGreaterThan(7)
+
+		const middleBluePalette = darkBluePalette.map(() => ({ r: 119, g: 119, b: 119 }))
+		middleBluePalette[0] = { r: 0, g: 0, b: 0 }
+		middleBluePalette[15] = { r: 255, g: 255, b: 255 }
+		expect(selectInputColors(middleBluePalette)).toEqual({
+			color: 15,
+			bgColor: 0,
+			contrast: 21
+		})
+	})
+
+	test('uses an explicit readable fallback when palette reporting is unavailable', () => {
+		expect(selectInputColors([])).toEqual({
+			color: 'brightWhite',
+			bgColor: 'blue',
+			contrast: 0
+		})
+		const malformed = Array.from({ length: 16 }, () => ({ r: 0, g: 0, b: 0 }))
+		malformed[4] = { r: Number.NaN, g: 0, b: 0 }
+		expect(selectInputColors(malformed).color).toBe('brightWhite')
 	})
 
 	test('keeps only relevant, unique evidence for a chapter', () => {
