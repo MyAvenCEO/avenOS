@@ -78,7 +78,8 @@ bun run test:deploy
 bun run test:recovery
 ```
 
-- `test:infra` evaluates the Pulumi program and security-sensitive cloud-init output.
+- `test:infra` evaluates the Pulumi program, security-sensitive cloud-init output, and
+  exact-name adoption of existing platform DNS records after a partial deployment.
 - `test:bootstrap` proves bucket-policy isolation, namespaced GitHub configuration,
   all-event Polar webhook and product-manifest reconciliation, live-model catalog
   conversion, mode-`0600` recovery output, signed exact-name bucket creation, idempotent

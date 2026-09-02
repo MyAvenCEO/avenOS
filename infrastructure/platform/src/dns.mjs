@@ -41,3 +41,15 @@ export function platformRecordSpecs({ zone, hostnames, ipv4, ipv6 }) {
 		record('platform-apex-aaaa', zone, relativeName(hostnames.apex, zone), 'AAAA', ipv6)
 	]
 }
+
+export function platformHostnames(environment) {
+	if (environment === 'next')
+		return {
+			apex: 'next.aven.ceo',
+			api: 'api.next.aven.ceo',
+			checkout: 'my.next.aven.ceo'
+		}
+	if (environment === 'production')
+		return { apex: 'aven.ceo', api: 'api.aven.ceo', checkout: 'my.aven.ceo' }
+	throw new Error('managed platform DNS exists only for next and production')
+}

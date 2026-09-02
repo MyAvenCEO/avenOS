@@ -78,7 +78,19 @@ next Infrastructure\tCreate DNS\t2026-08-31T10:00:03Z error: (api.next, CNAME) c
 next Infrastructure\tCreate DNS\t2026-08-31T10:00:04Z error: (next, CNAME) conflicts with (next, A)`
 	assert.equal(
 		workflowFailureSummary(log),
-		'Hetzner DNS conflict: next CNAME blocks A and AAAA; api.next CNAME blocks A and AAAA. Remove the obsolete conflicting record(s) in the aven.ceo zone, then retry.'
+		'Hetzner DNS conflict: next CNAME blocks A and AAAA; api.next CNAME blocks A and AAAA. Retry with the current setup; it removes only those obsolete CNAME record sets before applying the managed addresses.'
+	)
+})
+
+test('turns unmanaged matching Hetzner DNS record sets into an automatic retry instruction', () => {
+	const log = `error: [ERROR] An unexpected error was encountered during an API request.
+RRSet(s) already exist(s) (uniqueness_error, 34a3f5c19c173e0ec40c4b476a6dca94)
+Error code: uniqueness_error
+Status code: 409
+error: API request failed`
+	assert.equal(
+		workflowFailureSummary(log),
+		'Hetzner DNS record sets already exist outside this Pulumi stack. Retry with the current setup; it adopts and updates the exact managed A and AAAA record sets automatically.'
 	)
 })
 

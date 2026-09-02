@@ -1,4 +1,5 @@
 import { isIP } from 'node:net'
+import { platformHostnames } from './dns.mjs'
 
 function required(env, name) {
 	const value = env[name]?.trim()
@@ -67,10 +68,6 @@ export function loadPlatformConfig(env = process.env) {
 			: positiveInteger(env, 'PLATFORM_VOLUME_SIZE_GB', 80)
 	if ((target === 'identity' && volumeSize < 30) || (target === 'platform' && volumeSize < 40))
 		throw new Error('identity volume must be >=30 GiB and platform volume >=40 GiB')
-	const hostnames =
-		environment === 'next'
-			? { apex: 'next.aven.ceo', api: 'api.next.aven.ceo', checkout: 'my.next.aven.ceo' }
-			: { apex: 'aven.ceo', api: 'api.aven.ceo', checkout: 'my.aven.ceo' }
 	return {
 		target,
 		environment,
@@ -78,7 +75,7 @@ export function loadPlatformConfig(env = process.env) {
 		identityDeploymentId: 'aven-identity-v1',
 		platformDeploymentId: `aven-platform-${environment}-v1`,
 		identityHostname: 'aven.id',
-		platformHostnames: hostnames,
+		platformHostnames: target === 'platform' ? platformHostnames(environment) : undefined,
 		platformDnsZone: 'aven.ceo',
 		location: required(env, 'HETZNER_LOCATION'),
 		serverType:

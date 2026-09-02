@@ -11,10 +11,16 @@ This Pulumi program creates one selected protected Hetzner foundation per stack:
 It also creates stable SSH host keys, the deployment key registration,
 firewalls, environment-specific `aven.ceo` DNS records, and internal runtime secrets.
 `aven.id` uses an external DNS provider: the identity stack exports
-`identityDnsRecords` for manual entry and never attempts to manage that zone. The
-Each platform stack generates its own identity provisioning credential. The shared
+`identityDnsRecords` for manual entry and never attempts to manage that zone. Each
+platform stack generates its own identity provisioning credential. The shared
 identity deployment admits both credentials without giving either platform access to
 identity state or to the other platform's state.
+
+Before a real `up`, the workflow reconciles the six exact DNS record sets owned by that
+platform environment. Matching A and AAAA sets left by an earlier deployment are imported
+into the current stack and updated in place. A stale CNAME on one of those exact hostnames is
+removed because it cannot coexist with the required address records. Records outside the
+environment's `api`, `my`, and apex names are never adopted or removed.
 
 Until the planned VPN exists, SSH is reachable from dynamic IPv4 and IPv6
 addresses and remains protected by generated per-host keys, key-only

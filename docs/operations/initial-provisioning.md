@@ -189,6 +189,14 @@ If the local checkpoint already contains the provider, both buckets, versioning,
 policies with no pending operation or initialization error, resume skips the completed
 provider update and continues at this migration boundary.
 
+The initial infrastructure run applies the same adoption rule to public `aven.ceo` DNS.
+Before each platform update, it lists the six exact A and AAAA record sets owned by that
+environment. Existing matching sets are imported into the current Pulumi stack and then
+updated to the new host addresses. A stale CNAME at one of those exact names is removed
+because it cannot coexist with the required address records. Unrelated records in the zone
+are left untouched. This makes a fresh generation and a resumed installation follow the
+same path without asking the operator to remove old platform addresses manually.
+
 On a terminal smaller than 60 columns by 20 rows it automatically uses the accessible
 plain wizard. Force that mode in any terminal with:
 
