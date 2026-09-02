@@ -9,7 +9,7 @@ describe('Polar product manifest bootstrap', () => {
 				accessToken: 'unused-in-injected-test',
 				organizationId: 'org-test',
 				server: 'sandbox',
-				publicBaseUrl: 'https://my.next.aven.ceo',
+				publicBaseUrl: 'https://portal.next.aven.ceo',
 				webhookSecret: 'unused-in-injected-test'
 			},
 			{

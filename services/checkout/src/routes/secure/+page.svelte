@@ -110,7 +110,7 @@ function onKey(event: KeyboardEvent) {
 
 <!--
   Both states are the `flow-card` actor. Its description names this screen —
-  my.aven.ceo's name check is one of the three it was written for, beside
+  portal.aven.ceo's name check is one of the three it was written for, beside
   avenID's device authorisation and the passkey sign-in.
 
   What this replaces is `panel auth` plus eight loose classes (mark, code,

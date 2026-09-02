@@ -17,7 +17,7 @@
 	reverse_proxy api:3000
 }
 
-{$CHECKOUT_DOMAIN:my.aven.ceo} {
+{$CHECKOUT_DOMAIN:portal.aven.ceo} {
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"

@@ -14,14 +14,20 @@ separate protected action.
 | Target | Pulumi stack | Public origins | Static source |
 | --- | --- | --- | --- |
 | `identity` | `organization/aven-platform/identity` | `aven.id` | None |
-| `next` | `organization/aven-platform/next` | `next.aven.ceo`, `api.next.aven.ceo`, `my.next.aven.ceo` | `aven-brands` `next` and `deploy/next` |
-| `production` | `organization/aven-platform/production` | `aven.ceo`, `api.aven.ceo`, `my.aven.ceo` | `aven-brands` `production` and `deploy/production` |
+| `next` | `organization/aven-platform/next` | `next.aven.ceo`, `api.next.aven.ceo`, `portal.next.aven.ceo` | `aven-brands` `next` and `deploy/next` |
+| `production` | `organization/aven-platform/production` | `aven.ceo`, `api.aven.ceo`, `portal.aven.ceo` | `aven-brands` `production` and `deploy/production` |
 
 The platform stacks share no database, tenant-signing key, service credential,
 customer route, backup path, SSH identity, or Pulumi state. Both accept short-lived
 tokens from `https://aven.id`. Each platform stack generates its own internal
 provisioning credential. The shared identity deployment admits both; neither platform
 deployment receives identity-state or cross-platform-state access.
+
+The `my.aven.ceo` and `my.next.aven.ceo` names are outside avenOS ownership. During
+the first update from the former checkout hostname, automation removes only the old
+RRsets' Pulumi state entries and leaves the DNS records themselves unchanged. All new
+checkout traffic and DNS management use `portal.aven.ceo` and
+`portal.next.aven.ceo`.
 
 ## Before the first deployment
 
@@ -134,7 +140,7 @@ Verify shared identity and `next`:
 ```sh
 curl --fail https://aven.id/api/health/ready
 curl --fail https://api.next.aven.ceo/health/live
-curl --fail https://my.next.aven.ceo/api/health/ready
+curl --fail https://portal.next.aven.ceo/api/health/ready
 curl --fail https://next.aven.ceo/
 ```
 
@@ -156,7 +162,7 @@ Verify production:
 
 ```sh
 curl --fail https://api.aven.ceo/health/live
-curl --fail https://my.aven.ceo/api/health/ready
+curl --fail https://portal.aven.ceo/api/health/ready
 curl --fail https://aven.ceo/
 ```
 

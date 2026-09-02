@@ -177,7 +177,7 @@ onMount(() => {
 
 		<div class="relative grid min-h-dvh place-items-center px-6 py-24">
 			<!-- The `flow-card` actor. This is the fourth screen of its shape in the
-			     estate: avenID's device authorisation, my.aven.ceo's name check and
+			     estate: avenID's device authorisation, portal.aven.ceo's name check and
 			     its passkey sign-in are the three its description names, and the
 			     desktop app's own sign-in gate is the same crest / eyebrow /
 			     heading / description / code / actions card. -->

@@ -910,12 +910,12 @@ test('builds all deployment and operations environment settings', () => {
 	generated.polarWebhooks = {
 		next: {
 			id: 'next-hook',
-			url: 'https://my.next.aven.ceo/api/webhooks/polar',
+			url: 'https://portal.next.aven.ceo/api/webhooks/polar',
 			secret: 'next-secret'
 		},
 		production: {
 			id: 'prod-hook',
-			url: 'https://my.aven.ceo/api/webhooks/polar',
+			url: 'https://portal.aven.ceo/api/webhooks/polar',
 			secret: 'prod-secret'
 		}
 	}
@@ -983,7 +983,7 @@ test('validates and configures only the selected deployment targets', () => {
 	generated.polarWebhooks = {
 		next: {
 			id: 'next-hook',
-			url: 'https://my.next.aven.ceo/api/webhooks/polar',
+			url: 'https://portal.next.aven.ceo/api/webhooks/polar',
 			secret: 'next-secret'
 		}
 	}
@@ -1059,8 +1059,8 @@ test('supports every non-empty combination without configuring an unselected tar
 					id: `${target}-hook`,
 					url:
 						target === 'next'
-							? 'https://my.next.aven.ceo/api/webhooks/polar'
-							: 'https://my.aven.ceo/api/webhooks/polar',
+							? 'https://portal.next.aven.ceo/api/webhooks/polar'
+							: 'https://portal.aven.ceo/api/webhooks/polar',
 					secret: `${target}-secret`
 				}
 			])
@@ -1090,7 +1090,7 @@ test('refreshes completed environments when a later target adds shared state ref
 	generated.polarWebhooks = {
 		next: {
 			id: 'next-hook',
-			url: 'https://my.next.aven.ceo/api/webhooks/polar',
+			url: 'https://portal.next.aven.ceo/api/webhooks/polar',
 			secret: 'next-secret'
 		}
 	}
@@ -1119,12 +1119,12 @@ test('writes password-manager recovery material owner-only', () => {
 	generated.polarWebhooks = {
 		next: {
 			id: 'next-hook',
-			url: 'https://my.next.aven.ceo/api/webhooks/polar',
+			url: 'https://portal.next.aven.ceo/api/webhooks/polar',
 			secret: 'next-secret'
 		},
 		production: {
 			id: 'prod-hook',
-			url: 'https://my.aven.ceo/api/webhooks/polar',
+			url: 'https://portal.aven.ceo/api/webhooks/polar',
 			secret: 'prod-secret'
 		}
 	}
@@ -1156,12 +1156,12 @@ test('adds the resumable initial rollout and manual DNS handoff to the password-
 	generated.polarWebhooks = {
 		next: {
 			id: 'next-hook',
-			url: 'https://my.next.aven.ceo/api/webhooks/polar',
+			url: 'https://portal.next.aven.ceo/api/webhooks/polar',
 			secret: 'next-secret'
 		},
 		production: {
 			id: 'prod-hook',
-			url: 'https://my.aven.ceo/api/webhooks/polar',
+			url: 'https://portal.aven.ceo/api/webhooks/polar',
 			secret: 'prod-secret'
 		}
 	}
@@ -1192,6 +1192,6 @@ test('adds the resumable initial rollout and manual DNS handoff to the password-
 	assert.match(completedContents, /commit\/0123456789abcdef0123456789abcdef01234567/)
 	assert.match(completedContents, /Public installation verified at 2026-08-30T12:00:00\.000Z/)
 	assert.match(completedContents, /https:\/\/api\.next\.aven\.ceo/)
-	assert.match(completedContents, /https:\/\/my\.aven\.ceo/)
+	assert.match(completedContents, /https:\/\/portal\.aven\.ceo/)
 	assert.match(completedContents, /settings\/environments/)
 })

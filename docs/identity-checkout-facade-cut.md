@@ -14,11 +14,11 @@ separate deployments from this cut onward:
 | Origin | Responsibility | Must never own |
 | --- | --- | --- |
 | `https://aven.id` | Signup/account provisioning, passkey registration, passkey authentication, browser sessions, native device authorization, and signed service authorization | Checkout, billing, names, artifacts, sites, LLMs, or tenant routing |
-| `https://my.aven.ceo` | Checkout web application, name purchase funnel, payment-provider integration, invoices/subscriptions, purchase email, and commerce records | Credentials, authenticators, sessions, signing keys, or domain-service APIs |
+| `https://portal.aven.ceo` | Checkout web application, name purchase funnel, payment-provider integration, invoices/subscriptions, purchase email, and commerce records | Credentials, authenticators, sessions, signing keys, or domain-service APIs |
 | `https://api.aven.ceo` | Small authenticated facade over server-side services | Browser pages, checkout, user storage, credentials, or business persistence |
 | `https://aven.ceo` | Public static website published through avenOS static hosting | Authentication, checkout, mutable APIs, or secrets |
 
-`next` repeats the three platform responsibilities at `my.next.aven.ceo`,
+`next` repeats the three platform responsibilities at `portal.next.aven.ceo`,
 `api.next.aven.ceo`, and `next.aven.ceo`. It does not create another identity origin
 or WebAuthn relying party.
 
@@ -70,7 +70,7 @@ registration invalidates the bootstrap setup link.
 `POST /internal/v1/accounts` accepts one of two exact constant-time Bearer secrets and a
 validated `{ email, source }` body. It idempotently provisions one verified
 identity subject and returns a setup URL only while the user has no qualifying
-passkey. `my.aven.ceo` calls it after a verified payment event. No checkout code
+passkey. `portal.aven.ceo` calls it after a verified payment event. No checkout code
 inserts an identity row.
 
 Each platform stack generates its own rotatable symmetric credential. The protected
@@ -153,7 +153,7 @@ provisioning/reconciliation contracts are specified in
 ## Checkout surface
 
 The former monolith is renamed `services/checkout` and is deployed at
-`my.aven.ceo`. Identity source files, passkey endpoints, associated-domain
+`portal.aven.ceo`. Identity source files, passkey endpoints, associated-domain
 files, and credential tests have been removed from it. A checkout-owned
 `checkout_customers` table stores only `{ subject_id, email, timestamps }` as a
 commerce projection; it is not an identity cache and cannot authenticate
@@ -224,7 +224,7 @@ server documents remain separate work.
 
 `aven.ceo` is not a SvelteKit identity or checkout process. It is static output
 published through the existing static-site-hosting path in avenOS. It may link
-to `my.aven.ceo` and `aven.id`; it does not proxy their cookies or APIs. A
+to `portal.aven.ceo` and `aven.id`; it does not proxy their cookies or APIs. A
 compromise of public site content therefore cannot read host-only identity
 cookies.
 

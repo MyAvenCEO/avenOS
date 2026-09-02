@@ -69,7 +69,7 @@ async function approve() {
 
 <!--
   The `flow-card` actor. This screen is one of the three its description
-  names — avenID device authorisation, my.aven.ceo's name check and its
+  names — avenID device authorisation, portal.aven.ceo's name check and its
   passkey sign-in are the same shape, which is what made it an actor rather
   than a component here.
 

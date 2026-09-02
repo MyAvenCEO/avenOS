@@ -13,8 +13,8 @@ export function manualIdentityRecordSpecs({ hostname, ipv4, ipv6 }) {
 }
 
 const supportedHostnames = [
-	{ apex: 'next.aven.ceo', api: 'api.next.aven.ceo', checkout: 'my.next.aven.ceo' },
-	{ apex: 'aven.ceo', api: 'api.aven.ceo', checkout: 'my.aven.ceo' }
+	{ apex: 'next.aven.ceo', api: 'api.next.aven.ceo', checkout: 'portal.next.aven.ceo' },
+	{ apex: 'aven.ceo', api: 'api.aven.ceo', checkout: 'portal.aven.ceo' }
 ]
 
 function relativeName(hostname, zone) {
@@ -35,8 +35,8 @@ export function platformRecordSpecs({ zone, hostnames, ipv4, ipv6 }) {
 	return [
 		record('platform-api-a', zone, relativeName(hostnames.api, zone), 'A', ipv4),
 		record('platform-api-aaaa', zone, relativeName(hostnames.api, zone), 'AAAA', ipv6),
-		record('platform-checkout-a', zone, relativeName(hostnames.checkout, zone), 'A', ipv4),
-		record('platform-checkout-aaaa', zone, relativeName(hostnames.checkout, zone), 'AAAA', ipv6),
+		record('platform-portal-a', zone, relativeName(hostnames.checkout, zone), 'A', ipv4),
+		record('platform-portal-aaaa', zone, relativeName(hostnames.checkout, zone), 'AAAA', ipv6),
 		record('platform-apex-a', zone, relativeName(hostnames.apex, zone), 'A', ipv4),
 		record('platform-apex-aaaa', zone, relativeName(hostnames.apex, zone), 'AAAA', ipv6)
 	]
@@ -47,9 +47,9 @@ export function platformHostnames(environment) {
 		return {
 			apex: 'next.aven.ceo',
 			api: 'api.next.aven.ceo',
-			checkout: 'my.next.aven.ceo'
+			checkout: 'portal.next.aven.ceo'
 		}
 	if (environment === 'production')
-		return { apex: 'aven.ceo', api: 'api.aven.ceo', checkout: 'my.aven.ceo' }
+		return { apex: 'aven.ceo', api: 'api.aven.ceo', checkout: 'portal.aven.ceo' }
 	throw new Error('managed platform DNS exists only for next and production')
 }

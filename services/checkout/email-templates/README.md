@@ -43,7 +43,7 @@ but non-sensitive fixture values:
   "subject": "Checkout link for {{name}}",
   "fixture": {
     "name": "aurora",
-    "claimUrl": "https://my.aven.ceo/purchase/checkout?claim=designer-example",
+    "claimUrl": "https://portal.aven.ceo/purchase/checkout?claim=designer-example",
     "expiresAt": "Friday, 21 August 2026 at 23:59 UTC"
   }
 }

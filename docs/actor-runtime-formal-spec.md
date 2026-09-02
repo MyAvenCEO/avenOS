@@ -239,7 +239,7 @@ Ownership is resolved as follows:
 | Surface | Public entry | Owning downstream |
 | --- | --- | --- |
 | signup, passkeys, sessions, token issuance | `aven.id` | identity service |
-| billing and checkout operations | `api.aven.ceo` allowlist | `my.aven.ceo` checkout service |
+| billing and checkout operations | `api.aven.ceo` allowlist | `portal.aven.ceo` checkout service |
 | actor-run commands and events | `api.aven.ceo` `/api/actor-runs` allowlist | `os.aven` runner service |
 | artifact reads and publications | `api.aven.ceo` artifact allowlist | Artifact Store adapter |
 | model catalog and completions | `api.aven.ceo` LLM allowlist | `ceo.aven` LLM gateway service |

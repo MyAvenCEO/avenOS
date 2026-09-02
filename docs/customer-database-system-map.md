@@ -23,7 +23,7 @@ clients
       │   ├── identity service
       │   └── identity PostgreSQL
       │
-      ├── my.aven.ceo ───────── platform host
+      ├── portal.aven.ceo ───── platform host
       │   ├── checkout
       │   ├── email worker
       │   └── platform-event worker
@@ -48,7 +48,7 @@ backup repository prefixes. No database credential crosses between the hosts.
 | Boundary | Trust decision |
 | --- | --- |
 | `aven.id` | Authenticates the stable subject and signs short-lived `aven-services` tokens |
-| `my.aven.ceo` | Verifies payment-provider messages and records commerce facts; it cannot authenticate a user |
+| `portal.aven.ceo` | Verifies payment-provider messages and records commerce facts; it cannot authenticate a user |
 | `api.aven.ceo` | Verifies identity, evaluates current entitlement, selects one customer environment, and issues a bounded downstream tenant grant |
 | Domain service | Verifies workload authentication and the tenant grant, then opens only the selected customer's store |
 | PostgreSQL | Enforces database and schema isolation even if an application route is wrong |

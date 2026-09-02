@@ -86,14 +86,14 @@ if (dryRun) {
 			...(platformTargets.includes('next') && {
 				next: {
 					id: 'pending',
-					url: 'https://my.next.aven.ceo/api/webhooks/polar',
+					url: 'https://portal.next.aven.ceo/api/webhooks/polar',
 					secret: 'pending'
 				}
 			}),
 			...(platformTargets.includes('production') && {
 				production: {
 					id: 'pending',
-					url: 'https://my.aven.ceo/api/webhooks/polar',
+					url: 'https://portal.aven.ceo/api/webhooks/polar',
 					secret: 'pending'
 				}
 			})
@@ -428,7 +428,7 @@ for (const target of platformTargets) {
 		accessToken: provider.polarApiKey,
 		organizationId: provider.polarOrganizationId,
 		server: target === 'next' ? 'sandbox' : 'production',
-		publicBaseUrl: target === 'next' ? 'https://my.next.aven.ceo' : 'https://my.aven.ceo',
+		publicBaseUrl: target === 'next' ? 'https://portal.next.aven.ceo' : 'https://portal.aven.ceo',
 		webhookSecret: endpoint.secret
 	})
 	completeProgress(

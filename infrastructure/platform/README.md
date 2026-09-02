@@ -4,9 +4,9 @@ This Pulumi program creates one selected protected Hetzner foundation per stack:
 
 - `identity`: `aven-identity-v1`, `aven.id`, and its identity-only PostgreSQL volume;
 - `next`: `aven-platform-next-v1` at `next.aven.ceo`, `api.next.aven.ceo`, and
-  `my.next.aven.ceo`; or
+  `portal.next.aven.ceo`; or
 - `production`: `aven-platform-production-v1` at `aven.ceo`, `api.aven.ceo`, and
-  `my.aven.ceo`.
+  `portal.aven.ceo`.
 
 It also creates stable SSH host keys, the deployment key registration,
 firewalls, environment-specific `aven.ceo` DNS records, and internal runtime secrets.
@@ -20,7 +20,9 @@ Before a real `up`, the workflow reconciles the six exact DNS record sets owned 
 platform environment. Matching A and AAAA sets left by an earlier deployment are imported
 into the current stack and updated in place. A stale CNAME on one of those exact hostnames is
 removed because it cannot coexist with the required address records. Records outside the
-environment's `api`, `my`, and apex names are never adopted or removed.
+environment's `api`, `portal`, and apex names are never adopted or removed. Legacy
+`my` checkout RRsets are relinquished from Pulumi state without provider-side deletion;
+the platform never imports, changes, or removes them.
 
 Until the planned VPN exists, SSH is reachable from dynamic IPv4 and IPv6
 addresses and remains protected by generated per-host keys, key-only

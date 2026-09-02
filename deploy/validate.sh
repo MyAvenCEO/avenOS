@@ -40,9 +40,9 @@ env \
 
 source "$root/deploy/release/environment.sh"
 configure_platform_environment next
-[[ "$public_domain $api_domain $checkout_domain" == 'next.aven.ceo api.next.aven.ceo my.next.aven.ceo' ]]
+[[ "$public_domain $api_domain $checkout_domain" == 'next.aven.ceo api.next.aven.ceo portal.next.aven.ceo' ]]
 configure_platform_environment production
-[[ "$public_domain $api_domain $checkout_domain" == 'aven.ceo api.aven.ceo my.aven.ceo' ]]
+[[ "$public_domain $api_domain $checkout_domain" == 'aven.ceo api.aven.ceo portal.aven.ceo' ]]
 bun test "$root/deploy/local/llm-catalog.test.ts"
 
 env \
@@ -68,7 +68,7 @@ env \
   IDENTITY_BACKUP_PASSWORD=test-backup \
   IDENTITY_BETTER_AUTH_SECRET=01234567890123456789012345678901 \
   IDENTITY_PROVISIONING_SECRETS=01234567890123456789012345678901,abcdefghijklmnopqrstuvwxyz012345 \
-  TRUSTED_WEB_ORIGINS=https://next.aven.ceo,https://my.next.aven.ceo,https://aven.ceo,https://my.aven.ceo \
+  TRUSTED_WEB_ORIGINS=https://next.aven.ceo,https://portal.next.aven.ceo,https://aven.ceo,https://portal.aven.ceo \
   NEXT_PLATFORM_PUBLIC_IPV4=192.0.2.10 \
   NEXT_PLATFORM_PUBLIC_IPV6=2001:db8::10 \
   PRODUCTION_PLATFORM_PUBLIC_IPV4=192.0.2.20 \
@@ -127,8 +127,8 @@ env \
   PLATFORM_PUBLIC_IPV4=192.0.2.10 \
   API_DOMAIN=api.next.aven.ceo \
   API_PUBLIC_BASE_URL=https://api.next.aven.ceo \
-  CHECKOUT_DOMAIN=my.next.aven.ceo \
-  PLATFORM_WEB_ORIGINS=https://next.aven.ceo,https://my.next.aven.ceo \
+  CHECKOUT_DOMAIN=portal.next.aven.ceo \
+  PLATFORM_WEB_ORIGINS=https://next.aven.ceo,https://portal.next.aven.ceo \
   DOWNSTREAMS_JSON='[]' \
   CUSTOMER_DOWNSTREAMS_JSON='[]' \
   LLM_GATEWAY_MODELS_JSON='[]' \
@@ -156,14 +156,14 @@ docker run --rm \
 
 docker run --rm \
   --env API_DOMAIN=api.next.aven.ceo \
-  --env CHECKOUT_DOMAIN=my.next.aven.ceo \
+  --env CHECKOUT_DOMAIN=portal.next.aven.ceo \
   --env ACME_EMAIL=test@example.test \
   --volume "$root/deploy/platform/Caddyfile:/etc/caddy/Caddyfile:ro" \
   caddy:2.10.2-alpine caddy validate --config /etc/caddy/Caddyfile
 
 docker run --rm \
   --env API_DOMAIN=api.aven.ceo \
-  --env CHECKOUT_DOMAIN=my.aven.ceo \
+  --env CHECKOUT_DOMAIN=portal.aven.ceo \
   --env ACME_EMAIL=test@example.test \
   --volume "$root/deploy/platform/Caddyfile:/etc/caddy/Caddyfile:ro" \
   caddy:2.10.2-alpine caddy validate --config /etc/caddy/Caddyfile
