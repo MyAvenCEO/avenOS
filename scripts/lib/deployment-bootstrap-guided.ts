@@ -277,30 +277,36 @@ function hmac(key: string | Buffer, value: string): Buffer {
 	return createHmac('sha256', key).update(value).digest()
 }
 
-export function signedS3ReadRequest(input: {
+function signedS3Request(input: {
 	region: string
 	accessKeyId: string
 	secretAccessKey: string
-	bucket?: string
+	bucket: string
+	method: 'DELETE' | 'GET' | 'PUT'
 	now?: Date
 }): { url: string; headers: Record<string, string> } {
 	if (!/^[a-z0-9-]+$/.test(input.region)) throw new Error('Invalid Object Storage region.')
 	if (!input.accessKeyId || !input.secretAccessKey)
 		throw new Error('Both Object Storage credential values are required.')
-	if (input.bucket && !/^[a-z0-9][a-z0-9.-]+[a-z0-9]$/.test(input.bucket))
+	if (!/^[a-z0-9][a-z0-9.-]+[a-z0-9]$/.test(input.bucket))
 		throw new Error('Invalid Object Storage bucket name.')
 	const host = `${input.region}.your-objectstorage.com`
-	const path = input.bucket ? `/${input.bucket}` : '/'
-	const query = input.bucket ? 'list-type=2&max-keys=0' : ''
+	const path = `/${input.bucket}`
+	const query = input.method === 'GET' ? 'list-type=2&max-keys=0' : ''
 	const now = input.now ?? new Date()
 	const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '')
 	const date = amzDate.slice(0, 8)
 	const payloadHash = sha256('')
 	const signedHeaders = 'host;x-amz-content-sha256;x-amz-date'
 	const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`
-	const canonicalRequest = ['GET', path, query, canonicalHeaders, signedHeaders, payloadHash].join(
-		'\n'
-	)
+	const canonicalRequest = [
+		input.method,
+		path,
+		query,
+		canonicalHeaders,
+		signedHeaders,
+		payloadHash
+	].join('\n')
 	const scope = `${date}/${input.region}/s3/aws4_request`
 	const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${scope}\n${sha256(canonicalRequest)}`
 	const dateKey = hmac(`AWS4${input.secretAccessKey}`, date)
@@ -316,6 +322,81 @@ export function signedS3ReadRequest(input: {
 			'x-amz-date': amzDate
 		}
 	}
+}
+
+export function signedS3ReadRequest(input: {
+	region: string
+	accessKeyId: string
+	secretAccessKey: string
+	bucket: string
+	now?: Date
+}): { url: string; headers: Record<string, string> } {
+	return signedS3Request({ ...input, method: 'GET' })
+}
+
+export function signedS3CreateBucketRequest(input: {
+	region: string
+	accessKeyId: string
+	secretAccessKey: string
+	bucket: string
+	now?: Date
+}): { url: string; headers: Record<string, string> } {
+	return signedS3Request({ ...input, method: 'PUT' })
+}
+
+export function signedS3DeleteBucketRequest(input: {
+	region: string
+	accessKeyId: string
+	secretAccessKey: string
+	bucket: string
+	now?: Date
+}): { url: string; headers: Record<string, string> } {
+	return signedS3Request({ ...input, method: 'DELETE' })
+}
+
+type ExactS3BucketRequest = {
+	region: string
+	accessKeyId: string
+	secretAccessKey: string
+	bucket: string
+}
+
+export async function exactS3BucketExists(
+	input: ExactS3BucketRequest,
+	fetcher: typeof fetch = fetch
+): Promise<boolean> {
+	const request = signedS3ReadRequest(input)
+	const response = await fetcher(request.url, {
+		headers: request.headers,
+		signal: AbortSignal.timeout(20_000)
+	})
+	if (response.ok) return true
+	if (response.status === 404) return false
+	throw new Error(
+		`Hetzner Object Storage returned HTTP ${response.status} while checking exact bucket ${input.bucket}.`
+	)
+}
+
+export async function createExactS3Bucket(
+	input: ExactS3BucketRequest,
+	fetcher: typeof fetch = fetch
+): Promise<void> {
+	const request = signedS3CreateBucketRequest(input)
+	const response = await fetcher(request.url, {
+		method: 'PUT',
+		headers: request.headers,
+		signal: AbortSignal.timeout(20_000)
+	})
+	if (response.ok) return
+	const code = s3ErrorCode(await response.text())
+	if (
+		response.status === 409 &&
+		['BucketAlreadyExists', 'BucketAlreadyOwnedByYou'].includes(code ?? '')
+	)
+		return
+	throw new Error(
+		`Hetzner Object Storage rejected exact bucket ${input.bucket} with HTTP ${response.status}${code ? ` (${code})` : ''}.`
+	)
 }
 
 export function s3ErrorCode(xml: string): string | undefined {

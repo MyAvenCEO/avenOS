@@ -3,7 +3,9 @@ import test from 'node:test'
 import {
 	actionableWizardProgress,
 	bootstrapFailureSummary,
+	createExactS3Bucket,
 	deploymentTargetSummary,
+	exactS3BucketExists,
 	guidedBootstrapIntroduction,
 	guidedBootstrapRecoveryNotice,
 	guidedCredentialsCsv,
@@ -17,6 +19,8 @@ import {
 	savedWizardResumeIndex,
 	savedWizardVerificationIndexes,
 	setValueAt,
+	signedS3CreateBucketRequest,
+	signedS3DeleteBucketRequest,
 	signedS3ReadRequest,
 	unseenWorkflowRunId,
 	valueAt,
@@ -299,6 +303,96 @@ test('signs read-only S3 verification requests without exposing the secret', () 
 	assert.match(request.headers.Authorization, /Signature=[a-f0-9]{64}$/)
 	assert.doesNotMatch(JSON.stringify(request), /example-secret-that-must-not-appear/)
 	assert.equal(s3ErrorCode('<Error><Code>NoSuchBucket</Code></Error>'), 'NoSuchBucket')
+})
+
+test('signs an empty private bucket create without exposing the secret', () => {
+	const request = signedS3CreateBucketRequest({
+		region: 'hel1',
+		accessKeyId: 'EXAMPLEACCESS',
+		secretAccessKey: 'example-secret-that-must-not-appear',
+		bucket: 'avenos-0123456789-1234567-next-state',
+		now: new Date('2026-08-30T12:34:56.000Z')
+	})
+	assert.equal(
+		request.url,
+		'https://hel1.your-objectstorage.com/avenos-0123456789-1234567-next-state'
+	)
+	assert.match(request.headers.Authorization, /Credential=EXAMPLEACCESS\/20260830\/hel1\/s3/)
+	assert.match(request.headers.Authorization, /Signature=[a-f0-9]{64}$/)
+	assert.doesNotMatch(JSON.stringify(request), /example-secret-that-must-not-appear/)
+})
+
+test('signs an exact empty bucket delete without exposing the secret', () => {
+	const request = signedS3DeleteBucketRequest({
+		region: 'hel1',
+		accessKeyId: 'EXAMPLEACCESS',
+		secretAccessKey: 'example-secret-that-must-not-appear',
+		bucket: 'avenos-0123456789-1234567-disposable',
+		now: new Date('2026-08-30T12:34:56.000Z')
+	})
+	assert.equal(
+		request.url,
+		'https://hel1.your-objectstorage.com/avenos-0123456789-1234567-disposable'
+	)
+	assert.match(request.headers.Authorization, /Credential=EXAMPLEACCESS\/20260830\/hel1\/s3/)
+	assert.match(request.headers.Authorization, /Signature=[a-f0-9]{64}$/)
+	assert.doesNotMatch(JSON.stringify(request), /example-secret-that-must-not-appear/)
+})
+
+test('checks one exact bucket without listing storage', async () => {
+	const requests = []
+	const input = {
+		region: 'hel1',
+		accessKeyId: 'EXAMPLEACCESS',
+		secretAccessKey: 'example-secret',
+		bucket: 'avenos-0123456789-1234567-next-state'
+	}
+	assert.equal(
+		await exactS3BucketExists(input, async (url, options) => {
+			requests.push({ url, options })
+			return new Response('', { status: 200 })
+		}),
+		true
+	)
+	assert.equal(requests.length, 1)
+	assert.match(requests[0].url, new RegExp(`/${input.bucket}\\?list-type=2&max-keys=0$`))
+	assert.equal(requests[0].options.method, undefined)
+	assert.equal(
+		await exactS3BucketExists(input, async () => new Response('', { status: 404 })),
+		false
+	)
+	await assert.rejects(
+		exactS3BucketExists(input, async () => new Response('', { status: 403 })),
+		/HTTP 403.*exact bucket/
+	)
+})
+
+test('creates only the exact bucket and accepts an idempotent conflict', async () => {
+	const input = {
+		region: 'hel1',
+		accessKeyId: 'EXAMPLEACCESS',
+		secretAccessKey: 'example-secret',
+		bucket: 'avenos-0123456789-1234567-next-state'
+	}
+	const requests = []
+	await createExactS3Bucket(input, async (url, options) => {
+		requests.push({ url, options })
+		return new Response('', { status: 200 })
+	})
+	assert.equal(requests.length, 1)
+	assert.equal(requests[0].url, `https://hel1.your-objectstorage.com/${input.bucket}`)
+	assert.equal(requests[0].options.method, 'PUT')
+	await createExactS3Bucket(
+		input,
+		async () => new Response('<Error><Code>BucketAlreadyOwnedByYou</Code></Error>', { status: 409 })
+	)
+	await assert.rejects(
+		createExactS3Bucket(
+			input,
+			async () => new Response('<Error><Code>AccessDenied</Code></Error>', { status: 403 })
+		),
+		/HTTP 403 \(AccessDenied\)/
+	)
 })
 
 test('persists nested answers without replacing sibling values', () => {

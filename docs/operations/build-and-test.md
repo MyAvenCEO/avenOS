@@ -81,11 +81,11 @@ bun run test:recovery
 - `test:infra` evaluates the Pulumi program and security-sensitive cloud-init output.
 - `test:bootstrap` proves bucket-policy isolation, namespaced GitHub configuration,
   all-event Polar webhook and product-manifest reconciliation, live-model catalog
-  conversion, mode-`0600` recovery output, bounded recovery from either provider create
-  order, bounded retry while an exact signed bucket read leads the provider's import
-  visibility, replacement of an orphaned salt-only Pulumi stack file without removing
-  operator settings, and exact-bucket teardown planning across every partial checkpoint
-  state without contacting a provider.
+  conversion, mode-`0600` recovery output, signed exact-name bucket creation, idempotent
+  resume, bounded S3 and provider-import visibility retries, atomic adoption of both
+  pre-created buckets, replacement of an orphaned salt-only Pulumi stack file without
+  removing operator settings, and exact-bucket teardown planning across every partial
+  checkpoint state without contacting a provider.
 - `test:deploy` validates shell scripts, production Compose files, Caddy
   configuration, dependency order, non-root images, and secret-safe build contexts.
 - `test:recovery` creates source databases, takes encrypted backups, restores fresh

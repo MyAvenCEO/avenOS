@@ -129,6 +129,32 @@ export const BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS = [
 	2_000, 4_000, 8_000, 15_000, 30_000, 30_000, 30_000, 60_000, 60_000, 60_000
 ] as const
 
+export async function ensureBootstrapBucketExists(options: {
+	exists: () => Promise<boolean>
+	create: () => Promise<void>
+	onVisibilityWait?: (options: { retry: number; maxRetries: number; delayMs: number }) => void
+	sleep?: (delayMs: number) => Promise<void>
+}): Promise<'existing' | 'created'> {
+	if (await options.exists()) return 'existing'
+	await options.create()
+	if (await options.exists()) return 'created'
+
+	for (const [index, delayMs] of BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.entries()) {
+		options.onVisibilityWait?.({
+			retry: index + 1,
+			maxRetries: BOOTSTRAP_BUCKET_VISIBILITY_RETRY_DELAYS_MS.length,
+			delayMs
+		})
+		await (options.sleep ?? ((delay) => new Promise((resolve) => setTimeout(resolve, delay))))(
+			delayMs
+		)
+		if (await options.exists()) return 'created'
+	}
+	throw new Error(
+		'Hetzner accepted the exact bucket create request, but the bucket did not become visible before the bounded retry window ended.'
+	)
+}
+
 export function pulumiStackIsListed(names: readonly string[], expected: string): boolean {
 	const shortName = expected.split('/').at(-1)
 	return names.some((name) => name === expected || name === shortName)
@@ -254,7 +280,11 @@ export async function reconcileBootstrapBucketUpdate(options: {
 			(kind) =>
 				!tracked.has(kind) && (snapshot.existing.includes(kind) || providerReported.includes(kind))
 		)
-		if (candidates.some((kind) => attempted.has(kind)) && !allowRepeatedCandidates)
+		if (
+			candidates.length > 0 &&
+			candidates.every((kind) => attempted.has(kind)) &&
+			!allowRepeatedCandidates
+		)
 			throw precedingError
 		const visibilityRetry = allowRepeatedCandidates
 		allowRepeatedCandidates = false
@@ -291,8 +321,8 @@ export async function reconcileBootstrapBucketUpdate(options: {
 			const afterTracked = new Set(afterFailure?.tracked ?? [])
 			const recoverable = (afterFailure?.existing ?? []).filter((kind) => !afterTracked.has(kind))
 			const exactImportsStillVisible =
-				candidates.length > 0 &&
-				candidates.every((kind) => providerInvisible.includes(kind) && recoverable.includes(kind))
+				providerInvisible.length > 0 &&
+				providerInvisible.every((kind) => candidates.includes(kind) && recoverable.includes(kind))
 			if (exactImportsStillVisible) {
 				const key = candidates.join(',')
 				if (key !== visibilityRetryKey) {
