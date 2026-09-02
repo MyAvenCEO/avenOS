@@ -21,8 +21,10 @@ import {
 	setValueAt,
 	signedS3CreateBucketRequest,
 	signedS3DeleteBucketRequest,
+	signedS3ListBucketsRequest,
 	signedS3ReadRequest,
 	unseenWorkflowRunId,
+	validateS3ProjectCredential,
 	valueAt,
 	workflowFailureSummary,
 	workflowRunIdFromDispatchOutput
@@ -303,6 +305,51 @@ test('signs read-only S3 verification requests without exposing the secret', () 
 	assert.match(request.headers.Authorization, /Signature=[a-f0-9]{64}$/)
 	assert.doesNotMatch(JSON.stringify(request), /example-secret-that-must-not-appear/)
 	assert.equal(s3ErrorCode('<Error><Code>NoSuchBucket</Code></Error>'), 'NoSuchBucket')
+})
+
+test('signs the project-level bucket listing used to validate an S3 credential', () => {
+	const request = signedS3ListBucketsRequest({
+		region: 'hel1',
+		accessKeyId: 'EXAMPLEACCESS',
+		secretAccessKey: 'example-secret-that-must-not-appear',
+		now: new Date('2026-08-30T12:34:56.000Z')
+	})
+	assert.equal(request.url, 'https://hel1.your-objectstorage.com/')
+	assert.match(request.headers.Authorization, /Credential=EXAMPLEACCESS\/20260830\/hel1\/s3/)
+	assert.match(request.headers.Authorization, /Signature=[a-f0-9]{64}$/)
+	assert.doesNotMatch(JSON.stringify(request), /example-secret-that-must-not-appear/)
+})
+
+test('validates an S3 credential by listing the project root, not a bucket', async () => {
+	const input = {
+		region: 'hel1',
+		accessKeyId: 'EXAMPLEACCESS',
+		secretAccessKey: 'example-secret-that-must-not-appear'
+	}
+	const requests = []
+	assert.equal(
+		await validateS3ProjectCredential(input, async (url, options) => {
+			requests.push({ url, options })
+			return new Response(
+				'<ListAllMyBucketsResult><Buckets><Bucket></Bucket><Bucket></Bucket></Buckets></ListAllMyBucketsResult>',
+				{ status: 200 }
+			)
+		}),
+		2
+	)
+	assert.equal(requests[0].url, 'https://hel1.your-objectstorage.com/')
+	assert.doesNotMatch(JSON.stringify(requests), /example-secret-that-must-not-appear/)
+	await assert.rejects(
+		validateS3ProjectCredential(
+			input,
+			async () => new Response('<Error><Code>InvalidAccessKeyId</Code></Error>', { status: 403 })
+		),
+		/HTTP 403 \(InvalidAccessKeyId\)/
+	)
+	await assert.rejects(
+		validateS3ProjectCredential(input, async () => new Response('<html/>', { status: 200 })),
+		/unexpected list-buckets response/
+	)
 })
 
 test('signs an empty private bucket create without exposing the secret', () => {
