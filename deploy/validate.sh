@@ -16,7 +16,14 @@ sh -n \
   "$root/deploy/operations/restore.sh" \
   "$root/deploy/operations/entrypoint.sh" \
   "$root/deploy/operations/healthcheck.sh"
-bash -n "$root/deploy/release/deploy.sh" "$root/deploy/release/environment.sh" "$root/deploy/validate.sh" "$root/deploy/operations/test-recovery.sh"
+bash -n \
+  "$root/deploy/release/deploy.sh" \
+  "$root/deploy/release/environment.sh" \
+  "$root/deploy/release/ssh-staging.sh" \
+  "$root/deploy/release/test-deploy.sh" \
+  "$root/deploy/validate.sh" \
+  "$root/deploy/operations/test-recovery.sh"
+bash "$root/deploy/release/test-deploy.sh"
 bun test "$root/deploy/local/llm-catalog.test.ts" "$root/deploy/e2e/llm-catalog.test.ts"
 
 grep -Fq "if: matrix.target != 'identity'" "$root/.github/workflows/platform-deploy.yml"

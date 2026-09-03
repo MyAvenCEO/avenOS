@@ -15,6 +15,7 @@ fi
 : "${PULUMI_BACKEND:?PULUMI_BACKEND is required}"
 
 root=$(cd -- "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$root/deploy/release/ssh-staging.sh"
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 pulumi login "$PULUMI_BACKEND" >/dev/null
@@ -24,7 +25,7 @@ output() { pulumi stack output "$1" --show-secrets --cwd "$root/infrastructure/p
 ip=$(output "${host_kind}Ipv4Address")
 host_key=$(output "${host_kind}HostPublicKey")
 private_key=$(output "${host_kind}TunnelPrivateKey")
-install -m 600 /dev/null "$scratch/key" "$scratch/known_hosts"
+prepare_ssh_staging "$scratch"
 printf '%s\n' "$private_key" > "$scratch/key"
 printf '%s %s\n' "$ip" "$host_key" > "$scratch/known_hosts"
 
