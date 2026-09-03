@@ -262,7 +262,7 @@ export function providerMissingImportedBootstrapBucketKinds(
 ): BootstrapBucketKind[] {
 	const missing = new Set<string>()
 	for (const match of output.matchAll(
-		/import error:\s+Preview failed:\s+resource '([^']+)' does not exist/gi
+		/\bimport(?:ing)?[^\r\n]*?\berror:\s+(?:Preview failed:\s+)?resource '([^']+)' does not exist/gi
 	))
 		missing.add(match[1] as string)
 	return BOOTSTRAP_BUCKET_KINDS.filter((kind) => missing.has(expected[kind]))
