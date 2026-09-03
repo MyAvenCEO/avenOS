@@ -74,6 +74,20 @@ docker run "${common[@]}" --env PGHOST="$source_db" --env PGUSER=aven_backup --e
 docker run "${common[@]}" --env PGHOST="$source_db" --env PGUSER=aven_backup --env PGPASSWORD=backup-test \
   --volume "$scratch/source-state:/var/lib/aven-backups" "$image" health
 
+started=$SECONDS
+if timeout 15 docker run "${common[@]}" \
+  --env RESTIC_REPOSITORY=s3:https://unreachable.invalid/aven-test \
+  --env BACKUP_REPOSITORY_PROBE_TIMEOUT_SECONDS=2 \
+  --env BACKUP_RESTIC_COMMAND_TIMEOUT_SECONDS=2 \
+  --env AWS_ACCESS_KEY_ID=test --env AWS_SECRET_ACCESS_KEY=test --env AWS_REGION=hel1 \
+  --env PGHOST="$source_db" --env PGUSER=aven_backup --env PGPASSWORD=backup-test \
+  --env BACKUP_ENVIRONMENT=ci --env BACKUP_HOST=bounded-provider-failure \
+  --volume "$scratch/source-state:/var/lib/aven-backups" "$image" backup; then
+  echo 'backup unexpectedly accepted an unreachable repository' >&2
+  exit 1
+fi
+((SECONDS - started < 15)) || { echo 'backup provider failure was not bounded' >&2; exit 1; }
+
 start_database "$target_db"
 if docker run "${common[@]}" --env PGHOST="$target_db" --env PGUSER=postgres --env PGPASSWORD=recovery-test \
   --env BACKUP_ENVIRONMENT=production --env RESTORE_CONFIRMATION=fresh-target-only \

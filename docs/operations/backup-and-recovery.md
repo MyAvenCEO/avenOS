@@ -43,6 +43,12 @@ read-only `aven_backup` database role. It:
 6. applies retention and verifies repository metadata; and
 7. atomically updates `last-success` only after every step succeeds.
 
+The backup and restore containers have database access on the internal network and a
+separate outbound-capable attachment for Object Storage. They publish no ports. On a fresh
+host, backup waits for the current central migrations and the deployment waits for the
+first successful encrypted snapshot. Repository probes are bounded, and a failed attempt
+is logged and retried after 30 seconds.
+
 The backup role can read application data but cannot write, create databases, create
 roles, or restore.
 

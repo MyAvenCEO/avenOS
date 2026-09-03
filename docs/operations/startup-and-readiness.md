@@ -33,6 +33,7 @@ closed.
 identity PostgreSQL durable TCP readiness
 └── identity role reconciliation completes
     └── identity migrations complete
+        ├── first off-host backup completes
         └── identity service becomes internally ready
             └── Caddy exposes aven.id
                 └── public identity readiness succeeds
@@ -47,6 +48,12 @@ Identity readiness requires its schema and signing material. Caddy starting does
 make identity ready, and certificate issuance cannot succeed until the externally
 managed `aven.id` records point to the identity host.
 
+Backup and restore containers join both the internal database network and a dedicated
+outbound network. The internal network remains unable to reach the internet, while the
+outbound attachment lets only the selected containers reach Object Storage without
+publishing an inbound port. A fresh deployment is not ready until migrations have
+completed and the first encrypted off-host backup has produced a current success marker.
+
 ## Each platform host
 
 ```text
@@ -56,18 +63,18 @@ platform PostgreSQL durable TCP readiness
     │   └── Polar product manifest converges
     ├── facade migrations complete
     ├── Artifact Store control migrations complete
-    └── backup role is usable
-        ├── checkout becomes ready after product convergence; its workers become ready
-        ├── platform provisioner becomes ready
-        └── Artifact Store provisioner becomes ready
-            └── customer reconciliation verifies mandatory components
-                ├── Intent Service becomes ready for routed customers
-                ├── Actor Runner becomes ready for routed customers
-                └── Artifact Store becomes ready for routed customers
-                    └── facade becomes internally ready
-                        ├── the environment API becomes publicly ready
-                        ├── the environment checkout becomes publicly ready
-                        └── managed static hosting exposes its system site
+    ├── first off-host backup completes with the migrated central schemas
+    ├── checkout becomes ready after product convergence; its workers become ready
+    ├── platform provisioner becomes ready
+    └── Artifact Store provisioner becomes ready
+        └── customer reconciliation verifies mandatory components
+            ├── Intent Service becomes ready for routed customers
+            ├── Actor Runner becomes ready for routed customers
+            └── Artifact Store becomes ready for routed customers
+                └── facade becomes internally ready
+                    ├── the environment API becomes publicly ready
+                    ├── the environment checkout becomes publicly ready
+                    └── managed static hosting exposes its system site
 ```
 
 Customer routing stays closed until the provisioner has observed the required schema
@@ -108,6 +115,11 @@ identity DNS records have been applied, the deployment workflow follows this ord
 Stop at the first failed gate. Inspect logs through the observation rail, correct the
 declarative source, and redeploy. Do not start a blocked dependant by hand or edit a
 database to make a health check pass.
+
+The first repository probe is time-bounded and a failed backup retries after 30 seconds.
+Backup logs identify the active attempt, provider failure, and retry delay. Compose gives
+a fresh backup three minutes to establish its marker and fails the deployment by four
+minutes rather than leaving a silently blocked Restic process running indefinitely.
 
 ## Recovery difference
 
