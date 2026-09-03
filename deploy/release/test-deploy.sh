@@ -41,7 +41,7 @@ file_mode() {
 }
 
 assert_ssh_arguments() {
-  local argument path
+  local argument path identities_only=false
   while (($# > 0)); do
     argument=$1
     shift
@@ -52,8 +52,11 @@ assert_ssh_arguments() {
     elif [[ "$argument" == UserKnownHostsFile=* ]]; then
       path=${argument#UserKnownHostsFile=}
       [[ -f "$path" && "$(file_mode "$path")" == 600 ]]
+    elif [[ "$argument" == IdentitiesOnly=yes ]]; then
+      identities_only=true
     fi
   done
+  [[ "$identities_only" == true ]]
 }
 
 ssh() {
@@ -116,7 +119,13 @@ run_target() (
   source "$root/deploy/release/deploy.sh"
 )
 
-run_target identity >/dev/null
-run_target next >/dev/null
-run_target production >/dev/null
+output_file=$(mktemp)
+trap 'rm -f "$output_file"' EXIT
+for target in identity next production; do
+  run_target "$target" >"$output_file" 2>&1
+  if grep -Fq 'test-secret' "$output_file"; then
+    echo "release deployment exposed a Pulumi secret for $target" >&2
+    exit 1
+  fi
+done
 echo 'release deployment staging passed for identity, next, and production'

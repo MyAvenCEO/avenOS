@@ -114,11 +114,13 @@ write_files:
   - path: /etc/ssh/ssh_host_ed25519_key
     owner: root:root
     permissions: "0600"
+    defer: true
     content: |
 ${indent(sshHostPrivateKey.trimEnd(), 6)}
   - path: /etc/ssh/ssh_host_ed25519_key.pub
     owner: root:root
     permissions: "0644"
+    defer: true
     content: |
 ${indent(normalizedSshHostPublicKey, 6)}
   - path: /etc/ssh/sshd_config.d/99-aven-hardening.conf

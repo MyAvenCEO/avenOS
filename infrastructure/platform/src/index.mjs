@@ -9,6 +9,7 @@ import { manualIdentityRecordSpecs, platformRecordSpecs } from './dns.mjs'
 const config = loadPlatformConfig()
 const teardown = process.env.PLATFORM_TEARDOWN === 'true'
 const protect = { protect: !teardown }
+const replaceable = { protect: false }
 const keepExistingDuringTeardown = (...properties) =>
 	teardown ? { ignoreChanges: properties } : {}
 
@@ -72,15 +73,27 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 		deployment: deploymentId,
 		environment: config.environment
 	}
-	const hostKey = new tls.PrivateKey(`${resource}-host-key`, { algorithm: 'ED25519' }, protect)
-	const adminKey = new tls.PrivateKey(`${resource}-admin-key`, { algorithm: 'ED25519' }, protect)
-	const deployKey = new tls.PrivateKey(`${resource}-deploy-key`, { algorithm: 'ED25519' }, protect)
+	const hostKey = new tls.PrivateKey(`${resource}-host-key`, { algorithm: 'ED25519' }, replaceable)
+	const adminKey = new tls.PrivateKey(
+		`${resource}-admin-key`,
+		{ algorithm: 'ED25519' },
+		replaceable
+	)
+	const deployKey = new tls.PrivateKey(
+		`${resource}-deploy-key`,
+		{ algorithm: 'ED25519' },
+		replaceable
+	)
 	const observeKey = new tls.PrivateKey(
 		`${resource}-observe-key`,
 		{ algorithm: 'ED25519' },
-		protect
+		replaceable
 	)
-	const tunnelKey = new tls.PrivateKey(`${resource}-tunnel-key`, { algorithm: 'ED25519' }, protect)
+	const tunnelKey = new tls.PrivateKey(
+		`${resource}-tunnel-key`,
+		{ algorithm: 'ED25519' },
+		replaceable
+	)
 	const registeredDeployKey = new hcloud.SshKey(
 		`${resource}-deploy-key-registration`,
 		{
@@ -88,12 +101,12 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 			publicKey: deployKey.publicKeyOpenssh,
 			labels
 		},
-		{ ...protect, provider: computeProvider }
+		{ ...replaceable, provider: computeProvider }
 	)
 	const firewall = new hcloud.Firewall(
 		`${resource}-firewall`,
 		{ name: `${deploymentId}-firewall`, labels, rules: firewallRules },
-		{ ...protect, provider: computeProvider }
+		{ ...replaceable, provider: computeProvider }
 	)
 	const volume = new hcloud.Volume(
 		`${resource}-data`,
@@ -152,9 +165,9 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 			serverType: selectedServerType(serverType),
 			image: config.osImage,
 			backups: false,
-			deleteProtection: !teardown,
-			rebuildProtection: !teardown,
-			keepDisk: !teardown,
+			deleteProtection: false,
+			rebuildProtection: false,
+			keepDisk: false,
 			firewallIds: [firewall.id.apply(Number)],
 			sshKeys: [registeredDeployKey.id],
 			publicNets: [{ ipv4Enabled: true, ipv6Enabled: true }],
@@ -162,7 +175,7 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 			labels
 		},
 		{
-			...protect,
+			...replaceable,
 			...keepExistingDuringTeardown(
 				'name',
 				'location',
@@ -181,7 +194,7 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 	const attachment = new hcloud.VolumeAttachment(
 		`${resource}-data-attachment`,
 		{ serverId: server.id.apply(Number), volumeId: volume.id.apply(Number), automount: false },
-		{ ...protect, provider: computeProvider, dependsOn: [server, volume] }
+		{ ...replaceable, provider: computeProvider, dependsOn: [server, volume] }
 	)
 	return {
 		server,
@@ -252,7 +265,7 @@ const platformDns = platform
 	: []
 
 const password = (name, length = 48) =>
-	new random.RandomPassword(name, { length, special: false }, protect).result
+	new random.RandomPassword(name, { length, special: false }, replaceable).result
 
 const identitySecrets = identity
 	? {
@@ -313,7 +326,7 @@ const platformSecrets = platform
 	: {}
 
 const tenantGrantKey = platform
-	? new tls.PrivateKey('tenant-grant-signing-key', { algorithm: 'ED25519' }, protect)
+	? new tls.PrivateKey('tenant-grant-signing-key', { algorithm: 'ED25519' }, replaceable)
 	: undefined
 
 export const deployUser = config.deployUser

@@ -74,7 +74,6 @@ external_output() {
 load_secret() {
   local variable=$1 stack=$2 output_name=$3 value
   value=$(stack_output "$stack" "$output_name")
-  printf '::add-mask::%s\n' "$value"
   printf -v "$variable" '%s' "$value"
 }
 
@@ -108,7 +107,7 @@ wait_for_cloud_init() {
       sleep 5
       continue
     fi
-    if ssh -i "$key" -o BatchMode=yes -o ConnectTimeout=10 -o UserKnownHostsFile="$stage/ssh/known_hosts" -o StrictHostKeyChecking=yes "$remote" 'test -f /var/lib/aven/cloud-init-complete'; then return 0; fi
+    if ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o UserKnownHostsFile="$stage/ssh/known_hosts" -o StrictHostKeyChecking=yes "$remote" 'test -f /var/lib/aven/cloud-init-complete'; then return 0; fi
     sleep 5
   done
   echo "cloud-init did not install the Pulumi-pinned SSH host key and finish on $remote within 15 minutes" >&2
@@ -119,7 +118,7 @@ deploy_bundle() {
   local host=$1 service=$2
   local remote="$deploy_user@$host"
   local upload="/tmp/aven-${service}-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
-  local ssh_args=(-i "$stage/ssh/key" -o BatchMode=yes -o ConnectTimeout=10 -o UserKnownHostsFile="$stage/ssh/known_hosts" -o StrictHostKeyChecking=yes)
+  local ssh_args=(-i "$stage/ssh/key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o UserKnownHostsFile="$stage/ssh/known_hosts" -o StrictHostKeyChecking=yes)
   wait_for_cloud_init "$stage/ssh/key" "$remote" "$(awk '{ print $1 " " $2 }' <<<"$3")"
   ssh "${ssh_args[@]}" "$remote" "install -d -m 0700 '$upload'"
   scp "${ssh_args[@]}" -r "$stage/$service/." "$remote:$upload/"
@@ -159,8 +158,6 @@ if [[ "$DEPLOYMENT_TARGET" == identity ]]; then
   load_secret identityBetterAuthSecret "$PULUMI_STACK" identityBetterAuthSecret
   nextProvisioningSecret=$(external_output "$NEXT_PULUMI_BACKEND" "$NEXT_STATE_S3_ACCESS_KEY_ID" "$NEXT_STATE_S3_SECRET_ACCESS_KEY" "$NEXT_PULUMI_CONFIG_PASSPHRASE" "$NEXT_PULUMI_STACK" platformIdentityProvisioningSecret)
   productionProvisioningSecret=$(external_output "$PRODUCTION_PULUMI_BACKEND" "$PRODUCTION_STATE_S3_ACCESS_KEY_ID" "$PRODUCTION_STATE_S3_SECRET_ACCESS_KEY" "$PRODUCTION_PULUMI_CONFIG_PASSPHRASE" "$PRODUCTION_PULUMI_STACK" platformIdentityProvisioningSecret)
-  printf '::add-mask::%s\n' "$nextProvisioningSecret"
-  printf '::add-mask::%s\n' "$productionProvisioningSecret"
   next_ipv4=$(dig +short A api.next.aven.ceo | tail -1)
   next_ipv6=$(dig +short AAAA api.next.aven.ceo | tail -1)
   production_ipv4=$(dig +short A api.aven.ceo | tail -1)

@@ -10,7 +10,7 @@ on:
         default: all
         required: true
       command:
-        description: Preview or create/update the selected protected Hetzner host
+        description: Preview or reconcile the selected replaceable host and protected data volume
         type: choice
         options: [preview, up]
         default: preview

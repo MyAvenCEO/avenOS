@@ -48,9 +48,9 @@ Environment name.
 
 Open **Actions → platform-infrastructure → Run workflow**. Select `target: all` and
 `command: preview`. The workflow previews `identity`, `next`, and production serially.
-Review three protected servers, three protected volumes, their firewalls, generated SSH
-identities, and each target's DNS behavior. Reject an unexpected replacement, wider SSH
-ingress, an unprotected stateful resource, or the wrong target stack.
+Review three replaceable servers, three protected volumes, their firewalls, generated
+SSH identities, and each target's DNS behavior. Reject an unexplained replacement, wider
+SSH ingress, an unprotected stateful resource, or the wrong target stack.
 
 After the preview succeeds, run the same workflow once more with `target: all` and
 `command: up`. It applies the three reviewed targets serially in `identity`, `next`,
@@ -68,6 +68,11 @@ generation for this repair.
 Pulumi installs Docker and Compose, mounts the protected volume, enables UFW,
 fail2ban, bounded logs, and unattended security updates, and records cloud-init
 completion. Do not create or upload SSH keys manually.
+
+Servers are disposable and intentionally lack provider deletion protection; their
+attached data volumes remain protected. A reviewed cloud-init or machine-image change
+may therefore replace a host and reattach the same volume. Reject a plan that deletes or
+replaces a data volume unless the recovery procedure explicitly requires it.
 
 Pulumi also generates per-host `aven-admin` identities. They permit key-only SSH from
 dynamic IPv4/IPv6 networks, including a phone SSH client, and have passwordless sudo

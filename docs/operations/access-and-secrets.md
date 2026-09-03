@@ -262,6 +262,12 @@ email, or shared cloud storage. Connect as `aven-admin` to the host's Pulumi out
 address. Password login and direct root login remain disabled, and fail2ban remains
 enabled even while port 22 is public.
 
+The host-key files are written in cloud-init's deferred final stage, after the operating
+system's SSH module has generated its defaults. Deployment then accepts the host only
+when its presented Ed25519 key equals Pulumi's public output and the cloud-init completion
+marker exists. Secret stack outputs are captured directly into owner-only temporary files
+or shell variables; they must never be printed as log-masking commands.
+
 The database tunnel is transport only. SQL inspection also requires a separately
 issued, time-bounded, read-only database role; automatic diagnostic-role issuance is
 not implemented yet.
