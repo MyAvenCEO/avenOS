@@ -111,12 +111,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.93.1
-      - uses: ./.github/actions/setup-platform-test-host
       - uses: ./.github/actions/bun-install
         with:
           token: ${{ secrets.PACKAGE_READ_TOKEN }}
-      - name: Install Playwright Chromium
-        run: bunx playwright install chromium
+      - uses: ./.github/actions/setup-platform-test-host
       - name: Static checks
         run: |
           bun run check:docs

@@ -34,6 +34,18 @@ grep -Fq 'libasound2-dev' "$root/.github/actions/setup-platform-test-host/action
   echo 'the platform test host must install ALSA headers required by the native voice client' >&2
   exit 1
 }
+grep -Fq 'bunx playwright install chromium' "$root/.github/actions/setup-platform-test-host/action.yml" || {
+  echo 'the platform test host must install the Chromium binary required by the browser E2E test' >&2
+  exit 1
+}
+for workflow in platform-ci.yml platform-deploy.yml; do
+  install_line=$(grep -n 'uses: ./.github/actions/bun-install' "$root/.github/workflows/$workflow" | head -1 | cut -d: -f1)
+  host_line=$(grep -n 'uses: ./.github/actions/setup-platform-test-host' "$root/.github/workflows/$workflow" | head -1 | cut -d: -f1)
+  if [[ -z "$install_line" || -z "$host_line" || "$install_line" -ge "$host_line" ]]; then
+    echo "$workflow must install repository dependencies before the shared test host resolves Playwright" >&2
+    exit 1
+  fi
+done
 grep -Fq "http://127.0.0.1:3010/health/ready" "$root/services/intent-service/Dockerfile"
 
 env \

@@ -86,10 +86,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.93.1
-      - uses: ./.github/actions/setup-platform-test-host
       - uses: ./.github/actions/bun-install
         with:
           token: ${{ secrets.PACKAGE_READ_TOKEN }}
+      - uses: ./.github/actions/setup-platform-test-host
       - name: Static, unit, infrastructure, and deployment-source checks
         run: |
           bun run check:docs

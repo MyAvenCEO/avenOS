@@ -1,5 +1,5 @@
 name: Set up platform test host
-description: Install the Linux libraries and WebDriver required by the native avenOS E2E client
+description: Install the Linux libraries, WebDriver, and browser required by the avenOS E2E stack
 
 runs:
   using: composite
@@ -28,3 +28,6 @@ runs:
           wget \
           xvfb
         cargo install tauri-driver --locked
+    - name: Install the lockfile-matched Playwright Chromium
+      shell: bash
+      run: bunx playwright install chromium
