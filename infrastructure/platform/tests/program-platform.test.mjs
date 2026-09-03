@@ -66,6 +66,12 @@ test('creates only one isolated production platform foundation and all six DNS r
 	assert.equal(resources.filter(({ type }) => type === 'hcloud:index/firewall:Firewall').length, 1)
 	assert.equal(resources.filter(({ type }) => type === 'hcloud:index/volume:Volume').length, 1)
 	assert.equal(resources.filter(({ type }) => type === 'hcloud:index/sshKey:SshKey').length, 1)
+	const server = resources.find(({ type }) => type === 'hcloud:index/server:Server')
+	const volume = resources.find(({ type }) => type === 'hcloud:index/volume:Volume')
+	assert.equal(server.inputs.deleteProtection, false)
+	assert.equal(server.inputs.rebuildProtection, false)
+	assert.equal(server.inputs.keepDisk, false)
+	assert.equal(volume.inputs.deleteProtection, true)
 	assert.equal(
 		resources.filter(({ type }) => type === 'hcloud:index/zoneRrset:ZoneRrset').length,
 		6

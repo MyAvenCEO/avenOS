@@ -32,6 +32,14 @@ test('identity and platform cloud-init use different deployment roots', () => {
 test('pins a Pulumi-managed SSH host key and contains no application secret', () => {
 	const cloudInit = render('/opt/aven/identity')
 	assert.match(cloudInit, /HostKey \/etc\/ssh\/ssh_host_ed25519_key/)
+	assert.match(
+		cloudInit,
+		/path: \/etc\/ssh\/ssh_host_ed25519_key\n\s+owner: root:root\n\s+permissions: "0600"\n\s+defer: true/
+	)
+	assert.match(
+		cloudInit,
+		/path: \/etc\/ssh\/ssh_host_ed25519_key\.pub\n\s+owner: root:root\n\s+permissions: "0644"\n\s+defer: true/
+	)
 	assert.match(cloudInit, /PasswordAuthentication no/)
 	assert.doesNotMatch(cloudInit, /BETTER_AUTH|POSTGRES_PASSWORD|POLAR_API_KEY|SMTP_URL/)
 })

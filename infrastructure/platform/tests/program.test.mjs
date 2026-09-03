@@ -53,7 +53,7 @@ Object.assign(process.env, {
 const program = await import('../src/index.mjs')
 await Promise.all([program.identityIpv4Address.promise(), program.identityDnsRecords.promise()])
 
-test('creates only the protected shared identity foundation', () => {
+test('creates a replaceable identity host around one protected data volume', () => {
 	assert.deepEqual(
 		resources
 			.filter(({ type }) => type === 'hcloud:index/server:Server')
@@ -65,6 +65,12 @@ test('creates only the protected shared identity foundation', () => {
 	assert.equal(resources.filter(({ type }) => type === 'hcloud:index/volume:Volume').length, 1)
 	assert.equal(resources.filter(({ type }) => type === 'tls:index/privateKey:PrivateKey').length, 5)
 	assert.equal(resources.filter(({ type }) => type === 'hcloud:index/sshKey:SshKey').length, 1)
+	const server = resources.find(({ type }) => type === 'hcloud:index/server:Server')
+	const volume = resources.find(({ type }) => type === 'hcloud:index/volume:Volume')
+	assert.equal(server.inputs.deleteProtection, false)
+	assert.equal(server.inputs.rebuildProtection, false)
+	assert.equal(server.inputs.keepDisk, false)
+	assert.equal(volume.inputs.deleteProtection, true)
 	assert.equal(
 		resources.filter(({ type }) => type === 'hcloud:index/zoneRrset:ZoneRrset').length,
 		0
