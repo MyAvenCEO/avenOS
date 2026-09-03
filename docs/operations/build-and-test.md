@@ -91,8 +91,8 @@ bun run test:recovery
 - `test:deploy` validates shell scripts, production Compose files, Caddy
   configuration, dependency order, non-root images, and secret-safe build contexts.
 - `test:recovery` creates source databases, takes encrypted backups, restores fresh
-  targets, compares exact data and access control lists, and proves wrong-key and
-  populated-target rejection.
+  targets, compares exact data and access control lists, and proves bounded provider
+  failure, wrong-key, and populated-target rejection.
 
 ## Full-stack E2E release gate
 
@@ -223,6 +223,18 @@ bun run test:e2e:platform
 
 `platform-ci` and `platform-deploy` repeat the release-critical checks on Linux. A
 deployment cannot publish images until its verification job passes.
+
+## CI scheduling and caches
+
+Pull-request checks cancel an older run when a newer commit arrives on the same pull
+request. Deployment, infrastructure, and operations mutations keep their target-scoped,
+non-cancelling locks. The Voice workflow also uses dependency-aware paths on `main`, so an
+unrelated merge does not rebuild the native audio stack.
+
+Platform, deployment verification, Actor, Voice, and Android jobs cache compiler or build
+download state keyed by their lockfiles, toolchain, operating system, target, and profile.
+Caches only accelerate the normal locked build: no compiled release artifact replaces a
+build or verification step, and a cache miss runs the same assertions.
 
 ## Failure handling
 

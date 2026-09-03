@@ -47,6 +47,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            app/src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties
+            app/src-tauri/gen/android/**/*.gradle*
       - uses: android-actions/setup-android@v3
       - name: Install Android SDK and NDK
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' "ndk;$ANDROID_NDK_VERSION"

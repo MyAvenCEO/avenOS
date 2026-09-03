@@ -86,6 +86,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.93.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri -> ../../target/rust
+            services/artifact-store -> ../../target/rust
+          key: platform-linux
       - uses: ./.github/actions/bun-install
         with:
           token: ${{ secrets.PACKAGE_READ_TOKEN }}

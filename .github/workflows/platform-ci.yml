@@ -44,6 +44,7 @@ on:
       - .github/workflows/platform-deploy.yml
       - .github/workflows/platform-infrastructure.yml
       - .github/workflows/platform-operations.yml
+      - .github/actions/bun-install/action.yml
       - .github/actions/setup-platform-test-host/action.yml
   push:
     branches: [main, next]
@@ -89,11 +90,16 @@ on:
       - .github/workflows/platform-deploy.yml
       - .github/workflows/platform-infrastructure.yml
       - .github/workflows/platform-operations.yml
+      - .github/actions/bun-install/action.yml
       - .github/actions/setup-platform-test-host/action.yml
 
 permissions:
   contents: read
   packages: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
@@ -121,6 +127,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.93.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri -> ../../target/rust
+            services/artifact-store -> ../../target/rust
+          key: platform-linux
       - uses: ./.github/actions/bun-install
         with:
           token: ${{ secrets.PACKAGE_READ_TOKEN }}
