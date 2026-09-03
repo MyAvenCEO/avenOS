@@ -117,6 +117,20 @@ test('recognizes delayed import visibility only for exact expected bucket names'
 	)
 	assert.deepEqual(
 		providerMissingImportedBootstrapBucketKinds(
+			"= minio:index:S3Bucket identity-state importing (0s) error: resource 'avenos-0123456789-1234567-identity-state' does not exist",
+			expected
+		),
+		['state']
+	)
+	assert.deepEqual(
+		providerMissingImportedBootstrapBucketKinds(
+			"= minio:index:S3Bucket identity-state **importing failed** error: resource 'avenos-0123456789-1234567-identity-state' does not exist",
+			expected
+		),
+		['state']
+	)
+	assert.deepEqual(
+		providerMissingImportedBootstrapBucketKinds(
 			"Preview failed: resource 'avenos-0123456789-1234567-identity-state' does not exist",
 			expected
 		),
@@ -336,6 +350,32 @@ test('retries the full import when only one pre-created bucket lags in the provi
 				const error = new Error('state import visibility is delayed')
 				error.commandOutput =
 					"= minio:index:S3Bucket next-state import error: Preview failed: resource 'expected-state' does not exist"
+				throw error
+			}
+		},
+		sleep: async () => {}
+	})
+	assert.deepEqual(calls, [
+		['state', 'backup'],
+		['state', 'backup']
+	])
+})
+
+test('retries when preview sees the bucket but update-time import visibility is delayed', async () => {
+	const calls = []
+	let first = true
+	await reconcileBootstrapBucketUpdate({
+		target: 'next',
+		expected: { state: 'expected-state', backup: 'expected-backup' },
+		confirmedExisting: ['state', 'backup'],
+		inspect: async () => ({ existing: ['state', 'backup'], tracked: [] }),
+		apply: async (adopt) => {
+			calls.push([...adopt])
+			if (first) {
+				first = false
+				const error = new Error('update-time import visibility is delayed')
+				error.commandOutput =
+					"= minio:index:S3Bucket next-state importing (0s) error: resource 'expected-state' does not exist"
 				throw error
 			}
 		},
