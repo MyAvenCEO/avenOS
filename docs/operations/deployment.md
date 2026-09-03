@@ -71,8 +71,10 @@ completion. Do not create or upload SSH keys manually.
 
 Servers are disposable and intentionally lack provider deletion protection; their
 attached data volumes remain protected. A reviewed cloud-init or machine-image change
-may therefore replace a host and reattach the same volume. Reject a plan that deletes or
-replaces a data volume unless the recovery procedure explicitly requires it.
+may therefore replace a host and reattach the same volume. Fixed-name hosts, deployment
+key registrations, and attachments use delete-before-replace ordering so replacement
+does not exceed server quota or collide with the old resource. Reject a plan that deletes
+or replaces a data volume unless the recovery procedure explicitly requires it.
 
 Pulumi also generates per-host `aven-admin` identities. They permit key-only SSH from
 dynamic IPv4/IPv6 networks, including a phone SSH client, and have passwordless sudo
