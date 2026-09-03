@@ -180,10 +180,14 @@ export function workflowFailureSummary(log: string): string | undefined {
 	if (missingNativeLibrary)
 		return `Release runner is missing native library ${missingNativeLibrary[1]} required by ${missingNativeLibrary[2]}. Merge a workflow dependency fix, update this checkout to that commit, then resume the saved setup.`
 	if (
-		/browserType\.launch: Executable doesn't exist at .*chromium_headless_shell/is.test(normalized) ||
+		/browserType\.launch: Executable doesn't exist at .*chromium_headless_shell/is.test(
+			normalized
+		) ||
 		/Looks like Playwright was just installed or updated[\s\S]*playwright install/i.test(normalized)
 	)
 		return 'Release runner is missing the lockfile-matched Playwright Chromium browser. Merge a workflow prerequisite fix, update this checkout to that commit, then resume the saved setup.'
+	if (/install: target ['"].*\/ssh\/known_hosts['"]: No such file or directory/i.test(normalized))
+		return 'Release deployment could not prepare its temporary SSH credentials. Merge the SSH staging fix, update this checkout to that commit, then resume the saved setup.'
 	const conflicts = new Map<string, { name: string; type: string; required: Set<string> }>()
 	const conflictPattern =
 		/\(([^,\n()]+),\s*([A-Z][A-Z0-9]*)\) conflicts with \(([^,\n()]+),\s*([A-Z][A-Z0-9]*)\)/g

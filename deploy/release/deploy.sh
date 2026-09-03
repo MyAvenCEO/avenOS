@@ -46,6 +46,7 @@ fi
 
 root=$(cd -- "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 source "$root/deploy/release/environment.sh"
+source "$root/deploy/release/ssh-staging.sh"
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 
@@ -88,8 +89,7 @@ expected_infrastructure_target=platform
   echo 'Pulumi deploymentTarget output does not match the requested target' >&2
   exit 1
 }
-install -m 700 -d "$stage/ssh"
-install -m 600 /dev/null "$stage/ssh/key" "$stage/ssh/known_hosts"
+prepare_ssh_staging "$stage/ssh"
 
 dotenv() {
   local name=$1 value=$2

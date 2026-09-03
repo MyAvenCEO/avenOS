@@ -126,6 +126,15 @@ verify\tE2E\t2026-09-03T01:30:43Z error: script "test:e2e:platform" exited with 
 	)
 })
 
+test('explains an invalid release SSH staging command', () => {
+	const log = `deploy identity\tDeploy\t2026-09-03T04:20:33Z install: target '/tmp/tmp.cxZI3wzfzx/ssh/known_hosts': No such file or directory
+deploy identity\tDeploy\t2026-09-03T04:20:33Z Error: Process completed with exit code 1.`
+	assert.equal(
+		workflowFailureSummary(log),
+		'Release deployment could not prepare its temporary SSH credentials. Merge the SSH staging fix, update this checkout to that commit, then resume the saved setup.'
+	)
+})
+
 test('recognizes transient GitHub CLI failures that are safe to reconcile', () => {
 	assert.equal(retryableGitHubCliFailure('gh timed out after 30s'), true)
 	assert.equal(retryableGitHubCliFailure('gh failed: HTTP 502 Bad Gateway'), true)
