@@ -14,6 +14,7 @@ import {
 	orderedDeploymentTargets,
 	POLAR_API_KEY_SCOPES,
 	retryableGitHubCliFailure,
+	retryTransientGitHubRead,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
 	savedWizardResumeIndex,
@@ -139,6 +140,59 @@ test('recognizes transient GitHub CLI failures that are safe to reconcile', () =
 	assert.equal(retryableGitHubCliFailure('gh timed out after 30s'), true)
 	assert.equal(retryableGitHubCliFailure('gh failed: HTTP 502 Bad Gateway'), true)
 	assert.equal(retryableGitHubCliFailure('gh failed: authentication required'), false)
+})
+
+test('keeps polling through transient GitHub read failures', async () => {
+	const attempts = []
+	const delays = []
+	const result = await retryTransientGitHubRead({
+		deadlineAt: Date.now() + 60_000,
+		read: async () => {
+			attempts.push(attempts.length + 1)
+			if (attempts.length < 3) throw new Error('gh timed out after 30s')
+			return 'completed'
+		},
+		onRetry: ({ attempt, delayMs }) => delays.push([attempt, delayMs]),
+		sleep: async () => {}
+	})
+	assert.equal(result, 'completed')
+	assert.deepEqual(attempts, [1, 2, 3])
+	assert.deepEqual(delays, [
+		[1, 1000],
+		[2, 2000]
+	])
+})
+
+test('does not retry permanent GitHub read failures', async () => {
+	let attempts = 0
+	await assert.rejects(
+		retryTransientGitHubRead({
+			deadlineAt: Date.now() + 60_000,
+			read: async () => {
+				attempts += 1
+				throw new Error('gh failed: authentication required')
+			},
+			sleep: async () => {}
+		}),
+		/authentication required/
+	)
+	assert.equal(attempts, 1)
+})
+
+test('stops transient GitHub retries at the operation deadline', async () => {
+	let attempts = 0
+	await assert.rejects(
+		retryTransientGitHubRead({
+			deadlineAt: Date.now() - 1,
+			read: async () => {
+				attempts += 1
+				throw new Error('gh timed out after 30s')
+			},
+			sleep: async () => {}
+		}),
+		/timed out/
+	)
+	assert.equal(attempts, 1)
 })
 
 test('resumes at the latest saved station so an unverified value is checked again', () => {
