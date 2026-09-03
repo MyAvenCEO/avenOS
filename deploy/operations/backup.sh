@@ -9,6 +9,12 @@ for name in $required; do
 done
 case "$BACKUP_ENVIRONMENT" in *[!A-Za-z0-9_.-]*|'') echo 'invalid backup environment' >&2; exit 64 ;; esac
 case "$BACKUP_HOST" in *[!A-Za-z0-9_.-]*|'') echo 'invalid backup host' >&2; exit 64 ;; esac
+repository_probe_timeout=${BACKUP_REPOSITORY_PROBE_TIMEOUT_SECONDS:-30}
+restic_timeout=${BACKUP_RESTIC_COMMAND_TIMEOUT_SECONDS:-900}
+case "$repository_probe_timeout" in *[!0-9]*|'') echo 'invalid repository probe timeout' >&2; exit 64 ;; esac
+case "$restic_timeout" in *[!0-9]*|'') echo 'invalid restic command timeout' >&2; exit 64 ;; esac
+[ "$repository_probe_timeout" -gt 0 ] || { echo 'repository probe timeout must be positive' >&2; exit 64; }
+[ "$restic_timeout" -gt 0 ] || { echo 'restic command timeout must be positive' >&2; exit 64; }
 
 state_root=${BACKUP_STATE_ROOT:-/var/lib/aven-backups}
 run_id=$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
@@ -49,18 +55,19 @@ case "$release" in *[!A-Za-z0-9_.:@/-]*|'') echo 'invalid backup release id' >&2
 printf '%s\n' "{\"formatVersion\":1,\"backupId\":\"$run_id\",\"environment\":\"$BACKUP_ENVIRONMENT\",\"host\":\"$BACKUP_HOST\",\"release\":\"$release\",\"createdAt\":\"$created_at\",\"postgresVersionNumber\":$pg_version,\"databases\":[$database_json]}" > "$stage/manifest.json"
 sha256sum "$stage/manifest.json" | cut -d' ' -f1 > "$stage/manifest.sha256"
 
-if ! restic snapshots --json >/dev/null 2>&1; then
-  restic init
+if ! timeout "$repository_probe_timeout" restic snapshots --json >/dev/null; then
+  echo 'backup repository is not initialized or temporarily unavailable; attempting initialization' >&2
+  timeout "$repository_probe_timeout" restic init
 fi
-snapshot_id=$(restic backup "$stage" \
+snapshot_id=$(timeout "$restic_timeout" restic backup "$stage" \
   --host "$BACKUP_HOST" \
   --tag "environment:$BACKUP_ENVIRONMENT" \
   --tag 'kind:postgres-logical' \
   --json | awk -F'"' '/"message_type":"summary"/{for(i=1;i<=NF;i++) if($i=="snapshot_id") {print $(i+2); exit}}')
 [ -n "$snapshot_id" ] || { echo 'restic did not return a snapshot id' >&2; exit 1; }
 
-restic forget --host "$BACKUP_HOST" --tag 'kind:postgres-logical' \
+timeout "$restic_timeout" restic forget --host "$BACKUP_HOST" --tag 'kind:postgres-logical' \
   --keep-within 14d --keep-weekly 8 --keep-monthly 12 --prune
-restic check
+timeout "$restic_timeout" restic check
 printf '%s %s %s %s\n' "$(date -u +%s)" "$created_at" "$snapshot_id" "$run_id" > "$state_root/last-success"
 echo "backup complete: $BACKUP_HOST $run_id $snapshot_id"

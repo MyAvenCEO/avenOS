@@ -27,6 +27,7 @@ printf '%s\n' "$private_key" > "$scratch/key"
 printf '%s %s\n' "$ip" "$host_key" > "$scratch/known_hosts"
 exec ssh \
   -i "$scratch/key" \
+  -o IdentitiesOnly=yes \
   -o BatchMode=yes \
   -o UserKnownHostsFile="$scratch/known_hosts" \
   -o StrictHostKeyChecking=yes \

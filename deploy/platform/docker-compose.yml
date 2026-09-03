@@ -66,7 +66,9 @@ services:
     image: ${OPERATIONS_IMAGE:?required}
     restart: unless-stopped
     depends_on:
-      database-roles:
+      checkout-migrate:
+        condition: service_completed_successfully
+      api-migrate:
         condition: service_completed_successfully
     environment:
       PGHOST: database
@@ -90,11 +92,11 @@ services:
     read_only: true
     healthcheck:
       test: [CMD, /operations/entrypoint.sh, health]
-      interval: 1m
+      interval: 15s
       timeout: 10s
-      retries: 2
-      start_period: 10m
-    networks: [platform-private]
+      retries: 4
+      start_period: 3m
+    networks: [platform-private, platform-egress]
     security_opt: [no-new-privileges:true]
 
   restore:
@@ -121,7 +123,7 @@ services:
       - /var/lib/aven/backups:/var/lib/aven-backups
     tmpfs: [/tmp]
     read_only: true
-    networks: [platform-private]
+    networks: [platform-private, platform-egress]
     security_opt: [no-new-privileges:true]
 
   checkout-migrate:

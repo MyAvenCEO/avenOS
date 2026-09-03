@@ -32,6 +32,7 @@ printf '%s %s\n' "$ip" "$host_key" > "$scratch/known_hosts"
 echo "Opening read-only access rail on 127.0.0.1:$local_port; database credentials remain separate."
 exec ssh -N -T \
   -i "$scratch/key" \
+  -o IdentitiesOnly=yes \
   -o BatchMode=yes \
   -o ExitOnForwardFailure=yes \
   -o UserKnownHostsFile="$scratch/known_hosts" \

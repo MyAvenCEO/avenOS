@@ -262,6 +262,9 @@ email, or shared cloud storage. Connect as `aven-admin` to the host's Pulumi out
 address. Password login and direct root login remain disabled, and fail2ban remains
 enabled even while port 22 is public.
 
+The observation and database-tunnel tools set OpenSSH `IdentitiesOnly`, so keys loaded in
+the workstation agent are not offered before the Pulumi-generated role key.
+
 The host-key files are written in cloud-init's deferred final stage, after the operating
 system's SSH module has generated its defaults. Deployment then accepts the host only
 when its presented Ed25519 key equals Pulumi's public output and the cloud-init completion
