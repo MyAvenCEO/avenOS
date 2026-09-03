@@ -121,6 +121,70 @@ describeWithPostgres('SQL runner persistence', () => {
 		}
 	})
 
+	test('concurrent recovery claims an accepted run only once', async () => {
+		const pool = new pg.Pool({
+			connectionString: databaseUrl,
+			max: 4,
+			options: `-c search_path=${schema},pg_catalog`
+		})
+		let executions = 0
+		let releaseExecution = () => {}
+		const executionReleased = new Promise<void>((resolve) => {
+			releaseExecution = resolve
+		})
+		const executor = async () => {
+			executions += 1
+			await executionReleased
+			return { remainingGoals: [] }
+		}
+		const request = deterministicRunRequest('server', randomUUID(), randomUUID())
+		const runId = randomUUID()
+		const now = new Date().toISOString()
+		const record: PlanRunRecord = {
+			...request,
+			runId,
+			revision: 1,
+			state: 'accepted',
+			createdAt: now,
+			updatedAt: now,
+			checkpoints: [],
+			continuations: []
+		}
+		try {
+			await pool.query(
+				`INSERT INTO runs(id,subject_id,idempotency_key,material_hash,state,revision,record)
+				 VALUES($1,$2,$3,$4,'accepted',1,$5)`,
+				[
+					runId,
+					request.security.principal.subjectId,
+					request.idempotencyKey,
+					'concurrent-recovery',
+					record
+				]
+			)
+			const first = new SqlPlanRunner(pool, pool, executor)
+			const second = new SqlPlanRunner(pool, pool, executor)
+			const recoveries = Promise.all([first.recoverAcceptedRuns(), second.recoverAcceptedRuns()])
+			const deadline = Date.now() + 2_000
+			while (executions === 0 && Date.now() < deadline) {
+				await new Promise((resolve) => setTimeout(resolve, 10))
+			}
+			expect(executions).toBe(1)
+			await new Promise((resolve) => setTimeout(resolve, 50))
+			expect(executions).toBe(1)
+			releaseExecution()
+			expect((await recoveries).sort()).toEqual([0, 1])
+			expect(await first.status(runId)).toMatchObject({
+				state: 'succeeded',
+				revision: 2,
+				checkpoints: [expect.objectContaining({ ordinal: 0 })]
+			})
+		} finally {
+			releaseExecution()
+			await pool.end()
+		}
+	})
+
 	test('persists a deterministic generic execution and matches the local outcome', async () => {
 		const pool = new pg.Pool({
 			connectionString: databaseUrl,

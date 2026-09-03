@@ -118,8 +118,9 @@ fresh databases on dynamic loopback ports, and proves the public journey:
   speaker;
 - focused Actor runtime conformance against fresh PostgreSQL and the production Rust
   Artifact Store image, including authenticated admission, durable checkpoints,
-  lineage, idempotent publication replay, local/server outcome equivalence, and a
-  secret continuation that never persists the submitted secret;
+  a single database-backed executor claim under concurrent recovery, lineage,
+  idempotent publication replay, local/server outcome equivalence, and a secret
+  continuation that never persists the submitted secret;
 - persistent Actor admission through the facade in the native user journey;
 - resistance to forged identity, routing, and tenant-grant headers; and
 - managed static hosting with verified Git revisions.
