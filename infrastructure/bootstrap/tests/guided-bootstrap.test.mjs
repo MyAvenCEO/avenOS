@@ -115,6 +115,17 @@ verify\tE2E\t2026-09-02T23:47:19Z ^[[1m^[[33mwarning^[[0m: build failed, waiting
 	)
 })
 
+test('explains a missing Playwright browser on a fresh release runner', () => {
+	const log = `verify\tE2E\t2026-09-03T01:30:01Z Error: browserType.launch: Executable doesn't exist at /home/runner/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell
+verify\tE2E\t2026-09-03T01:30:01Z Looks like Playwright was just installed or updated.
+verify\tE2E\t2026-09-03T01:30:01Z     npx playwright install
+verify\tE2E\t2026-09-03T01:30:43Z error: script "test:e2e:platform" exited with code 1`
+	assert.equal(
+		workflowFailureSummary(log),
+		'Release runner is missing the lockfile-matched Playwright Chromium browser. Merge a workflow prerequisite fix, update this checkout to that commit, then resume the saved setup.'
+	)
+})
+
 test('recognizes transient GitHub CLI failures that are safe to reconcile', () => {
 	assert.equal(retryableGitHubCliFailure('gh timed out after 30s'), true)
 	assert.equal(retryableGitHubCliFailure('gh failed: HTTP 502 Bad Gateway'), true)
