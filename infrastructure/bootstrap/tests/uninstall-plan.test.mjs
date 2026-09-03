@@ -8,6 +8,7 @@ import {
 	bootstrapTeardownStackName,
 	githubEnvironmentNames,
 	guidedUninstallArguments,
+	localPulumiLockPid,
 	localResetPaths,
 	ownedPolarCatalogResources,
 	platformProtectionTargetUrns,
@@ -27,6 +28,14 @@ test('removes a generation in reverse dependency order', () => {
 	)
 	assert.equal(uninstallConfirmation('avenos-0123456789'), 'uninstall avenos-0123456789')
 	assert.throws(() => uninstallConfirmation('avenos-current'), /Invalid deployment namespace/)
+})
+
+test('recognizes only a lock owned by a process on this host', () => {
+	const error =
+		'the stack is currently locked: created by operator@aven-host (pid 39443) at 2026-09-03T15:16:11+02:00'
+	assert.equal(localPulumiLockPid(error, 'aven-host'), 39443)
+	assert.equal(localPulumiLockPid(error, 'other-host'), undefined)
+	assert.equal(localPulumiLockPid('the stack is currently locked', 'aven-host'), undefined)
 })
 
 test('passes the typed generation confirmation to the uninstall engine', () => {
@@ -72,7 +81,7 @@ test('names only the saved generation GitHub Environments', () => {
 	assert.equal(activePrefixAllowsRepositoryCleanup('avenos-aaaaaaaaaa', 'avenos-0123456789'), false)
 	assert.match(
 		uninstallSummary('avenos-0123456789', ['identity'], ['avenos-0123456789-identity']),
-		/GitHub token.*not deleted automatically/
+		/Provider-issued credentials are not revoked automatically/
 	)
 })
 

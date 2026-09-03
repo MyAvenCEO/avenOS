@@ -57,6 +57,12 @@ Object Storage projects. The credentials remain separate and enter only their co
 deployment Environments. The bootstrap performs an exact read of `aven.ceo` with each token;
 a 404 means the token was created in a project that does not own the zone.
 
+The `aven.id` zone remains at United Domains. Its API key belongs only in the owner-only
+bootstrap record and password-manager escrow; application and GitHub Environments do not
+receive it. The setup uses it to replace the apex A and AAAA record sets after Pulumi
+returns the identity host addresses. Uninstall uses the same key to remove only those saved
+addresses.
+
 ## GitHub Environments
 
 The bootstrap creates a deployment and operations Environment for every checked target,
@@ -202,6 +208,7 @@ owning scope: `bootstrap`, `shared`, `identity`, `next`, or `production`. It con
 - its `PULUMI_CONFIG_PASSPHRASE`;
 - its `BACKUP_RESTIC_PASSWORD`;
 - the provider tokens, SMTP URLs, and RedPill key entered once during bootstrap;
+- the United Domains API key used for exact `aven.id` address reconciliation;
 - the Polar webhook endpoints and signing secrets created or reconciled by bootstrap;
 - exact state and backup bucket names and namespaced GitHub Environments; and
 - the deployed revision, GitHub workflow runs, public service origins, verification time,
@@ -229,10 +236,11 @@ holder exists, include them in that check.
 
 The [guided uninstall](initial-provisioning.md#uninstall-a-saved-generation) uses this local
 record to identify one exact infrastructure generation. It removes generated remote
-resources but does not revoke provider-issued Cloud, DNS, S3, Polar, SMTP, RedPill, or
-GitHub credentials and does not edit the externally managed `aven.id` zone. After teardown,
-either retain those inputs for a fresh generation or revoke them at their providers. Never
-assume deleting a GitHub Environment revoked the underlying provider credential.
+resources and the exact saved `aven.id` address records, but it does not revoke
+provider-issued Cloud, DNS, S3, Polar, SMTP, RedPill, United Domains, or GitHub credentials.
+After teardown, either retain those inputs for a fresh generation or revoke them at their
+providers. Never assume deleting a GitHub Environment revoked the underlying provider
+credential.
 
 ## Generated access roles
 
@@ -260,8 +268,19 @@ not implemented yet.
 
 ## Rotation
 
-- Rotate a provider secret in the owning GitHub Environment, then deploy the same
-  verified ref.
+- Start `bun run bootstrap:deployment:guided`, choose **Review or rotate credentials**,
+  and select the affected secret-bearing stations. The wizard verifies replacements before
+  saving them, updates policies and GitHub Environments once, and deploys once to activate
+  the complete set.
+- Keep each old provider credential active until the deployment and public verification
+  succeed. Then revoke it at the provider and rerun the credential preflight. The setup
+  cannot revoke a credential whose provider created and identified it outside the saved
+  input.
+- A fresh bootstrap generation creates new Pulumi passphrases, Restic passwords, SSH keys,
+  database passwords, signing keys, and workload tokens. Use the full uninstall-and-install
+  lifecycle when every generated secret must change. With enough server quota, prepare and
+  verify the replacement before removing the old generation; otherwise plan the documented
+  downtime and restore path.
 - Rotate generated infrastructure material through Pulumi, review replacements, and
   redeploy. Do not edit host `.env` files.
 - Rotate database function roots in stages so reconciliation proves new grants before

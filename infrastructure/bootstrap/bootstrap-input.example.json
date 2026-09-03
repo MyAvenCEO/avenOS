@@ -64,7 +64,10 @@
 	},
 	"providers": {
 		"dnsProjectId": "4567890",
-		"identity": { "computeToken": "PASTE_IDENTITY_COMPUTE_TOKEN" },
+		"identity": {
+			"computeToken": "PASTE_IDENTITY_COMPUTE_TOKEN",
+			"dnsApiKey": "PASTE_UNITED_DOMAINS_DNS_API_KEY"
+		},
 		"next": {
 			"computeToken": "PASTE_NEXT_COMPUTE_TOKEN",
 			"dnsToken": "PASTE_NEXT_DNS_TOKEN",

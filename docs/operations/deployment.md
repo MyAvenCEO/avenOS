@@ -33,8 +33,8 @@ unchanged. All new checkout traffic and DNS management use `portal.aven.ceo` and
 
 Complete [Initial provisioning](initial-provisioning.md). Its guided command owns the
 normal first rollout: it creates the fresh namespaced GitHub Environments and storage,
-dispatches the combined workflows, pauses for external `aven.id` DNS, and verifies the
-running installation. The procedures below are the independently runnable operator paths
+dispatches the combined workflows, publishes `aven.id` through United Domains, and verifies
+the running installation. The procedures below are the independently runnable operator paths
 used by that setup and by later repair work.
 
 Prove the candidate through [Build and test](build-and-test.md). The deployment
@@ -76,15 +76,21 @@ and database-tunnel roles. Import an admin private key only through the procedur
 [Access and secrets](access-and-secrets.md). Once the VPN is available, set
 `SSH_ALLOWED_CIDRS` to its networks and apply the reviewed firewall change.
 
-## Apply the external `aven.id` DNS records
+## Reconcile the external `aven.id` DNS records
 
-Read `identityDnsRecords` from the successful identity Pulumi summary. At the
-authoritative external provider, replace the `aven.id` apex records with exactly:
+The guided setup reads `identityDnsRecords` from the successful identity Pulumi summary,
+uses the saved United Domains API key to replace only the apex A and AAAA record sets, and
+waits for public DNS before deploying software. The final CSV records both values and the
+verification result.
+
+For an independently dispatched infrastructure repair, read `identityDnsRecords` and
+reconcile exactly:
 
 - `A`, name `@`, returned identity IPv4 address, TTL 300;
 - `AAAA`, name `@`, returned identity IPv6 address, TTL 300.
 
-Verify the authoritative answers:
+Use the United Domains console or API key recorded by the setup, then verify the public
+answers:
 
 ```sh
 dig +short A aven.id

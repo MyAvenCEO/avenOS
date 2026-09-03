@@ -287,7 +287,15 @@ Have these ready before you start:
   - Hetzner: ${count(targets.length, 'target-scoped Cloud write token')}${platformTargets.length ? `; the project ID that owns aven.ceo; and ${count(platformTargets.length, 'DNS write token')} from that project` : ''}
 ${platformTargets.length ? `  - Polar: ${count(platformTargets.length, 'organization ID')} for ${platformTargets.join(' and ')}, plus the listed billing API scopes\n  - SMTP: send-only URLs and From addresses for ${platformTargets.join(' and ')}; Reply-To is optional\n  - RedPill: 1 active, funded API key for the Phala-hosted model catalog\n` : ''}  - Settings: host, SSH, ACME email, and ${targets.includes('identity') ? 'identity volume' : ''}${targets.includes('identity') && platformTargets.length ? ' plus ' : ''}${platformTargets.length ? 'platform volume and download' : ''} defaults are offered
   - Optional: a second GitHub reviewer${targets.includes('production') ? ' and Android certificate fingerprints' : ''}
-${targets.includes('identity') ? '  - Later: aven.id DNS access after Pulumi returns the identity addresses\n' : ''}`
+${targets.includes('identity') ? '  - United Domains: 1 writable aven.id DNS API key\n' : ''}`
+}
+
+export function rotatableWizardStepIndexes(
+	steps: readonly { info?: boolean; secret?: boolean; companion?: { secret?: boolean } }[]
+): number[] {
+	return steps.flatMap((step, index) =>
+		!step.info && (step.secret === true || step.companion?.secret === true) ? [index] : []
+	)
 }
 
 export function guidedBootstrapRecoveryNotice(inputPath: string, credentialsPath: string): string {

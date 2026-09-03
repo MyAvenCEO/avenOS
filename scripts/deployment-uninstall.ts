@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { chmodSync, readFileSync } from 'node:fs'
+import { hostname } from 'node:os'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { Polar } from '@polar-sh/sdk'
 import {
@@ -26,12 +27,14 @@ import {
 	bootstrapStorageTeardownPlan,
 	bootstrapTeardownStackName,
 	githubEnvironmentNames,
+	localPulumiLockPid,
 	ownedPolarCatalogResources,
 	platformProtectionTargetUrns,
 	platformStackName,
 	uninstallSummary,
 	uninstallTargets
 } from './lib/deployment-uninstall.js'
+import { removeUnitedDomainsIdentityDns } from './lib/united-domains-dns.js'
 
 const root = resolve(import.meta.dir, '..')
 const args = process.argv.slice(2)
@@ -87,7 +90,12 @@ const localTeardownBackend = `file://${localTeardownState}`
 const platformTargets = targets.filter(
 	(target): target is 'next' | 'production' => target !== 'identity'
 )
-const progressTotal = targets.length + platformTargets.length + 1 + targets.length
+const progressTotal =
+	targets.length +
+	platformTargets.length +
+	1 +
+	targets.length +
+	(targets.includes('identity') ? 1 : 0)
 let completedProgress = 0
 let activeProgress: { label: string; detail?: string } | undefined
 
@@ -172,6 +180,43 @@ async function runGitHub(commandArgs: string[], options: RunOptions = {}): Promi
 		}
 	}
 	throw new Error('GitHub retry loop ended unexpectedly.')
+}
+
+function processExists(pid: number): boolean {
+	try {
+		process.kill(pid, 0)
+		return true
+	} catch (error) {
+		return !(
+			error instanceof Error &&
+			'code' in error &&
+			(error as NodeJS.ErrnoException).code === 'ESRCH'
+		)
+	}
+}
+
+async function runPulumiWithStaleLocalLockRecovery(
+	commandArgs: string[],
+	options: RunOptions,
+	stack: string,
+	cwd: string
+): Promise<string> {
+	try {
+		return await run('pulumi', commandArgs, options)
+	} catch (error) {
+		const output =
+			error instanceof Error && 'commandOutput' in error
+				? String((error as { commandOutput?: unknown }).commandOutput)
+				: String(error)
+		const pid = localPulumiLockPid(output, hostname())
+		if (!pid || processExists(pid)) throw error
+		updateProgress(`Removing stale local Pulumi lock from stopped process ${pid}, then retrying.`)
+		await run('pulumi', ['cancel', '--yes', '--stack', stack, '--cwd', cwd], {
+			env: options.env,
+			quiet: true
+		})
+		return run('pulumi', commandArgs, options)
+	}
 }
 
 async function repositoryVariables(): Promise<Map<string, string>> {
@@ -352,8 +397,7 @@ async function destroyPlatform(target: Target): Promise<void> {
 	const targetsToUnlock = platformProtectionTargetUrns(deployment as never)
 	if (targetsToUnlock.length > 0) {
 		updateProgress(`Removing provider deletion locks from ${targetsToUnlock.length} resource(s).`)
-		await run(
-			'pulumi',
+		await runPulumiWithStaleLocalLockRecovery(
 			[
 				'up',
 				'--yes',
@@ -364,22 +408,27 @@ async function destroyPlatform(target: Target): Promise<void> {
 				platformCwd,
 				...targetsToUnlock.flatMap((urn) => ['--target', urn])
 			],
-			{ env, capture: true }
+			{ env, capture: true },
+			stack,
+			platformCwd
 		)
 	}
 	updateProgress('Removing Pulumi protections, then destroying only this stack.')
-	await run(
-		'pulumi',
+	await runPulumiWithStaleLocalLockRecovery(
 		['state', 'unprotect', '--all', '--yes', '--stack', stack, '--cwd', platformCwd],
 		{
 			env,
 			quiet: true
-		}
+		},
+		stack,
+		platformCwd
 	)
-	await run('pulumi', ['destroy', '--yes', '--stack', stack, '--cwd', platformCwd], {
-		env,
-		capture: true
-	})
+	await runPulumiWithStaleLocalLockRecovery(
+		['destroy', '--yes', '--stack', stack, '--cwd', platformCwd],
+		{ env, capture: true },
+		stack,
+		platformCwd
+	)
 	await run('pulumi', ['stack', 'rm', stack, '--yes', '--remove-backups', '--cwd', platformCwd], {
 		env,
 		quiet: true
@@ -431,6 +480,21 @@ async function removePolar(target: 'next' | 'production'): Promise<void> {
 	completeProgress(
 		`${target}: ${owned.productIds.length} product(s) and ${owned.meterIds.length} meter(s) archived; ${owned.benefitIds.length} benefit(s) and the saved webhook removed.`
 	)
+}
+
+async function removeIdentityDns(): Promise<void> {
+	beginProgress('Remove identity DNS', 'Removing only this generation’s saved aven.id addresses.')
+	const expected = generated.initialRollout?.identityDns
+	if (!expected) {
+		completeProgress('No saved identity addresses exist; aven.id DNS was left unchanged.')
+		return
+	}
+	const removed = await removeUnitedDomainsIdentityDns({
+		apiKey: input.providers.identity.dnsApiKey,
+		ipv4: expected.ipv4,
+		ipv6: expected.ipv6
+	})
+	completeProgress(`${removed} saved-generation aven.id address record(s) removed.`)
 }
 
 async function removeGitHub(): Promise<void> {
@@ -658,10 +722,11 @@ selectedDeploymentTargets(targets)
 await assertSafeGitHubTeardown()
 await assertSafePolarTeardown()
 for (const target of targets) await destroyPlatform(target)
+if (targets.includes('identity')) await removeIdentityDns()
 for (const target of platformTargets) await removePolar(target)
 await removeGitHub()
 for (const target of targets) await removeStorage(target)
 
 process.stdout.write(
-	`Uninstall complete for ${generated.deploymentPrefix}. Provider-issued credentials and externally managed aven.id DNS were left unchanged.\n`
+	`Uninstall complete for ${generated.deploymentPrefix}. Provider-issued credentials were left unchanged.\n`
 )

@@ -71,8 +71,8 @@ providers, and the four-value recovery escrow described in
 
 1. Run `platform-infrastructure` with `command: up` for `identity`, `next`, and
    `production` to create three fresh hosts and empty protected volumes.
-2. Apply the newly returned `aven.id` A/AAAA records at its external DNS provider.
-   Pulumi has already recreated both platform environments' `aven.ceo` records.
+2. Reconcile the newly returned `aven.id` A/AAAA records through the saved United Domains
+   API key. Pulumi has already recreated both platform environments' `aven.ceo` records.
 3. Run `platform-deploy` for `identity` with the last verified ref and
    `recover_from_backup: true`.
 4. Run the same workflow and recovery option for `next`, then for `production`.

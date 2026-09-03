@@ -19,6 +19,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { Polar } from '@polar-sh/sdk'
+import nodemailer from 'nodemailer'
 import {
 	type BootstrapInput,
 	deploymentConfigurationTargets,
@@ -44,6 +45,7 @@ import {
 	POLAR_API_KEY_SCOPES,
 	retryableGitHubCliFailure,
 	retryTransientGitHubRead,
+	rotatableWizardStepIndexes,
 	S3_CREDENTIAL_STEPS,
 	savedWizardResumeIndex,
 	savedWizardVerificationIndexes,
@@ -70,6 +72,10 @@ import {
 	uninstallTargets
 } from './lib/deployment-uninstall.js'
 import { fetchRedpillPhalaCatalog } from './lib/redpill-model-catalog.js'
+import {
+	reconcileUnitedDomainsIdentityDns,
+	verifyUnitedDomainsDnsAccess
+} from './lib/united-domains-dns.js'
 
 function failPreflight(error: unknown): never {
 	const message =
@@ -707,36 +713,49 @@ async function identityDnsRecords(input: BootstrapInput): Promise<{ ipv4: string
 }
 
 async function waitForIdentityDns(expected: { ipv4: string; ipv6: string }): Promise<void> {
-	for (;;) {
-		setUiContext(
-			'Initial deployment · External DNS',
-			'Point aven.id at the identity host',
-			`At the external DNS provider for aven.id, replace the apex records with exactly:\n\nA     @     ${expected.ipv4}     TTL 300\nAAAA  @     ${expected.ipv6}     TTL 300\n\nRemove old apex A or AAAA values. The setup will continue only when public DNS returns exactly these addresses.`
-		)
-		if (tui)
-			await tui.choose({
-				label: 'After saving the DNS records',
-				options: [{ label: 'Check DNS >', value: 'check' }]
+	await withProgress('Publish and verify aven.id DNS', async (update) => {
+		await reconcileUnitedDomainsIdentityDns({
+			apiKey: String(valueAt(draft, ['providers', 'identity', 'dnsApiKey'])),
+			...expected
+		})
+		const deadline = Date.now() + 15 * 60_000
+		let attempt = 0
+		for (;;) {
+			attempt += 1
+			update({
+				status: 'active',
+				current: 1,
+				total: 1,
+				label: 'Publish and verify aven.id DNS',
+				detail: `United Domains accepted the exact A/AAAA records; checking public DNS (${attempt}).`
 			})
-		else await question('Press Enter after saving both DNS records')
-		try {
-			const [ipv4, ipv6] = await Promise.all([resolve4('aven.id'), resolve6('aven.id')])
-			const exactV4 =
-				ipv4.length === 1 && canonicalIp(ipv4[0] as string) === canonicalIp(expected.ipv4)
-			const exactV6 =
-				ipv6.length === 1 && canonicalIp(ipv6[0] as string) === canonicalIp(expected.ipv6)
-			if (!exactV4 || !exactV6)
-				throw new Error(
-					`current A: ${ipv4.join(', ') || 'none'}; current AAAA: ${ipv6.join(', ') || 'none'}`
-				)
-			reportStatus('✓ aven.id now resolves only to the new identity host.')
-			return
-		} catch (error) {
-			reportFailure(
-				`aven.id is not ready yet: ${error instanceof Error ? error.message : 'DNS lookup failed'}. Update the records or wait for propagation, then check again.`
-			)
+			try {
+				const [ipv4, ipv6] = await Promise.all([resolve4('aven.id'), resolve6('aven.id')])
+				const exactV4 =
+					ipv4.length === 1 && canonicalIp(ipv4[0] as string) === canonicalIp(expected.ipv4)
+				const exactV6 =
+					ipv6.length === 1 && canonicalIp(ipv6[0] as string) === canonicalIp(expected.ipv6)
+				if (!exactV4 || !exactV6)
+					throw new Error(
+						`current A: ${ipv4.join(', ') || 'none'}; current AAAA: ${ipv6.join(', ') || 'none'}`
+					)
+				update({
+					status: 'complete',
+					current: 1,
+					total: 1,
+					label: 'Publish and verify aven.id DNS',
+					detail: 'aven.id resolves only to the new identity host.'
+				})
+				return
+			} catch (error) {
+				if (Date.now() >= deadline)
+					throw new Error(
+						`United Domains has the new records, but public aven.id DNS did not converge within 15 minutes: ${error instanceof Error ? error.message : 'DNS lookup failed'}.`
+					)
+				await Bun.sleep(5_000)
+			}
 		}
-	}
+	})
 }
 
 async function verifyPublicInstallation(): Promise<void> {
@@ -814,7 +833,7 @@ async function completeInitialRollout(input: BootstrapInput): Promise<boolean> {
 	setUiContext(
 		'Initial deployment',
 		'Creating the first installation',
-		`GitHub will preview and create the identity, next, and production hosts, then verify and publish ${localRef.slice(0, 12)} once before installing all three. The process is resumable. The only manual pause is the external aven.id DNS change.`
+		`GitHub will preview and create the identity, next, and production hosts, then verify and publish ${localRef.slice(0, 12)} once before installing all three. The process is resumable. The installer publishes and verifies the exact aven.id A and AAAA records through United Domains.`
 	)
 	await runRolloutWorkflow({
 		field: 'infrastructurePreviewRunId',
@@ -1125,7 +1144,7 @@ async function uninstallSavedGeneration(): Promise<void> {
 	setUiContext(
 		'Uninstall',
 		'Generation removed',
-		`Provider resources created for ${generated.deploymentPrefix} are gone. The external aven.id A and AAAA records and provider-issued credentials remain because the setup did not create them. Remove the stale aven.id records at its external DNS provider before leaving the service offline.\n\nType "reuse" to keep bootstrap-input.json and remove generated state, logs, and CSVs for a fresh generation. Type "delete" to erase the entire local bootstrap record. No default is selected.`
+		`Provider resources created for ${generated.deploymentPrefix} are gone, including the exact saved aven.id A and AAAA records. Provider-issued credentials remain active because the providers created them; revoke them after retaining any values needed for the next setup.\n\nType "reuse" to keep bootstrap-input.json and remove generated state, logs, and CSVs for a fresh generation. Type "delete" to erase the entire local bootstrap record. No default is selected.`
 	)
 	for (;;) {
 		const cleanup = (
@@ -1164,8 +1183,13 @@ async function validateHetznerToken(token: string, label: string, resource: stri
 	const payload = (await response.json()) as Record<string, unknown>
 	if (resource.startsWith('servers')) {
 		if (!Array.isArray(payload.servers)) throw new Error('Hetzner returned no server list.')
-		const meta = payload.meta as { pagination?: { total?: number } } | undefined
-		const total = meta?.pagination?.total
+		const meta = payload.meta as
+			| { pagination?: { total?: number; total_entries?: number } }
+			| undefined
+		const total =
+			meta?.pagination?.total ??
+			meta?.pagination?.total_entries ??
+			(Array.isArray(payload.servers) ? payload.servers.length : undefined)
 		reportStatus(
 			`✓ ${label}: authenticated Cloud project access${typeof total === 'number' ? `; ${total} server(s) currently visible` : ''}.\n`
 		)
@@ -1207,6 +1231,7 @@ function redactSecrets(message: string): string {
 			target,
 			'computeToken'
 		]),
+		['providers', 'identity', 'dnsApiKey'],
 		...(['next', 'production'] as const).flatMap((target) => [
 			['providers', target, 'dnsToken'],
 			['providers', target, 'polarApiKey'],
@@ -1223,6 +1248,17 @@ function redactSecrets(message: string): string {
 	const knownSecrets = [...paths.map((path) => valueAt(draft, path)), ...generatedSecrets].filter(
 		(value): value is string => typeof value === 'string' && value.length >= 4
 	)
+	for (const target of ['next', 'production'] as const) {
+		const value = valueAt(draft, ['providers', target, 'smtpUrl'])
+		if (typeof value !== 'string') continue
+		try {
+			const smtp = new URL(value)
+			for (const component of [smtp.username, smtp.password])
+				if (component.length >= 4) knownSecrets.push(component)
+		} catch {
+			// Input validation reports malformed URLs before SMTP authentication.
+		}
+	}
 	for (const value of knownSecrets) redacted = redacted.replaceAll(value, '[redacted]')
 	return redacted
 }
@@ -1291,12 +1327,22 @@ async function validatePolarCredential(input: {
 	)
 }
 
-function describeSmtpUrl(value: string, target: 'next' | 'production'): void {
+async function verifySmtpCredential(value: string, target: 'next' | 'production'): Promise<void> {
 	const url = new URL(value)
-	const transport = url.protocol === 'smtps:' ? 'implicit TLS' : 'SMTP/STARTTLS at deployment'
+	const transport = url.protocol === 'smtps:' ? 'implicit TLS' : 'SMTP/STARTTLS'
 	const port = url.port || (url.protocol === 'smtps:' ? '465' : '587')
+	const transporter = nodemailer.createTransport(value, {
+		connectionTimeout: 20_000,
+		greetingTimeout: 20_000,
+		socketTimeout: 20_000
+	})
+	try {
+		await transporter.verify()
+	} finally {
+		transporter.close()
+	}
 	reportStatus(
-		`✓ SMTP ${target}: ${transport} endpoint ${url.hostname}:${port}; credentials are present but cannot be safely authenticated without an SMTP session.\n`
+		`✓ SMTP ${target}: authenticated ${transport} endpoint ${url.hostname}:${port} without sending mail.\n`
 	)
 }
 
@@ -1583,6 +1629,27 @@ function wizardSteps(selectedTargets: readonly Target[]): WizardStep[] {
 		})
 	}
 
+	if (selectedTargets.includes('identity'))
+		steps.push({
+			chapter: 'DNS',
+			subchapter: 'aven.id',
+			title: 'avenOS identity DNS deployment',
+			stationLabel: 'United Domains API key',
+			description:
+				'Open https://www.united-domains.de/portfolio/a/dns-api\nName: avenOS identity DNS deployment\n\nCreate an API key and paste the complete public-prefix.secret value. The installer uses it to replace only the aven.id apex A/AAAA records, verifies the result through public DNS, and stores the key in the recovery CSV for rotation.',
+			path: ['providers', 'identity', 'dnsApiKey'],
+			label: 'United Domains API key',
+			secret: true,
+			validate: (value) =>
+				/^[^.\s]+\.[^.\s]+$/.test(value)
+					? undefined
+					: 'Paste the complete public-prefix.secret API key.',
+			verify: async (apiKey) => {
+				const zone = await verifyUnitedDomainsDnsAccess({ apiKey })
+				reportStatus(`✓ United Domains: writable ${zone.type} zone ${zone.name}.`)
+			}
+		})
+
 	if (platformTargets.length > 0)
 		steps.push({
 			chapter: 'Hetzner',
@@ -1652,15 +1719,12 @@ function wizardSteps(selectedTargets: readonly Target[]): WizardStep[] {
 				subchapter,
 				title: `avenOS ${target} SMTP`,
 				stationLabel: 'SMTP credential',
-				description: `Name: avenOS ${target} SMTP\n\nCreate a send-only SMTP credential with the name above when the provider supports names. Paste a complete smtp:// or smtps:// URL containing its username and password; the endpoint structure is checked without sending mail.`,
+				description: `Name: avenOS ${target} SMTP\n\nCreate a send-only SMTP credential with the name above when the provider supports names. Paste a complete smtp:// or smtps:// URL containing its username and password; the wizard authenticates without sending mail.`,
 				path: ['providers', target, 'smtpUrl'],
 				label: 'SMTP URL',
 				secret: true,
 				validate: (value) => (validSmtpUrl(value) ? undefined : 'Enter a complete SMTP URL.'),
-				summary: (value) => {
-					describeSmtpUrl(value, target)
-					return ''
-				}
+				verify: (value) => verifySmtpCredential(value, target)
 			},
 			{
 				chapter: 'Email',
@@ -1871,7 +1935,9 @@ async function chooseDeploymentTargets(): Promise<Target[]> {
 	}
 }
 
-async function offerSavedSetupResume(): Promise<'fresh' | 'resume' | 'uninstall' | 'exit'> {
+async function offerSavedSetupResume(): Promise<
+	'fresh' | 'resume' | 'rotate' | 'uninstall' | 'exit'
+> {
 	if (savedCredentialCsvPaths.length === 0) return 'fresh'
 	const steps = wizardSteps(currentDeploymentTargets())
 	const resumeIndex = savedWizardResumeIndex(steps, draft)
@@ -1883,24 +1949,34 @@ async function offerSavedSetupResume(): Promise<'fresh' | 'resume' | 'uninstall'
 	const context = `Owner-only saved setup data was found:\n${records}\n\nResume at ${resumeStep.title}${resumeProgress ? ` (Step ${resumeProgress.current + 1} of ${resumeProgress.total + 1})` : ''}. You can change the target selection first. The latest saved station is reopened and checked again, so a value saved before a failed check is never skipped.`
 	for (;;) {
 		setUiContext('Welcome', 'Saved setup found', context)
-		let choice: 'exit' | 'resume' | 'uninstall'
+		let choice: 'exit' | 'resume' | 'rotate' | 'uninstall'
 		if (tui) {
 			choice = (await tui.choose({
 				label: '',
 				options: [
 					{ label: 'Resume >', value: 'resume' },
+					{ label: 'Review or rotate credentials…', value: 'rotate' },
 					{ label: 'Uninstall…', value: 'uninstall' },
 					{ label: 'Exit', value: 'exit' }
 				]
-			})) as 'exit' | 'resume' | 'uninstall'
+			})) as 'exit' | 'resume' | 'rotate' | 'uninstall'
 		} else {
-			process.stdout.write('\nEnter r to resume, u to uninstall this generation, or e to exit: ')
+			process.stdout.write(
+				'\nEnter r to resume, c to review or rotate credentials, u to uninstall this generation, or e to exit: '
+			)
 			const answer = (await readAnswer()).toLowerCase()
-			if (answer !== 'r' && answer !== 'u' && answer !== 'e') {
-				reportFailure('Choose r to resume, u to uninstall, or e to exit.')
+			if (answer !== 'r' && answer !== 'c' && answer !== 'u' && answer !== 'e') {
+				reportFailure('Choose r to resume, c to rotate credentials, u to uninstall, or e to exit.')
 				continue
 			}
-			choice = answer === 'r' ? 'resume' : answer === 'u' ? 'uninstall' : 'exit'
+			choice =
+				answer === 'r'
+					? 'resume'
+					: answer === 'c'
+						? 'rotate'
+						: answer === 'u'
+							? 'uninstall'
+							: 'exit'
 		}
 		if (choice === 'exit') return 'exit'
 		if (choice === 'uninstall') return 'uninstall'
@@ -1909,12 +1985,110 @@ async function offerSavedSetupResume(): Promise<'fresh' | 'resume' | 'uninstall'
 			await withProgress('Checking GitHub login and Pulumi…', async () => {
 				await dependencyCheck?.('')
 			})
-			return 'resume'
+			return choice
 		} catch (error) {
 			if (error instanceof TuiInterruptedError) throw error
 			const message = redactSecrets(error instanceof Error ? error.message : 'check failed')
 			reportFailure(message)
 		}
+	}
+}
+
+async function reviewOrRotateCredentials(selectedTargets: readonly Target[]): Promise<boolean> {
+	const steps = wizardSteps(selectedTargets)
+	const credentialIndexes = rotatableWizardStepIndexes(steps)
+	let changed = false
+	for (;;) {
+		setUiContext(
+			'Credentials',
+			'Review or rotate',
+			`Choose one saved credential to replace. Its current value stays hidden and is kept when the field is empty. Each replacement is verified before it replaces the saved value. Apply once at the end; the bootstrap updates policies and GitHub, then one deployment activates the complete rotated set. Revoke old provider credentials only after that deployment succeeds.`
+		)
+		let choice: string
+		if (tui) {
+			choice = await tui.choose({
+				label: '',
+				options: [
+					...credentialIndexes.map((index) => {
+						const step = steps[index] as WizardStep
+						return {
+							label: `${wizardLocation(step)} · ${step.title}`,
+							value: String(index)
+						}
+					}),
+					{ label: changed ? 'Apply credential changes >' : 'Done', value: 'apply' },
+					{ label: 'Exit without applying', value: 'exit' }
+				]
+			})
+		} else {
+			for (const [position, index] of credentialIndexes.entries()) {
+				const step = steps[index] as WizardStep
+				process.stdout.write(`${position + 1}. ${wizardLocation(step)} · ${step.title}\n`)
+			}
+			process.stdout.write(`\nChoose 1-${credentialIndexes.length}, a to apply, or e to exit: `)
+			const answer = (await readAnswer()).toLowerCase()
+			choice =
+				answer === 'a' || answer === 'e'
+					? answer === 'a'
+						? 'apply'
+						: 'exit'
+					: String(credentialIndexes[Number(answer) - 1] ?? '')
+		}
+		if (choice === 'apply') return changed
+		if (choice === 'exit') return false
+		const index = Number(choice)
+		if (!credentialIndexes.includes(index)) {
+			reportFailure('Choose one listed credential, Apply, or Exit.')
+			continue
+		}
+		const step = steps[index] as WizardStep
+		const existing = valueAt(draft, step.path)
+		const existingText = typeof existing === 'string' ? existing : ''
+		const companionExisting = step.companion ? valueAt(draft, step.companion.path) : undefined
+		const companionExistingText = typeof companionExisting === 'string' ? companionExisting : ''
+		setUiContext(
+			wizardLocation(step),
+			step.title,
+			`${typeof step.description === 'function' ? step.description() : step.description}\n\nA saved value is present and remains hidden. Leave ${step.companion ? 'either field' : 'the field'} empty to keep it.`
+		)
+		const result = await navigateStep(step, undefined, undefined, true)
+		if (result.direction === 'back') continue
+		const candidate = result.value || existingText
+		const companionCandidate = step.companion
+			? result.companionValue || companionExistingText
+			: undefined
+		if (!candidate) {
+			reportFailure(`${step.label}: a value is required.`)
+			continue
+		}
+		const invalid = step.validate?.(candidate)
+		if (invalid) {
+			reportFailure(`${step.label}: ${invalid}`)
+			continue
+		}
+		if (step.companion && !companionCandidate && !step.companion.optional) {
+			reportFailure(`${step.companion.label}: a value is required.`)
+			continue
+		}
+		const companionInvalid = step.companion?.validate?.(companionCandidate ?? '')
+		if (companionInvalid) {
+			reportFailure(`${step.companion?.label}: ${companionInvalid}`)
+			continue
+		}
+		setValueAt(draft, step.path, candidate)
+		if (step.companion) setValueAt(draft, step.companion.path, companionCandidate)
+		try {
+			await withProgress(`Checking ${step.title}…`, async () => step.verify?.(candidate))
+		} catch (error) {
+			setValueAt(draft, step.path, existing)
+			if (step.companion) setValueAt(draft, step.companion.path, companionExisting)
+			const message = redactSecrets(error instanceof Error ? error.message : 'verification failed')
+			reportFailure(`Saved value unchanged: ${message}`)
+			continue
+		}
+		saveDraft()
+		changed ||= candidate !== existingText || companionCandidate !== companionExistingText
+		reportStatus(`✓ ${step.title}: replacement verified and saved for the pending apply.`)
 	}
 }
 
@@ -2103,9 +2277,22 @@ try {
 		generated
 	)
 	if (!existsSync(inputPath) || !existsSync(credentialsPath)) saveDraft()
-	const startIndex =
-		startup === 'resume' ? await resumeIndexAfterCredentialPreflight(selectedTargets) : 0
-	const bootstrapInput = await collectInput(selectedTargets, startIndex)
+	let bootstrapInput: BootstrapInput
+	if (startup === 'rotate') {
+		const changed = await reviewOrRotateCredentials(selectedTargets)
+		if (!changed) {
+			process.stdout.write(
+				`Saved setup preserved in ${outputDirectory}; no provider changes applied.\n`
+			)
+			process.exit(0)
+		}
+		validateBootstrapInput(draft)
+		bootstrapInput = draft as unknown as BootstrapInput
+	} else {
+		const startIndex =
+			startup === 'resume' ? await resumeIndexAfterCredentialPreflight(selectedTargets) : 0
+		bootstrapInput = await collectInput(selectedTargets, startIndex)
+	}
 	setUiContext('Review', 'Validating the plan', 'No provider state changes while this check runs.')
 	await withProgress('Validating the complete deployment plan…', () =>
 		run(
@@ -2124,7 +2311,7 @@ try {
 	setUiContext(
 		'Review',
 		'Plan validated',
-		`The input for ${selectedTargets.join(', ')} is valid. Apply creates ${selectedTargets.length * 2} private buckets, ${selectedTargets.filter((target) => target !== 'identity').length} Polar webhook(s), generated credentials, and reconciles ${configurationTargets.length * 2} namespaced GitHub Environments. When all three targets are prepared, it then provisions and deploys the first installation, pausing only for external aven.id DNS. Previously prepared targets are refreshed only to keep shared references current.`
+		`The input for ${selectedTargets.join(', ')} is valid. Apply creates or reconciles ${selectedTargets.length * 2} private buckets, ${selectedTargets.filter((target) => target !== 'identity').length} Polar webhook(s), generated credentials, exact aven.id A/AAAA records, and ${configurationTargets.length * 2} namespaced GitHub Environments. When all three targets are prepared, it provisions and deploys the first installation. Previously prepared targets are refreshed only to keep shared references current.`
 	)
 	const apply = tui
 		? await tui.choose({
@@ -2148,6 +2335,12 @@ try {
 		await withProgress('Starting provider reconciliation…', runBootstrapApply)
 		promoteCompletedCredentials()
 		Object.assign(generated, loadOrCreateGeneratedSecrets(generatedPath))
+		if (startup === 'rotate' && generated.initialRollout) {
+			generated.initialRollout.deployRunId = undefined
+			generated.initialRollout.verifiedAt = undefined
+			saveGeneratedSecrets(generatedPath, generated)
+			refreshCompletedCredentials(bootstrapInput)
+		}
 		const running = await completeInitialRolloutWithRecovery(bootstrapInput)
 		if (running !== undefined)
 			process.stdout.write(
