@@ -242,6 +242,27 @@ export function retryableGitHubCliFailure(message: string): boolean {
 	)
 }
 
+export async function retryTransientGitHubRead<T>(options: {
+	read: () => Promise<T>
+	deadlineAt: number
+	onRetry?: (retry: { attempt: number; delayMs: number; message: string }) => void
+	sleep?: (delayMs: number) => Promise<void>
+}): Promise<T> {
+	let attempt = 0
+	for (;;) {
+		try {
+			return await options.read()
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			if (!retryableGitHubCliFailure(message) || Date.now() >= options.deadlineAt) throw error
+			attempt += 1
+			const delayMs = Math.min(1_000 * 2 ** Math.min(attempt - 1, 4), 15_000)
+			options.onRetry?.({ attempt, delayMs, message })
+			await (options.sleep ?? ((delay) => Bun.sleep(delay)))(delayMs)
+		}
+	}
+}
+
 export function deploymentTargetSummary(targets: readonly Target[]): string {
 	const descriptions: Record<Target, string> = {
 		identity: 'shared aven.id identity host',

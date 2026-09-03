@@ -43,6 +43,7 @@ import {
 	orderedDeploymentTargets,
 	POLAR_API_KEY_SCOPES,
 	retryableGitHubCliFailure,
+	retryTransientGitHubRead,
 	S3_CREDENTIAL_STEPS,
 	savedWizardResumeIndex,
 	savedWizardVerificationIndexes,
@@ -359,9 +360,11 @@ async function run(
 			}, timeoutMs)
 		: undefined
 	try {
-		const stdout = quiet ? await new Response(child.stdout).text() : ''
-		const stderr = quiet ? await new Response(child.stderr).text() : ''
-		const exitCode = await child.exited
+		const [stdout, stderr, exitCode] = await Promise.all([
+			quiet ? new Response(child.stdout).text() : Promise.resolve(''),
+			quiet ? new Response(child.stderr).text() : Promise.resolve(''),
+			child.exited
+		])
 		if (timedOut)
 			throw new Error(`${command} timed out after ${Math.ceil((timeoutMs ?? 0) / 1000)}s`)
 		if (exitCode !== 0)
@@ -421,6 +424,17 @@ async function workflowRun(runId: number, repository: string): Promise<GitHubWor
 	) as GitHubWorkflowRun
 }
 
+async function resilientGitHubRead(commandArgs: string[], label: string): Promise<string> {
+	return retryTransientGitHubRead({
+		read: () => run('gh', commandArgs, true, 30_000),
+		deadlineAt: Date.now() + 5 * 60_000,
+		onRetry: ({ attempt, delayMs, message }) =>
+			appendRolloutLog(
+				`${label}: GitHub API temporarily unavailable; retrying ${attempt} in ${Math.ceil(delayMs / 1_000)}s; ${redactSecrets(message)}`
+			)
+	})
+}
+
 async function workflowFailureReason(
 	runId: number,
 	repository: string
@@ -471,7 +485,15 @@ async function waitForWorkflowRun(
 	const deadline = Date.now() + timeoutMs
 	let lastDetail = ''
 	for (;;) {
-		const state = await workflowRun(runId, repository)
+		const state = await retryTransientGitHubRead({
+			read: () => workflowRun(runId, repository),
+			deadlineAt: deadline,
+			onRetry: ({ attempt, delayMs, message }) => {
+				const detail = `GitHub API temporarily unavailable; retrying poll ${attempt} in ${Math.ceil(delayMs / 1_000)}s`
+				appendRolloutLog(`${label}: ${detail}; ${redactSecrets(message)}`)
+				update({ status: 'active', current: 1, total: 1, label, detail })
+			}
+		})
 		const progress = workflowProgress(state, label)
 		if (progress.detail !== lastDetail) {
 			lastDetail = progress.detail
@@ -494,7 +516,7 @@ async function waitForWorkflowRun(
 			return state
 		}
 		if (Date.now() >= deadline) throw new Error(`${label} timed out. Open ${state.url}`)
-		await Bun.sleep(5_000)
+		await Bun.sleep(15_000)
 	}
 }
 
@@ -528,7 +550,18 @@ async function dispatchWorkflow(
 				30_000
 			)
 		) as Array<{ databaseId: number; url: string }>
-	const knownRunIds = new Set((await listRuns()).map((workflowRun) => workflowRun.databaseId))
+	const knownRunIds = new Set(
+		(
+			await retryTransientGitHubRead({
+				read: listRuns,
+				deadlineAt: Date.now() + 5 * 60_000,
+				onRetry: ({ attempt, delayMs, message }) =>
+					appendRolloutLog(
+						`${workflow} pre-dispatch discovery: GitHub API temporarily unavailable; retrying ${attempt} in ${Math.ceil(delayMs / 1_000)}s; ${redactSecrets(message)}`
+					)
+			})
+		).map((workflowRun) => workflowRun.databaseId)
+	)
 	const args = ['workflow', 'run', workflow, '--repo', repository, '--ref', ref]
 	for (const [name, value] of Object.entries(inputs)) args.push('--raw-field', `${name}=${value}`)
 	let output = ''
@@ -549,16 +582,26 @@ async function dispatchWorkflow(
 		)
 		return immediateRunId
 	}
-	const deadline = Date.now() + (dispatchFailure ? 120_000 : 30_000)
+	const deadline = Date.now() + (dispatchFailure ? 5 * 60_000 : 60_000)
 	while (Date.now() < deadline) {
-		await Bun.sleep(1_000)
+		await Bun.sleep(5_000)
 		let discoveredRunId: number | undefined
 		try {
-			discoveredRunId = unseenWorkflowRunId(await listRuns(), knownRunIds)
+			discoveredRunId = unseenWorkflowRunId(
+				await retryTransientGitHubRead({
+					read: listRuns,
+					deadlineAt: deadline,
+					onRetry: ({ attempt, delayMs, message }) =>
+						appendRolloutLog(
+							`${workflow} run discovery: GitHub API temporarily unavailable; retrying ${attempt} in ${Math.ceil(delayMs / 1_000)}s; ${redactSecrets(message)}`
+						)
+				}),
+				knownRunIds
+			)
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			if (!retryableGitHubCliFailure(message)) throw error
-			appendRolloutLog(`${workflow} run discovery is temporarily unavailable; retrying.`)
+			if (Date.now() >= deadline) break
 			continue
 		}
 		if (discoveredRunId) {
@@ -588,9 +631,18 @@ async function runRolloutWorkflow(input: {
 	refreshCredentials: () => void
 }): Promise<void> {
 	await withProgress(input.label, async (update) => {
+		const deadlineAt = Date.now() + input.timeoutMs
 		let runId = generated.initialRollout?.[input.field]
 		if (runId) {
-			const state = await workflowRun(runId, input.repository)
+			const state = await retryTransientGitHubRead({
+				read: () => workflowRun(runId, input.repository),
+				deadlineAt,
+				onRetry: ({ attempt, delayMs, message }) => {
+					const detail = `GitHub API temporarily unavailable; retrying saved-run check ${attempt} in ${Math.ceil(delayMs / 1_000)}s`
+					appendRolloutLog(`${input.label}: ${detail}; ${redactSecrets(message)}`)
+					update({ status: 'active', current: 1, total: 1, label: input.label, detail })
+				}
+			})
 			if (state.status === 'completed' && state.conclusion !== 'success') runId = undefined
 		}
 		if (!runId) {
@@ -600,7 +652,13 @@ async function runRolloutWorkflow(input: {
 			saveGeneratedSecrets(generatedPath, generated)
 			input.refreshCredentials()
 		}
-		await waitForWorkflowRun(runId, input.repository, input.label, update, input.timeoutMs)
+		await waitForWorkflowRun(
+			runId,
+			input.repository,
+			input.label,
+			update,
+			Math.max(deadlineAt - Date.now(), 1)
+		)
 	})
 }
 
@@ -623,7 +681,7 @@ async function identityDnsRecords(input: BootstrapInput): Promise<{ ipv4: string
 		AWS_EC2_METADATA_DISABLED: 'true',
 		PULUMI_SKIP_UPDATE_CHECK: 'true'
 	}
-	await run('pulumi', ['login', backend], true, 30_000, environment)
+	await run('pulumi', ['login', backend], true, 120_000, environment)
 	const records = JSON.parse(
 		await run(
 			'pulumi',
@@ -638,7 +696,7 @@ async function identityDnsRecords(input: BootstrapInput): Promise<{ ipv4: string
 				resolve(root, 'infrastructure/platform')
 			],
 			true,
-			30_000,
+			120_000,
 			environment
 		)
 	) as Array<{ type?: string; value?: string }>
@@ -731,18 +789,14 @@ async function completeInitialRollout(input: BootstrapInput): Promise<boolean> {
 		return false
 	}
 	const repository = input.repository
-	const defaultBranch = await run(
-		'gh',
+	const defaultBranch = await resilientGitHubRead(
 		['api', `repos/${repository}`, '--jq', '.default_branch'],
-		true,
-		30_000
+		'Read repository default branch'
 	)
 	const localRef = await run('git', ['rev-parse', 'HEAD'], true, 10_000)
-	const remoteRef = await run(
-		'gh',
+	const remoteRef = await resilientGitHubRead(
 		['api', `repos/${repository}/commits/${defaultBranch}`, '--jq', '.sha'],
-		true,
-		30_000
+		'Read current deployment commit'
 	)
 	if (localRef !== remoteRef)
 		throw new Error(
