@@ -87,16 +87,20 @@ appears:
    `avenOS next DNS deployment` and `avenOS production DNS deployment`. Both manage the
    shared `aven.ceo` zone, while their credentials and GitHub Environments remain separate.
    `aven.id` stays outside Hetzner DNS.
-6. In Polar sandbox and production, create organization API keys named
+6. In United Domains, create a writable DNS API key named
+   `avenOS identity DNS deployment`. The setup uses it only to read the `aven.id` zone and
+   replace its apex A and AAAA record sets. It stores the key in the recovery CSV and
+   removes only the saved installation addresses during uninstall.
+7. In Polar sandbox and production, create organization API keys named
    `avenOS next billing` and `avenOS production billing`. These backend tokens are used
    by both provisioning and the checkout service. Select only `organizations:read`,
    `products:write`, `benefits:write`, `meters:write`, `checkouts:write`,
    `subscriptions:write`, `customers:read`, `orders:read`, and `webhooks:write`. Their
    expiration must cover production use and planned rotation. The bootstrap creates or
    reconciles the endpoint and captures its signing secret.
-7. Create send-only SMTP credentials named `avenOS next SMTP` and
+8. Create send-only SMTP credentials named `avenOS next SMTP` and
    `avenOS production SMTP` when the provider supports names.
-8. Fund the RedPill account and create an active API key named `avenOS chat bootstrap`.
+9. Fund the RedPill account and create an active API key named `avenOS chat bootstrap`.
    One key may serve both platform targets; the API facade keeps it server-side.
 
 Product creation is not a provider prerequisite. The bootstrap applies the published
@@ -206,12 +210,18 @@ bun run bootstrap:deployment:guided -- --plain
 
 When the output directory contains one or both owner-only credential CSV files plus their
 machine-readable input and generated-secret companions, startup offers **Resume**,
-**Uninstall**, or **Exit**. Resume first reopens the saved target selection, then rechecks every saved,
+**Review or rotate credentials**, **Uninstall**, or **Exit**. Resume first reopens the saved target selection, then rechecks every saved,
 testable credential with read-only provider calls. The current credential and check count
 remain visible. A rejected credential opens its own station immediately so it can be
 replaced before Apply; otherwise the latest relevant saved station opens. Exit leaves every
 file untouched. A CSV without both companion files is preserved and produces a clear error
 instead of being overwritten or partially reconstructed.
+
+**Review or rotate credentials** shows only secret-bearing stations for the selected
+targets. Replace one or several values, verify each replacement, then apply once. The setup
+updates bucket policies and GitHub Environments and performs one deployment so the running
+services receive the complete rotated set. Keep the old provider credentials active until
+that deployment and public verification succeed, then revoke them at their providers.
 
 Pulumi also writes ignored `Pulumi.<stack>.yaml` files beside the bootstrap program. Their
 encryption salt belongs to one generated passphrase and backend, so a retained checkout can
@@ -236,8 +246,8 @@ ends with `SUCCESS` and the same path.
 Generated values join the same file as soon as they exist; manually entered provider
 values are present throughout. During the initial rollout this includes each GitHub run,
 the deployed Git revision, exact state and backup bucket names, public service origins,
-and the `aven.id` A and AAAA records. The DNS values are saved before the wizard asks the
-operator to set them, so cancelling at that screen does not lose the handoff.
+and the `aven.id` A and AAAA records. The DNS values are saved before the installer
+publishes them, so an interruption does not lose the exact reconciliation target.
 
 The CSV uses the common `Group`, `Title`, `Username`, `Password`, `URL`, and `Notes`
 fields. Groups include the deployment prefix and scope, for example
@@ -256,9 +266,23 @@ the organization name, slug, ID, and current product and webhook counts. The aut
 RedPill catalog reports the number of Phala-hosted models and a few names. Failed checks
 stay on the current form; correct its value or pair, go Back, or cancel the run.
 
-SMTP URLs receive strict parsing and the wizard reports their host, port, and transport.
-It deliberately does not attempt SMTP authentication because a portable, non-mutating
-provider check is not available; deployment readiness tests the configured transport.
+SMTP URLs receive strict parsing. The wizard authenticates to their host and transport
+without sending mail, then reports the verified endpoint.
+
+To recheck the complete saved credential set without changing provider state or opening
+the full-screen wizard, run:
+
+```sh
+bun run bootstrap:deployment:preflight -- \
+  --input "$HOME/avenos-bootstrap-record/bootstrap-input.json"
+```
+
+The command checks GitHub login and administration, private packages, every selected
+Hetzner Cloud and Object Storage credential, both DNS providers, Polar catalog and webhook
+access, SMTP authentication without sending, and the live Phala model catalog. It prints
+identity evidence such as project bucket counts, zone IDs, and Polar organization names,
+but redacts credential values. Run it before retrying a failed initial rollout and after
+revoking superseded credentials.
 After applying the documented infrastructure defaults, the wizard shows the dry-run
 result. Select **Apply now** on the review screen to create the buckets, Polar endpoints
 and manifest products, generated secrets, and GitHub configuration, then provision and
@@ -274,8 +298,8 @@ their storage or external-provider changes.
 
 After the provider bootstrap, the same process dispatches one combined infrastructure
 preview and one combined apply. Protected Pulumi resources reject destructive replacement.
-The setup then displays the exact external A and AAAA records for `aven.id` and waits until
-public DNS returns those values. Finally, it runs the complete release gate once, publishes
+The setup then replaces the exact apex A and AAAA record sets for `aven.id` through United
+Domains and waits until public DNS returns those values. Finally, it runs the complete release gate once, publishes
 each image once, deploys `identity`, `next`, and production in order, and checks all seven
 public readiness endpoints. Successful GitHub run IDs, the DNS handoff, and final
 verification time are stored in the owner-only generated record and mirrored into
@@ -319,9 +343,10 @@ The teardown is bounded by the saved record. It removes resources in dependency 
 2. the saved Polar webhook endpoints and the exact SSOT catalog identified by its metadata;
    Polar products and meters are archived where the provider retains them, benefits are
    removed, and financial history remains subject to Polar retention;
-3. the generation's GitHub Environments and, only when this generation is still active,
+3. the exact saved `aven.id` A and AAAA addresses through United Domains;
+4. the generation's GitHub Environments and, only when this generation is still active,
    its repository deployment variables and package-reader secret; and
-4. versioned Pulumi state and Restic backup buckets last. For each target, the command
+5. versioned Pulumi state and Restic backup buckets last. For each target, the command
    probes the two exact generation-bound names and reconstructs only the minimal local
    ownership needed to delete the buckets that actually exist.
 
@@ -352,10 +377,10 @@ After success, choose one exact local cleanup action with no default:
 - `delete` removes the complete local bootstrap record.
 
 The setup did not create the Hetzner Cloud or S3 credentials, Polar API keys, SMTP
-credentials, RedPill key, GitHub personal token, or external `aven.id` DNS records. It does
-not revoke or delete them. Remove the now-stale `aven.id` A and AAAA records at its external
-DNS provider. Reuse or revoke provider credentials according to the next installation and
-the provider's own access review.
+credentials, RedPill key, GitHub personal token, or United Domains API key. It does not
+revoke them. Reuse or revoke provider credentials according to the next installation and
+the provider's own access review. The exact saved `aven.id` A and AAAA addresses have
+already been removed.
 
 To resume or reconcile the same infrastructure generation, run the same command again.
 To use a different owner-only location:
@@ -469,9 +494,8 @@ locate the same record. This improves continuity but does not block a solo insta
 ## Finish the first installation
 
 Do not dispatch another workflow after a successful complete setup. The guided command
-already provisions and deploys the full topology. Its only manual deployment pause is the
-external `aven.id` DNS screen; enter the displayed records at that provider, then choose
-**Check DNS**. A successful run ends with:
+already provisions and deploys the full topology, including both DNS providers. A
+successful run ends with:
 
 ```text
 SUCCESS: the first avenOS installation for avenos-… is running.

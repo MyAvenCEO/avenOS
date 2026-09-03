@@ -36,7 +36,9 @@ test('validates and prints an exact uninstall plan without contacting providers'
 				sshAllowedCidrs: '192.0.2.1/32',
 				acmeEmail: 'ops@example.test'
 			},
-			providers: { identity: { computeToken: 'compute-token' } }
+			providers: {
+				identity: { computeToken: 'compute-token', dnsApiKey: 'prefix.secret' }
+			}
 		}),
 		{ mode: 0o600 }
 	)

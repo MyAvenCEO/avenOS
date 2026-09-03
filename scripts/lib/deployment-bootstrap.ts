@@ -49,7 +49,7 @@ export interface BootstrapInput {
 	}
 	providers: {
 		dnsProjectId?: string
-		identity: { computeToken: string }
+		identity: { computeToken: string; dnsApiKey: string }
 		next: {
 			computeToken: string
 			dnsToken: string
@@ -537,6 +537,7 @@ export function validateBootstrapInput(
 	if (selectedTargets.includes('identity')) {
 		const identity = objectAt(providers.identity, 'providers.identity')
 		stringAt(identity.computeToken, 'providers.identity.computeToken')
+		stringAt(identity.dnsApiKey, 'providers.identity.dnsApiKey')
 	}
 	const platformTargets = selectedTargets.filter(
 		(target): target is 'next' | 'production' => target !== 'identity'
@@ -777,6 +778,15 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 			`https://console.hetzner.com/projects/${storage.projectId}/security/tokens`
 		)
 	}
+	if (recoveryTargets.includes('identity'))
+		add(
+			'identity',
+			'avenOS identity DNS deployment (United Domains API key)',
+			'',
+			input.providers.identity.dnsApiKey,
+			'Writes only the externally hosted aven.id DNS zone during installation and removes only the saved identity A/AAAA values during a full uninstall.',
+			'https://www.united-domains.de/portfolio/a/dns-api'
+		)
 	for (const target of recoveryTargets.filter(
 		(target): target is 'next' | 'production' => target !== 'identity'
 	)) {
@@ -848,14 +858,14 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 		}
 		if (rollout.identityDns) {
 			const dnsStatus = rollout.identityDns.verified
-				? 'Public DNS was verified against this value.'
-				: 'This value still needs to be set and verified.'
+				? 'The installer published this value through United Domains and verified public DNS.'
+				: 'The installer has saved this value and will publish and verify it through United Domains before deployment.'
 			add(
 				'identity',
 				'aven.id apex A record',
 				'@',
 				rollout.identityDns.ipv4,
-				`At the authoritative external DNS provider, set type A, name @, TTL 300. Remove other apex A values. ${dnsStatus}`,
+				`Type A, apex name @, TTL 300. ${dnsStatus}`,
 				'https://aven.id/'
 			)
 			add(
@@ -863,7 +873,7 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 				'aven.id apex AAAA record',
 				'@',
 				rollout.identityDns.ipv6,
-				`At the authoritative external DNS provider, set type AAAA, name @, TTL 300. Remove other apex AAAA values. ${dnsStatus}`,
+				`Type AAAA, apex name @, TTL 300. ${dnsStatus}`,
 				'https://aven.id/'
 			)
 		}

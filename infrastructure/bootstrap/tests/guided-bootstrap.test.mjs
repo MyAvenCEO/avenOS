@@ -15,6 +15,7 @@ import {
 	POLAR_API_KEY_SCOPES,
 	retryableGitHubCliFailure,
 	retryTransientGitHubRead,
+	rotatableWizardStepIndexes,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
 	savedWizardResumeIndex,
@@ -51,6 +52,21 @@ test('counts only screens that require an answer', () => {
 	assert.equal(actionableWizardProgress(steps, 1), undefined)
 	assert.deepEqual(actionableWizardProgress(steps, 2), { current: 1, total: 3 })
 	assert.deepEqual(actionableWizardProgress(steps, 4), { current: 3, total: 3 })
+})
+
+test('offers only saved secret-bearing stations for credential rotation', () => {
+	const steps = [
+		{ info: true },
+		{ path: ['repository'] },
+		{ path: ['providers', 'computeToken'], secret: true },
+		{
+			path: ['storage', 'accessKey'],
+			secret: true,
+			companion: { path: ['storage', 'secretKey'], secret: true }
+		},
+		{ path: ['reviewer'], optional: true }
+	]
+	assert.deepEqual(rotatableWizardStepIndexes(steps), [2, 3])
 })
 
 test('identifies a dispatched workflow without depending on exact gh prose', () => {
@@ -353,7 +369,7 @@ test('preserves partial credentials with descriptive password-manager fields', (
 		},
 		providers: {
 			dnsProjectId: '4567890',
-			identity: { computeToken: 'COMPUTESECRET' },
+			identity: { computeToken: 'COMPUTESECRET', dnsApiKey: 'DNSPREFIX.DNSSECRET' },
 			next: { dnsToken: 'DNSSECRET' }
 		}
 	}

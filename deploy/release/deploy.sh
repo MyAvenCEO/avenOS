@@ -100,12 +100,18 @@ dotenv() {
 }
 
 wait_for_cloud_init() {
-  local key=$1 remote=$2
-  for _ in {1..60}; do
+  local key=$1 remote=$2 expected_host_key=$3 host scanned_host_key
+  host=${remote#*@}
+  for _ in {1..180}; do
+    scanned_host_key=$(ssh-keyscan -T 5 -t ed25519 "$host" 2>/dev/null | awk 'NR == 1 { print $2 " " $3 }') || true
+    if [[ "$scanned_host_key" != "$expected_host_key" ]]; then
+      sleep 5
+      continue
+    fi
     if ssh -i "$key" -o BatchMode=yes -o ConnectTimeout=10 -o UserKnownHostsFile="$stage/ssh/known_hosts" -o StrictHostKeyChecking=yes "$remote" 'test -f /var/lib/aven/cloud-init-complete'; then return 0; fi
     sleep 5
   done
-  echo "cloud-init did not finish on $remote" >&2
+  echo "cloud-init did not install the Pulumi-pinned SSH host key and finish on $remote within 15 minutes" >&2
   return 1
 }
 
@@ -114,7 +120,7 @@ deploy_bundle() {
   local remote="$deploy_user@$host"
   local upload="/tmp/aven-${service}-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
   local ssh_args=(-i "$stage/ssh/key" -o BatchMode=yes -o ConnectTimeout=10 -o UserKnownHostsFile="$stage/ssh/known_hosts" -o StrictHostKeyChecking=yes)
-  wait_for_cloud_init "$stage/ssh/key" "$remote"
+  wait_for_cloud_init "$stage/ssh/key" "$remote" "$(awk '{ print $1 " " $2 }' <<<"$3")"
   ssh "${ssh_args[@]}" "$remote" "install -d -m 0700 '$upload'"
   scp "${ssh_args[@]}" -r "$stage/$service/." "$remote:$upload/"
   cleanup_remote() {
@@ -198,7 +204,7 @@ if [[ "$DEPLOYMENT_TARGET" == identity ]]; then
   install -m 644 "$root/deploy/identity/docker-compose.yml" "$stage/identity/docker-compose.yml"
   install -m 644 "$root/deploy/identity/Caddyfile" "$stage/identity/Caddyfile"
   install -m 755 "$root/deploy/identity/db-init.sh" "$stage/identity/db-init.sh"
-  deploy_bundle "$identity_ip" identity
+  deploy_bundle "$identity_ip" identity "$identity_host_key"
   wait_for_url https://aven.id/api/health/ready
   echo 'Shared identity deployment is healthy.'
   exit 0
@@ -308,7 +314,7 @@ system_sites=$(printf '[{"hostname":"%s","repository":"myavenceo/aven-brands","s
 install -m 644 "$root/deploy/platform/docker-compose.yml" "$stage/platform/docker-compose.yml"
 install -m 644 "$root/deploy/platform/Caddyfile" "$stage/platform/Caddyfile"
 install -m 755 "$root/deploy/platform/db-init.sh" "$stage/platform/db-init.sh"
-deploy_bundle "$platform_ip" platform
+deploy_bundle "$platform_ip" platform "$platform_host_key"
 wait_for_url "https://$api_domain/health/live"
 wait_for_url "https://$checkout_domain/api/health/ready"
 wait_for_url "https://$public_domain/"

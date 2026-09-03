@@ -60,6 +60,11 @@ ssh() {
   assert_ssh_arguments "$@"
 }
 
+ssh-keyscan() {
+  local host=${*: -1}
+  printf '%s ssh-ed25519 AAAATEST\n' "$host"
+}
+
 scp() {
   assert_ssh_arguments "$@"
 }

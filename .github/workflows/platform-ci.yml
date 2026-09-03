@@ -28,13 +28,18 @@ on:
       - package.json
       - scripts/deployment-bootstrap-guided.ts
       - scripts/deployment-bootstrap.ts
+      - scripts/deployment-credentials-preflight.ts
+      - scripts/deployment-uninstall.ts
       - scripts/lib/deployment-bootstrap-guided.ts
       - scripts/lib/deployment-bootstrap-tui.ts
       - scripts/lib/deployment-bootstrap-tui.test.ts
       - scripts/lib/deployment-bootstrap.ts
+      - scripts/lib/deployment-uninstall.ts
       - scripts/lib/polar-webhook.ts
       - scripts/lib/redpill-model-catalog.ts
       - scripts/lib/redpill-model-catalog.test.ts
+      - scripts/lib/united-domains-dns.ts
+      - scripts/lib/united-domains-dns.test.ts
       - .github/workflows/platform-ci.yml
       - .github/workflows/platform-deploy.yml
       - .github/workflows/platform-infrastructure.yml
@@ -68,13 +73,18 @@ on:
       - package.json
       - scripts/deployment-bootstrap-guided.ts
       - scripts/deployment-bootstrap.ts
+      - scripts/deployment-credentials-preflight.ts
+      - scripts/deployment-uninstall.ts
       - scripts/lib/deployment-bootstrap-guided.ts
       - scripts/lib/deployment-bootstrap-tui.ts
       - scripts/lib/deployment-bootstrap-tui.test.ts
       - scripts/lib/deployment-bootstrap.ts
+      - scripts/lib/deployment-uninstall.ts
       - scripts/lib/polar-webhook.ts
       - scripts/lib/redpill-model-catalog.ts
       - scripts/lib/redpill-model-catalog.test.ts
+      - scripts/lib/united-domains-dns.ts
+      - scripts/lib/united-domains-dns.test.ts
       - .github/workflows/platform-ci.yml
       - .github/workflows/platform-deploy.yml
       - .github/workflows/platform-infrastructure.yml

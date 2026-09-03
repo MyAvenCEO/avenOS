@@ -70,8 +70,8 @@ credentials into `next` or reuse another target's state or backup prefix.
 
 ## Operating principles
 
-- Automate normal operation; ask the operator only for an explicit deployment decision,
-  external `aven.id` DNS, credential escrow, or a final recovery decision. A second-person
+- Automate normal operation; ask the operator only for provider credentials, an explicit
+  deployment or recovery decision, and credential escrow. A second-person
   approval can be enabled when another operator becomes available.
 - Deploy immutable image digests. Do not edit files on a server.
 - Give every process its own database role and only the privileges it needs.

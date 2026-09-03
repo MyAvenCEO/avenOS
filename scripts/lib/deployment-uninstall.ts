@@ -59,6 +59,13 @@ export function uninstallFailureSummary(lines: readonly string[]): string | unde
 	return useful.length > 0 ? useful.slice(-2).join(' — ').slice(0, 800) : undefined
 }
 
+export function localPulumiLockPid(message: string, currentHostname: string): number | undefined {
+	const match = message.match(/created by [^\s@]+@([^\s]+) \(pid (\d+)\)/)
+	if (!match || match[1] !== currentHostname) return undefined
+	const pid = Number(match[2])
+	return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined
+}
+
 export function uninstallTargets(
 	input: Pick<BootstrapInput, 'deploymentTargets'>,
 	generated: Pick<GeneratedSecrets, 'completedTargets'>
@@ -170,11 +177,12 @@ export function uninstallSummary(
 	const platformTargets = targets.filter((target) => target !== 'identity')
 	return `Generation ${prefix} will be removed in this order:
   1. Hetzner hosts, volumes, firewalls, SSH registrations, generated keys, secrets, and managed aven.ceo DNS for ${targets.join(', ')}
-  2. Polar webhook endpoints and SSOT billing catalog for ${platformTargets.join(', ') || 'no platform target'} (products and meters are archived when Polar retains them)
-  3. GitHub Environments ${environments.join(', ')} and this generation's repository deployment selection
-  4. Restic backup and Pulumi state buckets, last
+  2. The saved generation's aven.id A and AAAA records${targets.includes('identity') ? '' : ' (not selected)'}
+  3. Polar webhook endpoints and SSOT billing catalog for ${platformTargets.join(', ') || 'no platform target'} (products and meters are archived when Polar retains them)
+  4. GitHub Environments ${environments.join(', ')} and this generation's repository deployment selection
+  5. Restic backup and Pulumi state buckets, last
 
-The external aven.id A and AAAA records, Hetzner API/S3 credentials, Polar API keys, SMTP credentials, RedPill key, and GitHub token were supplied by you. They are not deleted automatically. Existing Polar financial history remains subject to Polar retention.`
+Provider-issued credentials are not revoked automatically. Existing Polar financial history remains subject to Polar retention.`
 }
 
 export function activePrefixAllowsRepositoryCleanup(

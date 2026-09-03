@@ -811,7 +811,7 @@ const input = {
 	},
 	providers: {
 		dnsProjectId: '4567890',
-		identity: { computeToken: 'identity-compute-token' },
+		identity: { computeToken: 'identity-compute-token', dnsApiKey: 'prefix.secret' },
 		next: {
 			computeToken: 'next-compute-token',
 			dnsToken: 'next-dns',
@@ -1151,7 +1151,7 @@ test('writes password-manager recovery material owner-only', () => {
 	assert.throws(() => writeRecoveryCsv(path, contents), /refusing to overwrite/)
 })
 
-test('adds the resumable initial rollout and manual DNS handoff to the password-manager CSV', () => {
+test('adds the resumable initial rollout and automated DNS evidence to the password-manager CSV', () => {
 	const generated = generateBootstrapSecrets()
 	generated.polarWebhooks = {
 		next: {
@@ -1178,8 +1178,8 @@ test('adds the resumable initial rollout and manual DNS handoff to the password-
 	assert.match(pendingContents, /aven\.id apex AAAA record/)
 	assert.match(pendingContents, /192\.0\.2\.10/)
 	assert.match(pendingContents, /2001:db8::10/)
-	assert.match(pendingContents, /type A, name @, TTL 300/)
-	assert.match(pendingContents, /This value still needs to be set and verified/)
+	assert.match(pendingContents, /Type A, apex name @, TTL 300/)
+	assert.match(pendingContents, /will publish and verify it through United Domains/)
 	assert.match(pendingContents, /actions\/runs\/101/)
 	assert.match(pendingContents, /actions\/runs\/102/)
 	assert.doesNotMatch(pendingContents, /actions\/runs\/103/)
@@ -1188,6 +1188,7 @@ test('adds the resumable initial rollout and manual DNS handoff to the password-
 	generated.initialRollout.deployRunId = 103
 	generated.initialRollout.verifiedAt = '2026-08-30T12:00:00.000Z'
 	const completedContents = recoveryCsv(input, generated)
+	assert.match(completedContents, /published this value through United Domains/)
 	assert.match(completedContents, /actions\/runs\/103/)
 	assert.match(completedContents, /commit\/0123456789abcdef0123456789abcdef01234567/)
 	assert.match(completedContents, /Public installation verified at 2026-08-30T12:00:00\.000Z/)
