@@ -101,7 +101,7 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 			publicKey: deployKey.publicKeyOpenssh,
 			labels
 		},
-		{ ...replaceable, provider: computeProvider }
+		{ ...replaceable, provider: computeProvider, deleteBeforeReplace: true }
 	)
 	const firewall = new hcloud.Firewall(
 		`${resource}-firewall`,
@@ -176,6 +176,7 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 		},
 		{
 			...replaceable,
+			deleteBeforeReplace: true,
 			...keepExistingDuringTeardown(
 				'name',
 				'location',
@@ -194,7 +195,12 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 	const attachment = new hcloud.VolumeAttachment(
 		`${resource}-data-attachment`,
 		{ serverId: server.id.apply(Number), volumeId: volume.id.apply(Number), automount: false },
-		{ ...replaceable, provider: computeProvider, dependsOn: [server, volume] }
+		{
+			...replaceable,
+			provider: computeProvider,
+			dependsOn: [server, volume],
+			deleteBeforeReplace: true
+		}
 	)
 	return {
 		server,
