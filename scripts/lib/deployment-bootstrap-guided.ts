@@ -158,11 +158,14 @@ export function unseenWorkflowRunId(
 	)?.databaseId
 }
 
-const ANSI_COLOR_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g')
+const ANSI_ESCAPE_PATTERN = new RegExp(
+	`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]|\\^\\[\\[[0-?]*[ -/]*[@-~]`,
+	'g'
+)
 
 function cleanWorkflowLogLine(line: string): string {
 	return line
-		.replace(ANSI_COLOR_PATTERN, '')
+		.replace(ANSI_ESCAPE_PATTERN, '')
 		.replace(/^.*?\t.*?\t\d{4}-\d{2}-\d{2}T[^\s]+\s*/, '')
 		.replace(/^\d{4}-\d{2}-\d{2}T[^\s]+\s*/, '')
 		.replace(/^::error(?:::[^:]*)?::/i, '')
@@ -170,7 +173,12 @@ function cleanWorkflowLogLine(line: string): string {
 }
 
 export function workflowFailureSummary(log: string): string | undefined {
-	const normalized = log.replace(ANSI_COLOR_PATTERN, '')
+	const normalized = log.replace(ANSI_ESCAPE_PATTERN, '')
+	const missingNativeLibrary = normalized.match(
+		/The system library [`']([^`']+)[`'] required by crate [`']([^`']+)[`'] was not found\./i
+	)
+	if (missingNativeLibrary)
+		return `Release runner is missing native library ${missingNativeLibrary[1]} required by ${missingNativeLibrary[2]}. Merge a workflow dependency fix, update this checkout to that commit, then resume the saved setup.`
 	const conflicts = new Map<string, { name: string; type: string; required: Set<string> }>()
 	const conflictPattern =
 		/\(([^,\n()]+),\s*([A-Z][A-Z0-9]*)\) conflicts with \(([^,\n()]+),\s*([A-Z][A-Z0-9]*)\)/g

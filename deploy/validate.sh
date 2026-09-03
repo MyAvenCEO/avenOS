@@ -24,6 +24,16 @@ if grep -Fq "if: inputs.target != 'identity'" "$root/.github/workflows/platform-
   echo 'bulk deployment must skip platform-only model discovery for the identity matrix job' >&2
   exit 1
 fi
+for workflow in platform-ci.yml platform-deploy.yml; do
+  grep -Fq 'uses: ./.github/actions/setup-platform-test-host' "$root/.github/workflows/$workflow" || {
+    echo "$workflow must use the shared native platform test-host setup" >&2
+    exit 1
+  }
+done
+grep -Fq 'libasound2-dev' "$root/.github/actions/setup-platform-test-host/action.yml" || {
+  echo 'the platform test host must install ALSA headers required by the native voice client' >&2
+  exit 1
+}
 grep -Fq "http://127.0.0.1:3010/health/ready" "$root/services/intent-service/Dockerfile"
 
 env \

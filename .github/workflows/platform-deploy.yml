@@ -86,11 +86,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.93.1
-      - name: Install native Tauri/WebDriver dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libwebkit2gtk-4.1-dev webkit2gtk-driver libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf xvfb
-          cargo install tauri-driver --locked
+      - uses: ./.github/actions/setup-platform-test-host
       - uses: ./.github/actions/bun-install
         with:
           token: ${{ secrets.PACKAGE_READ_TOKEN }}

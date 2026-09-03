@@ -104,6 +104,17 @@ test('keeps a concise provider error when no specialized failure explanation app
 	assert.equal(workflowFailureSummary('ordinary workflow output'), undefined)
 })
 
+test('explains a missing native release-runner library and removes terminal escapes', () => {
+	const ansiEscape = String.fromCharCode(27)
+	const log = `verify\tE2E\t2026-09-02T23:47:19Z ${ansiEscape}[1m${ansiEscape}[91merror${ansiEscape}[0m: failed to run custom build command for alsa-sys
+verify\tE2E\t2026-09-02T23:47:19Z The system library \`alsa\` required by crate \`alsa-sys\` was not found.
+verify\tE2E\t2026-09-02T23:47:19Z ^[[1m^[[33mwarning^[[0m: build failed, waiting for other jobs to finish...`
+	assert.equal(
+		workflowFailureSummary(log),
+		'Release runner is missing native library alsa required by alsa-sys. Merge a workflow dependency fix, update this checkout to that commit, then resume the saved setup.'
+	)
+})
+
 test('recognizes transient GitHub CLI failures that are safe to reconcile', () => {
 	assert.equal(retryableGitHubCliFailure('gh timed out after 30s'), true)
 	assert.equal(retryableGitHubCliFailure('gh failed: HTTP 502 Bad Gateway'), true)
