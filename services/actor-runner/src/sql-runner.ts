@@ -198,33 +198,56 @@ export class SqlPlanRunner implements PlanRunner {
 	}
 
 	private async execute(runId: string, context?: PlanRunExecutionContext): Promise<boolean> {
-		const row = (
-			await this.worker.query<{ record: PlanRunRecord }>(
-				`SELECT record FROM runs WHERE id=$1 AND state='accepted'`,
-				[runId]
-			)
-		).rows[0]
-		if (!row) return false
-		const record = row.record
+		const connection = await this.worker.connect()
+		let claimed = false
 		try {
-			const result = await this.executor(this.#request(record), context)
-			this.#applyResult(record, result)
-		} catch (error) {
-			record.state = 'failed'
-			record.failure = {
-				code: 'EXECUTION_FAILED',
-				message: error instanceof Error ? error.message : String(error),
-				retryable: false
+			claimed =
+				(
+					await connection.query<{ claimed: boolean }>(
+						`SELECT pg_try_advisory_lock(hashtext('aven_actor_run'),hashtext($1)) AS claimed`,
+						[runId]
+					)
+				).rows[0]?.claimed === true
+			if (!claimed) return false
+			const row = (
+				await connection.query<{ record: PlanRunRecord }>(
+					`SELECT record FROM runs WHERE id=$1 AND state='accepted'`,
+					[runId]
+				)
+			).rows[0]
+			if (!row) return false
+			const record = row.record
+			try {
+				const result = await this.executor(this.#request(record), context)
+				this.#applyResult(record, result)
+			} catch (error) {
+				record.state = 'failed'
+				record.failure = {
+					code: 'EXECUTION_FAILED',
+					message: error instanceof Error ? error.message : String(error),
+					retryable: false
+				}
+			}
+			record.revision += 1
+			record.updatedAt = new Date().toISOString()
+			const updated = await connection.query(
+				`UPDATE runs SET state=$2,revision=$3,record=$4,updated_at=clock_timestamp()
+				 WHERE id=$1 AND state='accepted'`,
+				[runId, record.state, record.revision, record]
+			)
+			return Boolean(updated.rowCount)
+		} finally {
+			try {
+				if (claimed) {
+					await connection.query(
+						`SELECT pg_advisory_unlock(hashtext('aven_actor_run'),hashtext($1))`,
+						[runId]
+					)
+				}
+			} finally {
+				connection.release()
 			}
 		}
-		record.revision += 1
-		record.updatedAt = new Date().toISOString()
-		const updated = await this.worker.query(
-			`UPDATE runs SET state=$2,revision=$3,record=$4,updated_at=clock_timestamp()
-			 WHERE id=$1 AND state='accepted'`,
-			[runId, record.state, record.revision, record]
-		)
-		return Boolean(updated.rowCount)
 	}
 
 	#request(record: PlanRunRecord): PlanRunStartRequest {
