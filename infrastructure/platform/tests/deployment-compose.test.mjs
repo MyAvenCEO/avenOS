@@ -34,6 +34,15 @@ test('fresh backup readiness fits inside the host deployment deadline', () => {
 	}
 })
 
+test('checkout workers receive only their function-specific database roles', () => {
+	const platform = readCompose('platform')
+	for (const name of ['email-worker', 'platform-event-worker']) {
+		const environment = platform.services[name].environment
+		assert.equal(environment.WEBHOOK_DATABASE_URL, undefined)
+		assert.notEqual(environment.DATABASE_URL, platform.services.checkout.environment.DATABASE_URL)
+	}
+})
+
 test('operational SSH tools offer only their Pulumi-generated identity', () => {
 	for (const path of ['../../../tools/stack-observe/run.sh', '../../../tools/db-tunnel/open.sh']) {
 		const source = readFileSync(new URL(path, import.meta.url), 'utf8')

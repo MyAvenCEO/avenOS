@@ -71,22 +71,25 @@ export const serverConfigSchema = z
 			context.addIssue({ code: 'custom', path: ['PUBLIC_BASE_URL'], message: 'must be an origin' })
 		if (config.NODE_ENV === 'production' && publicUrl.protocol !== 'https:')
 			context.addIssue({ code: 'custom', path: ['PUBLIC_BASE_URL'], message: 'must use HTTPS' })
-		if (config.NODE_ENV === 'production' && !config.WEBHOOK_DATABASE_URL)
-			context.addIssue({
-				code: 'custom',
-				path: ['WEBHOOK_DATABASE_URL'],
-				message: 'is required in production for database-role separation'
-			})
-		if (
-			config.WEBHOOK_DATABASE_URL &&
-			new URL(config.WEBHOOK_DATABASE_URL).username === new URL(config.DATABASE_URL).username
-		)
-			context.addIssue({
-				code: 'custom',
-				path: ['WEBHOOK_DATABASE_URL'],
-				message: 'must use a database user distinct from checkout HTTP'
-			})
 	})
+
+const apiConfigSchema = serverConfigSchema.superRefine((config, context) => {
+	if (config.NODE_ENV === 'production' && !config.WEBHOOK_DATABASE_URL)
+		context.addIssue({
+			code: 'custom',
+			path: ['WEBHOOK_DATABASE_URL'],
+			message: 'is required in production for database-role separation'
+		})
+	if (
+		config.WEBHOOK_DATABASE_URL &&
+		new URL(config.WEBHOOK_DATABASE_URL).username === new URL(config.DATABASE_URL).username
+	)
+		context.addIssue({
+			code: 'custom',
+			path: ['WEBHOOK_DATABASE_URL'],
+			message: 'must use a database user distinct from checkout HTTP'
+		})
+})
 
 export type ServerConfig = z.infer<typeof serverConfigSchema>
 
@@ -95,7 +98,7 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
 }
 
 export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
-	const config = loadServerConfig(env)
+	const config = apiConfigSchema.parse(env)
 	if (!validEncryptionKey(config.EMAIL_QUEUE_ENCRYPTION_KEY))
 		throw new Error('EMAIL_QUEUE_ENCRYPTION_KEY must decode to 32 bytes.')
 	if (!config.DOWNLOAD_URL && config.NODE_ENV === 'production')

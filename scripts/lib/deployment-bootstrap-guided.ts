@@ -158,6 +158,41 @@ export function unseenWorkflowRunId(
 	)?.databaseId
 }
 
+export interface GitHubWorkflowRun {
+	status: string
+	conclusion: string | null
+	url: string
+	jobs: Array<{
+		name: string
+		status: string
+		conclusion: string | null
+		steps?: Array<{ name: string; status: string; conclusion: string | null }>
+	}>
+}
+
+export function workflowProgress(
+	state: GitHubWorkflowRun,
+	label: string
+): { status: 'active' | 'complete'; current: number; total: number; detail: string } {
+	const jobs = state.jobs ?? []
+	const completed = jobs.filter((job) => job.status === 'completed').length
+	const active = jobs.find((job) => job.status !== 'completed')
+	const activeStep = active?.steps?.find((step) => step.status === 'in_progress')
+	const succeeded = state.status === 'completed' && state.conclusion === 'success'
+	return {
+		status: succeeded ? 'complete' : 'active',
+		current: Math.min(completed + 1, Math.max(jobs.length, 1)),
+		total: Math.max(jobs.length, 1),
+		detail: active
+			? `${active.name}${activeStep ? ` — ${activeStep.name}` : ''}`
+			: succeeded
+				? `${label} complete`
+				: state.status === 'completed'
+					? `${label} failed`
+					: 'Waiting for a GitHub runner'
+	}
+}
+
 const ANSI_ESCAPE_PATTERN = new RegExp(
 	`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]|\\^\\[\\[[0-?]*[ -/]*[@-~]`,
 	'g'
