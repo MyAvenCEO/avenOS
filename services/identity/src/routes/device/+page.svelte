@@ -110,8 +110,10 @@ async function approve() {
 		     markup put "Code: ABCDEFGH" in there beside the formatted
 		     "ABCD-EFGH" — the same code twice, and a copy that picked up both.
 		     The label is a real <label>-ish line above it instead. -->
-		<p class="text text--label" id="device-code-label">Device code</p>
-		<div class="flow-card-code" aria-labelledby="device-code-label">{displayCode}</div>
+		<div class="flow-card-code">
+			<span class="flow-card-code-label">Device code</span>
+			<strong class="flow-card-code-value">{displayCode}</strong>
+		</div>
 	{/if}
 	{#if message}
 		<div class="flow-card-alert" role="alert">{message}</div>

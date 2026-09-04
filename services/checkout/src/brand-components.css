@@ -1380,27 +1380,27 @@
 	.flow-card--status-success {
 
 		& .flow-card-crest {
-			background: var(--color-success-surface);
-			border-color: var(--color-success-border);
-			color: var(--color-success-ink);
+			background: var(--color-success);
+			border-color: transparent;
+			color: var(--color-success-foreground);
 		}
 	}
 
 	.flow-card--status-error {
 
 		& .flow-card-crest {
-			background: var(--color-error-surface);
-			border-color: var(--color-error-border);
-			color: var(--color-error-ink);
+			background: var(--color-error);
+			border-color: transparent;
+			color: var(--color-error-foreground);
 		}
 	}
 
 	.flow-card--status-waiting {
 
 		& .flow-card-crest {
-			background: var(--color-progress-surface);
-			border-color: var(--color-progress-border);
-			color: var(--color-progress-ink);
+			background: var(--color-progress);
+			border-color: transparent;
+			color: var(--color-progress-foreground);
 		}
 	}
 
