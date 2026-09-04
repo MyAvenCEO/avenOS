@@ -36,6 +36,7 @@ import {
 	actionableWizardProgress,
 	bootstrapFailureSummary,
 	deploymentTargetSummary,
+	type GitHubWorkflowRun,
 	guidedBootstrapIntroduction,
 	guidedBootstrapRecoveryNotice,
 	guidedCredentialsCsv,
@@ -54,6 +55,7 @@ import {
 	validateS3ProjectCredential,
 	valueAt,
 	workflowFailureSummary,
+	workflowProgress,
 	workflowRunIdFromDispatchOutput
 } from './lib/deployment-bootstrap-guided.js'
 import {
@@ -397,18 +399,6 @@ async function withProgress<T>(
 
 type RolloutRunField = 'infrastructurePreviewRunId' | 'infrastructureApplyRunId' | 'deployRunId'
 
-interface GitHubWorkflowRun {
-	status: string
-	conclusion: string | null
-	url: string
-	jobs: Array<{
-		name: string
-		status: string
-		conclusion: string | null
-		steps?: Array<{ name: string; status: string; conclusion: string | null }>
-	}>
-}
-
 function appendRolloutLog(message: string): void {
 	if (!existsSync(rolloutLogPath))
 		writeFileSync(rolloutLogPath, `avenOS initial rollout ${new Date().toISOString()}\n`, {
@@ -462,25 +452,6 @@ async function workflowFailureReason(
 	}
 }
 
-function workflowProgress(
-	state: GitHubWorkflowRun,
-	label: string
-): { current: number; total: number; detail: string } {
-	const jobs = state.jobs ?? []
-	const completed = jobs.filter((job) => job.status === 'completed').length
-	const active = jobs.find((job) => job.status !== 'completed')
-	const activeStep = active?.steps?.find((step) => step.status === 'in_progress')
-	return {
-		current: Math.min(completed + 1, Math.max(jobs.length, 1)),
-		total: Math.max(jobs.length, 1),
-		detail: active
-			? `${active.name}${activeStep ? ` — ${activeStep.name}` : ''}`
-			: state.status === 'completed'
-				? `${label} complete`
-				: 'Waiting for a GitHub runner'
-	}
-}
-
 async function waitForWorkflowRun(
 	runId: number,
 	repository: string,
@@ -505,7 +476,7 @@ async function waitForWorkflowRun(
 			lastDetail = progress.detail
 			appendRolloutLog(`${label}: ${state.status}; ${progress.detail}; ${state.url}`)
 			update({
-				status: state.status === 'completed' ? 'complete' : 'active',
+				status: progress.status,
 				current: progress.current,
 				total: progress.total,
 				label,

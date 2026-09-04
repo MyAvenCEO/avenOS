@@ -29,6 +29,7 @@ import {
 	validateS3ProjectCredential,
 	valueAt,
 	workflowFailureSummary,
+	workflowProgress,
 	workflowRunIdFromDispatchOutput
 } from '../../../scripts/lib/deployment-bootstrap-guided.ts'
 
@@ -85,6 +86,26 @@ test('identifies a dispatched workflow without depending on exact gh prose', () 
 		14
 	)
 	assert.equal(unseenWorkflowRunId([{ databaseId: 12 }], new Set([12])), undefined)
+})
+
+test('does not render a failed workflow as complete', () => {
+	assert.deepEqual(
+		workflowProgress(
+			{
+				status: 'completed',
+				conclusion: 'failure',
+				url: 'https://github.example.test/run/1',
+				jobs: [{ name: 'deploy (next)', status: 'completed', conclusion: 'failure' }]
+			},
+			'Deploy all software'
+		),
+		{
+			status: 'active',
+			current: 1,
+			total: 1,
+			detail: 'Deploy all software failed'
+		}
+	)
 })
 
 test('turns repeated Hetzner DNS conflicts into one actionable workflow failure', () => {
