@@ -15,14 +15,19 @@ case "$DEPLOYMENT_TARGET" in identity|next|production) ;; *) echo 'DEPLOYMENT_TA
 case "${RECOVER_FROM_BACKUP:-false}" in true|false) ;; *) echo 'RECOVER_FROM_BACKUP must be true or false' >&2; exit 64 ;; esac
 
 if [[ "$DEPLOYMENT_TARGET" == identity ]]; then
-  target_required=(
-    IDENTITY_IMAGE
-    NEXT_PULUMI_STACK NEXT_PULUMI_BACKEND NEXT_STATE_S3_ACCESS_KEY_ID
-    NEXT_STATE_S3_SECRET_ACCESS_KEY NEXT_PULUMI_CONFIG_PASSPHRASE
-    PRODUCTION_PULUMI_STACK PRODUCTION_PULUMI_BACKEND
-    PRODUCTION_STATE_S3_ACCESS_KEY_ID PRODUCTION_STATE_S3_SECRET_ACCESS_KEY
-    PRODUCTION_PULUMI_CONFIG_PASSPHRASE
-  )
+  target_required=(IDENTITY_IMAGE IDENTITY_PLATFORM_TARGETS_JSON)
+  jq -e 'type == "array" and (unique | length) == length and all(.[]; . == "next" or . == "production")' \
+    <<<"${IDENTITY_PLATFORM_TARGETS_JSON:-null}" >/dev/null || {
+      echo 'Identity requires an explicit, unique platform target list (empty for standalone identity)' >&2
+      exit 64
+    }
+  mapfile -t identity_platform_targets < <(jq -r '.[]' <<<"$IDENTITY_PLATFORM_TARGETS_JSON")
+  for target in "${identity_platform_targets[@]}"; do
+    upper=${target^^}
+    for suffix in PULUMI_STACK PULUMI_BACKEND STATE_S3_ACCESS_KEY_ID STATE_S3_SECRET_ACCESS_KEY PULUMI_CONFIG_PASSPHRASE; do
+      target_required+=("${upper}_${suffix}")
+    done
+  done
 else
   target_required=(
     API_IMAGE CHECKOUT_IMAGE STATIC_SITE_HOST_IMAGE
@@ -36,19 +41,19 @@ for name in "${target_required[@]}"; do
   [[ -n "${!name:-}" ]] || { echo "$name is required for $DEPLOYMENT_TARGET" >&2; exit 64; }
 done
 if [[ "$DEPLOYMENT_TARGET" == identity ]]; then
-  [[ "$NEXT_PULUMI_STACK" == organization/aven-platform/next ]] || {
-    echo 'NEXT_PULUMI_STACK must be organization/aven-platform/next' >&2
-    exit 64
-  }
-  [[ "$PRODUCTION_PULUMI_STACK" == organization/aven-platform/production ]] || {
-    echo 'PRODUCTION_PULUMI_STACK must be organization/aven-platform/production' >&2
-    exit 64
-  }
+  for target in "${identity_platform_targets[@]}"; do
+    variable="${target^^}_PULUMI_STACK"
+    [[ "${!variable}" == "organization/aven-platform/$target" ]] || {
+      echo "$variable must match its exact platform target" >&2
+      exit 64
+    }
+  done
 fi
 
 root=$(cd -- "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 source "$root/deploy/release/environment.sh"
 source "$root/deploy/release/ssh-staging.sh"
+source "$root/deploy/release/identity-caddy.sh"
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 umask 077
@@ -195,16 +200,33 @@ if [[ "$DEPLOYMENT_TARGET" == identity ]]; then
   load_secret identityMigratorPassword "$PULUMI_STACK" identityMigratorPassword
   load_secret identityBackupPassword "$PULUMI_STACK" identityBackupPassword
   load_secret identityBetterAuthSecret "$PULUMI_STACK" identityBetterAuthSecret
-  nextProvisioningSecret=$(external_output "$NEXT_PULUMI_BACKEND" "$NEXT_STATE_S3_ACCESS_KEY_ID" "$NEXT_STATE_S3_SECRET_ACCESS_KEY" "$NEXT_PULUMI_CONFIG_PASSPHRASE" "$NEXT_PULUMI_STACK" platformIdentityProvisioningSecret)
-  productionProvisioningSecret=$(external_output "$PRODUCTION_PULUMI_BACKEND" "$PRODUCTION_STATE_S3_ACCESS_KEY_ID" "$PRODUCTION_STATE_S3_SECRET_ACCESS_KEY" "$PRODUCTION_PULUMI_CONFIG_PASSPHRASE" "$PRODUCTION_PULUMI_STACK" platformIdentityProvisioningSecret)
-  next_ipv4=$(dig +short A api.next.aven.ceo | tail -1)
-  next_ipv6=$(dig +short AAAA api.next.aven.ceo | tail -1)
-  production_ipv4=$(dig +short A api.aven.ceo | tail -1)
-  production_ipv6=$(dig +short AAAA api.aven.ceo | tail -1)
-  [[ -n "$next_ipv4" && -n "$next_ipv6" && -n "$production_ipv4" && -n "$production_ipv6" ]] || {
-    echo 'both platform A and AAAA records must resolve before identity deployment' >&2
-    exit 1
-  }
+  provisioning_secrets=()
+  mail_origins=()
+  web_origins=()
+  platform_ips=()
+  for target in "${identity_platform_targets[@]}"; do
+    upper=${target^^}
+    backend="${upper}_PULUMI_BACKEND"
+    access_key="${upper}_STATE_S3_ACCESS_KEY_ID"
+    secret_key="${upper}_STATE_S3_SECRET_ACCESS_KEY"
+    passphrase="${upper}_PULUMI_CONFIG_PASSPHRASE"
+    stack="${upper}_PULUMI_STACK"
+    external_args=("${!backend}" "${!access_key}" "${!secret_key}" "${!passphrase}" "${!stack}")
+    credential=$(external_output "${external_args[@]}" platformIdentityProvisioningSecret)
+    [[ "$credential" =~ ^[A-Za-z0-9_-]{32,}$ ]] || { echo 'Invalid platform caller credential' >&2; exit 64; }
+    provisioning_secrets+=("$credential")
+    ipv4=$(external_output "${external_args[@]}" platformIpv4Address)
+    ipv6=$(external_output "${external_args[@]}" platformIpv6Address)
+    python3 -c 'import ipaddress,sys; assert ipaddress.ip_address(sys.argv[1]).version == 4; assert ipaddress.ip_address(sys.argv[2]).version == 6' "$ipv4" "$ipv6"
+    platform_ips+=("$ipv4" "$ipv6")
+    domain=aven.ceo
+    [[ "$target" == next ]] && domain=next.aven.ceo
+    mail_origins+=("https://portal.$domain")
+    web_origins+=("https://$domain" "https://portal.$domain")
+  done
+  join_commas() { local IFS=,; printf '%s' "$*"; }
+  allow_no_platforms=false
+  [[ ${#identity_platform_targets[@]} -eq 0 ]] && allow_no_platforms=true
 
   printf '%s\n' "$identityDeployPrivateKey" > "$stage/ssh/key"
   printf '%s %s\n' "$identity_ip" "$identity_host_key" > "$stage/ssh/known_hosts"
@@ -216,7 +238,7 @@ if [[ "$DEPLOYMENT_TARGET" == identity ]]; then
     dotenv PROXY_IMAGE "$PROXY_IMAGE"
     dotenv OPERATIONS_IMAGE "$OPERATIONS_IMAGE"
     dotenv IDENTITY_DOMAIN aven.id
-    dotenv TRUSTED_WEB_ORIGINS 'https://next.aven.ceo,https://portal.next.aven.ceo,https://aven.ceo,https://portal.aven.ceo'
+    dotenv TRUSTED_WEB_ORIGINS "$(join_commas "${web_origins[@]}")"
     dotenv IDENTITY_POSTGRES_PASSWORD "$identityPostgresPassword"
     dotenv IDENTITY_AUTH_PASSWORD "$identityAuthPassword"
     dotenv IDENTITY_ACCOUNTS_PASSWORD "$identityAccountsPassword"
@@ -224,13 +246,11 @@ if [[ "$DEPLOYMENT_TARGET" == identity ]]; then
     dotenv IDENTITY_MIGRATOR_PASSWORD "$identityMigratorPassword"
     dotenv IDENTITY_BACKUP_PASSWORD "$identityBackupPassword"
     dotenv IDENTITY_BETTER_AUTH_SECRET "$identityBetterAuthSecret"
-    dotenv IDENTITY_PROVISIONING_SECRETS "$nextProvisioningSecret,$productionProvisioningSecret"
-    dotenv IDENTITY_MAIL_ORIGINS 'https://portal.next.aven.ceo,https://portal.aven.ceo'
+    dotenv IDENTITY_PROVISIONING_SECRETS "$(join_commas "${provisioning_secrets[@]}")"
+    dotenv IDENTITY_ALLOW_NO_PLATFORMS "$allow_no_platforms"
+    dotenv IDENTITY_MAIL_ORIGINS "$(join_commas "${mail_origins[@]}")"
     dotenv ANDROID_APP_CERT_SHA256_FINGERPRINTS "${ANDROID_APP_CERT_SHA256_FINGERPRINTS:-}"
-    dotenv NEXT_PLATFORM_PUBLIC_IPV4 "$next_ipv4"
-    dotenv NEXT_PLATFORM_PUBLIC_IPV6 "$next_ipv6"
-    dotenv PRODUCTION_PLATFORM_PUBLIC_IPV4 "$production_ipv4"
-    dotenv PRODUCTION_PLATFORM_PUBLIC_IPV6 "$production_ipv6"
+    dotenv IDENTITY_PLATFORM_IPS "${platform_ips[*]}"
     dotenv ACME_EMAIL "${ACME_EMAIL:-ops@aven.ceo}"
     dotenv BACKUP_RESTIC_REPOSITORY "${BACKUP_REPOSITORY_BASE%/}/identity"
     dotenv BACKUP_RESTIC_PASSWORD "$BACKUP_RESTIC_PASSWORD"
@@ -241,7 +261,7 @@ if [[ "$DEPLOYMENT_TARGET" == identity ]]; then
     dotenv RELEASE_ID "${DEPLOYED_REF_SHA:-${GITHUB_SHA:-local}}"
   } > "$stage/identity/.env"
   install -m 644 "$root/deploy/identity/docker-compose.yml" "$stage/identity/docker-compose.yml"
-  install -m 644 "$root/deploy/identity/Caddyfile" "$stage/identity/Caddyfile"
+  render_identity_caddy "$root/deploy/identity/Caddyfile" "$stage/identity/Caddyfile" "$allow_no_platforms"
   install -m 755 "$root/deploy/identity/db-init.sh" "$stage/identity/db-init.sh"
   deploy_bundle "$identity_ip" identity "$identity_host_key"
   wait_for_url https://aven.id/api/health/ready

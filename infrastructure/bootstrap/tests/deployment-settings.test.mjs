@@ -1137,6 +1137,21 @@ test('supports every non-empty combination without configuring an unselected tar
 			])
 		)
 		const settings = githubConfiguration(selectedInput, generated)
+		if (deploymentTargets.includes('identity')) {
+			assert.deepEqual(
+				JSON.parse(
+					settings[`${generated.deploymentPrefix}-identity`].variables
+						.IDENTITY_PLATFORM_TARGETS_JSON
+				),
+				platformTargets
+			)
+		}
+		for (const target of platformTargets) {
+			const secrets = settings[`${generated.deploymentPrefix}-${target}`].secrets
+			assert.ok(!('NEXT_STATE_S3_ACCESS_KEY_ID' in secrets))
+			assert.ok(!('PRODUCTION_STATE_S3_ACCESS_KEY_ID' in secrets))
+		}
+
 		assert.deepEqual(
 			Object.keys(settings).sort(),
 			deploymentTargets
@@ -1170,6 +1185,10 @@ test('refreshes completed environments when a later target adds shared state ref
 	assert.deepEqual(configurationTargets, ['identity', 'next'])
 	assert.doesNotThrow(() => validateBootstrapInput(stagedInput, configurationTargets))
 	const settings = githubConfiguration(stagedInput, generated)
+	assert.equal(
+		settings[`${generated.deploymentPrefix}-identity`].variables.IDENTITY_PLATFORM_TARGETS_JSON,
+		'["next"]'
+	)
 	assert.deepEqual(Object.keys(settings).sort(), [
 		`${generated.deploymentPrefix}-identity`,
 		`${generated.deploymentPrefix}-identity-operations`,

@@ -30,12 +30,12 @@ import {
 	saveGeneratedSecrets,
 	TARGETS,
 	type Target,
+	type TargetRollout,
 	validateBootstrapInput
 } from './lib/deployment-bootstrap.js'
 import {
 	actionableWizardProgress,
 	bootstrapFailureSummary,
-	deploymentTargetSummary,
 	type GitHubWorkflowRun,
 	guidedBootstrapIntroduction,
 	guidedBootstrapRecoveryNotice,
@@ -73,6 +73,11 @@ import {
 	uninstallSummary,
 	uninstallTargets
 } from './lib/deployment-uninstall.js'
+import {
+	installationEndpoints,
+	installationRelease,
+	installationSelection
+} from './lib/installation.js'
 import { fetchRedpillPhalaCatalog } from './lib/redpill-model-catalog.js'
 import {
 	reconcileUnitedDomainsIdentityDns,
@@ -101,6 +106,10 @@ function preflight<T>(action: () => T): T {
 const root = resolve(import.meta.dir, '..')
 const args = process.argv.slice(2)
 const requestedPlainTerminal = args.includes('--plain')
+const modeIndex = args.indexOf('--installer')
+const installerMode = modeIndex < 0 ? 'choose' : args[modeIndex + 1]
+if (!['choose', 'identity', 'platform'].includes(installerMode ?? ''))
+	failPreflight('Use --installer identity or platform.')
 const outputArgument = args.indexOf('--output')
 if (outputArgument >= 0 && !args[outputArgument + 1]) failPreflight('--output needs a directory.')
 const outputDirectory = resolve(
@@ -400,6 +409,7 @@ async function withProgress<T>(
 type RolloutRunField =
 	| 'infrastructurePreviewRunId'
 	| 'infrastructureApplyRunId'
+	| 'identityAttachmentRunId'
 	| 'releaseRunId'
 	| 'deployRunId'
 
@@ -602,6 +612,7 @@ async function dispatchWorkflow(
 }
 
 async function runRolloutWorkflow(input: {
+	rollout: TargetRollout
 	field: RolloutRunField
 	workflow: string
 	label: string
@@ -613,10 +624,10 @@ async function runRolloutWorkflow(input: {
 }): Promise<void> {
 	await withProgress(input.label, async (update) => {
 		const deadlineAt = Date.now() + input.timeoutMs
-		let runId = generated.initialRollout?.[input.field]
+		let runId = input.rollout[input.field]
 		if (runId) {
 			const state = await retryTransientGitHubRead({
-				read: () => workflowRun(runId, input.repository),
+				read: () => workflowRun(runId as number, input.repository),
 				deadlineAt,
 				onRetry: ({ attempt, delayMs, message }) => {
 					const detail = `GitHub API temporarily unavailable; retrying saved-run check ${attempt} in ${Math.ceil(delayMs / 1_000)}s`
@@ -628,8 +639,7 @@ async function runRolloutWorkflow(input: {
 		}
 		if (!runId) {
 			runId = await dispatchWorkflow(input.workflow, input.repository, input.ref, input.inputs)
-			if (!generated.initialRollout) throw new Error('Initial rollout state was not initialized.')
-			generated.initialRollout[input.field] = runId
+			input.rollout[input.field] = runId
 			saveGeneratedSecrets(generatedPath, generated)
 			input.refreshCredentials()
 		}
@@ -733,16 +743,8 @@ async function waitForIdentityDns(expected: { ipv4: string; ipv6: string }): Pro
 	})
 }
 
-async function verifyPublicInstallation(): Promise<void> {
-	const endpoints = [
-		'https://aven.id/api/health/ready',
-		'https://api.next.aven.ceo/health/live',
-		'https://portal.next.aven.ceo/api/health/ready',
-		'https://next.aven.ceo/',
-		'https://api.aven.ceo/health/live',
-		'https://portal.aven.ceo/api/health/ready',
-		'https://aven.ceo/'
-	]
+async function verifyPublicInstallation(target: Target): Promise<void> {
+	const endpoints = installationEndpoints(target)
 	await withProgress('Verify the public installation', async (update) => {
 		for (const [index, endpoint] of endpoints.entries()) {
 			const deadline = Date.now() + 5 * 60_000
@@ -769,124 +771,127 @@ async function verifyPublicInstallation(): Promise<void> {
 			current: endpoints.length,
 			total: endpoints.length,
 			label: 'Verify the public installation',
-			detail: 'All seven public endpoints are ready.'
+			detail: `All ${endpoints.length} selected public endpoints are ready.`
 		})
 	})
 }
 
 async function completeInitialRollout(input: BootstrapInput): Promise<boolean> {
-	const completedTargets = generated.completedTargets ?? []
-	if (!TARGETS.every((target) => completedTargets.includes(target))) {
-		reportStatus(
-			`Bootstrap storage is configured for ${completedTargets.join(', ') || 'no targets'}, but a runnable first installation needs identity, next, and production. Resume the same generation and check the missing targets.`
-		)
-		return false
-	}
+	const target = installationSelection('choose', input.deploymentTargets[0])
+	if (input.deploymentTargets.length !== 1) throw new Error('Install one target at a time.')
+	const release = installationRelease(target, generated)
 	const repository = input.repository
-	const defaultBranch = 'prod'
 	const localRef = await run('git', ['rev-parse', 'HEAD'], true, 10_000)
 	const remoteRef = await resilientGitHubRead(
-		['api', `repos/${repository}/commits/${defaultBranch}`, '--jq', '.sha'],
+		['api', `repos/${repository}/commits/${release.branch}`, '--jq', '.sha'],
 		'Read current deployment commit'
 	)
 	if (localRef !== remoteRef)
 		throw new Error(
-			`The setup code must be the current ${defaultBranch} commit before deployment. Local ${localRef.slice(0, 12)} differs from GitHub ${remoteRef.slice(0, 12)}.`
+			`Use the current protected ${release.branch} checkout before installing ${target}. Local ${localRef.slice(0, 12)} differs from GitHub ${remoteRef.slice(0, 12)}.`
 		)
-	const nextRef = await resilientGitHubRead(
-		['api', `repos/${repository}/commits/next`, '--jq', '.sha'],
-		'Read protected next release'
-	)
-	const nextTree = await resilientGitHubRead(
-		['api', `repos/${repository}/git/commits/${nextRef}`, '--jq', '.tree.sha'],
-		'Read next release tree'
-	)
-	const productionTree = await resilientGitHubRead(
-		['api', `repos/${repository}/git/commits/${localRef}`, '--jq', '.tree.sha'],
-		'Read production release tree'
-	)
-	if (nextTree !== productionTree)
-		throw new Error(
-			'Initial installation requires the same source tree promoted through next to prod. Open the promotion PR; main has no deployment authority.'
-		)
-	if (
-		!generated.initialRollout ||
-		generated.initialRollout.ref !== localRef ||
-		generated.initialRollout.targets.join(',') !== TARGETS.join(',')
-	) {
-		generated.initialRollout = { ref: localRef, targets: [...TARGETS] }
+	generated.rollouts ??= {}
+	let rollout = generated.rollouts[target]
+	if (!rollout || rollout.ref !== localRef) {
+		rollout = { ref: localRef, targets: [target] }
+		generated.rollouts[target] = rollout
+	}
+	if (release.releaseRunId) {
+		if (rollout.releaseRunId !== release.releaseRunId) {
+			rollout.deployRunId = undefined
+			rollout.verifiedAt = undefined
+		}
+		rollout.releaseRunId = release.releaseRunId
+		rollout.nextProofRunId = release.nextProofRunId
+	}
+	const persist = () => {
 		saveGeneratedSecrets(generatedPath, generated)
 		refreshCompletedCredentials(input)
 	}
+	persist()
 	setUiContext(
-		'Initial deployment',
-		'Creating the first installation',
-		`GitHub will preview and create the identity, next, and production hosts, then verify and publish ${localRef.slice(0, 12)} once before installing all three. The process is resumable. The installer publishes and verifies the exact aven.id A and AAAA records through United Domains.`
+		'Installation',
+		`Install ${target}`,
+		`Create and verify ${target} independently. Completed work is saved for resume. Identity attachment keeps identity's existing verified software.`
 	)
-	await runRolloutWorkflow({
-		field: 'infrastructurePreviewRunId',
-		workflow: 'platform-infrastructure.yml',
-		label: 'Preview all infrastructure',
-		repository,
-		ref: defaultBranch,
-		inputs: { target: 'all', command: 'preview' },
-		timeoutMs: 60 * 60_000,
-		refreshCredentials: () => refreshCompletedCredentials(input)
-	})
-	await runRolloutWorkflow({
-		field: 'infrastructureApplyRunId',
-		workflow: 'platform-infrastructure.yml',
-		label: 'Create all infrastructure',
-		repository,
-		ref: defaultBranch,
-		inputs: { target: 'all', command: 'up' },
-		timeoutMs: 60 * 60_000,
-		refreshCredentials: () => refreshCompletedCredentials(input)
-	})
-	const dns = await identityDnsRecords(input)
-	const savedDns = generated.initialRollout.identityDns
-	if (
-		!savedDns?.verified ||
-		canonicalIp(savedDns.ipv4) !== canonicalIp(dns.ipv4) ||
-		canonicalIp(savedDns.ipv6) !== canonicalIp(dns.ipv6)
-	) {
-		generated.initialRollout.identityDns = { ...dns, verified: false }
-		saveGeneratedSecrets(generatedPath, generated)
-		refreshCompletedCredentials(input)
-		await waitForIdentityDns(dns)
-		generated.initialRollout.identityDns = { ...dns, verified: true }
-		saveGeneratedSecrets(generatedPath, generated)
-		refreshCompletedCredentials(input)
+	const workflow = (
+		field: RolloutRunField,
+		name: string,
+		label: string,
+		ref: string,
+		inputs: Record<string, string>
+	) =>
+		runRolloutWorkflow({
+			rollout,
+			field,
+			workflow: name,
+			label,
+			repository,
+			ref,
+			inputs,
+			timeoutMs: 3 * 60 * 60_000,
+			refreshCredentials: () => refreshCompletedCredentials(input)
+		})
+	await workflow(
+		'infrastructurePreviewRunId',
+		'platform-infrastructure.yml',
+		`Preview ${target} infrastructure`,
+		release.branch,
+		{ target, command: 'preview' }
+	)
+	await workflow(
+		'infrastructureApplyRunId',
+		'platform-infrastructure.yml',
+		`Create ${target} infrastructure`,
+		release.branch,
+		{ target, command: 'up' }
+	)
+	if (target === 'identity') {
+		const dns = await identityDnsRecords(input)
+		const savedDns = rollout.identityDns
+		if (
+			!savedDns?.verified ||
+			canonicalIp(savedDns.ipv4) !== canonicalIp(dns.ipv4) ||
+			canonicalIp(savedDns.ipv6) !== canonicalIp(dns.ipv6)
+		) {
+			rollout.identityDns = { ...dns, verified: false }
+			persist()
+			await waitForIdentityDns(dns)
+			rollout.identityDns = { ...dns, verified: true }
+			persist()
+		}
+	} else {
+		const identity = generated.rollouts.identity
+		if (!identity?.releaseRunId) throw new Error('The verified identity release record is missing.')
+		await workflow(
+			'identityAttachmentRunId',
+			'platform-deploy.yml',
+			`Attach ${target} to identity`,
+			'prod',
+			{
+				target: 'identity',
+				release_run_id: String(identity.releaseRunId),
+				recover_from_backup: 'false'
+			}
+		)
 	}
-	await runRolloutWorkflow({
-		field: 'releaseRunId',
-		workflow: 'platform-release.yml',
-		label: 'Verify and publish immutable software images',
-		repository,
-		ref: 'next',
-		inputs: {},
-		timeoutMs: 3 * 60 * 60_000,
-		refreshCredentials: () => refreshCompletedCredentials(input)
+	if (!release.releaseRunId)
+		await workflow(
+			'releaseRunId',
+			'platform-release.yml',
+			'Verify and publish immutable software images',
+			release.branch,
+			{}
+		)
+	await workflow('deployRunId', 'platform-deploy.yml', `Deploy ${target}`, release.branch, {
+		target,
+		release_run_id: String(rollout.releaseRunId),
+		...(rollout.nextProofRunId ? { next_proof_run_id: String(rollout.nextProofRunId) } : {}),
+		recover_from_backup: 'false'
 	})
-	await runRolloutWorkflow({
-		field: 'deployRunId',
-		workflow: 'platform-deploy.yml',
-		label: 'Install identity, verify next, then install production',
-		repository,
-		ref: defaultBranch,
-		inputs: {
-			target: 'all',
-			initial_installation: 'true',
-			release_run_id: String(generated.initialRollout.releaseRunId),
-			recover_from_backup: 'false'
-		},
-		timeoutMs: 3 * 60 * 60_000,
-		refreshCredentials: () => refreshCompletedCredentials(input)
-	})
-	await verifyPublicInstallation()
-	generated.initialRollout.verifiedAt = new Date().toISOString()
-	saveGeneratedSecrets(generatedPath, generated)
-	refreshCompletedCredentials(input)
+	await verifyPublicInstallation(target)
+	rollout.verifiedAt = new Date().toISOString()
+	persist()
 	return true
 }
 
@@ -1896,45 +1901,38 @@ function wizardStations(steps: readonly WizardStep[]) {
 }
 
 async function chooseDeploymentTargets(): Promise<Target[]> {
-	let selectedTargets = currentDeploymentTargets()
 	for (;;) {
 		setUiContext(
 			'Welcome · Scope',
-			'Deployment targets',
-			`Check every target to prepare in this run. Only pages and provider changes needed by the checked targets will follow.\n\n${deploymentTargetSummary(TARGETS)}\n\nA complete installation eventually needs all three. You can prepare one target now and add another later with the same saved generation.`
+			'Choose an installer',
+			'Install identity first. Then install either next for release testing or production for everyday use. Reuse the same private installation record to add another target later.'
 		)
-		let values: string[]
-		if (tui) {
-			const result = await tui.chooseMany({
-				label: 'Targets for this run',
-				options: TARGETS.map((target) => ({
-					label: target,
-					value: target
-				})),
-				selected: selectedTargets
-			})
-			values = result.values
-		} else {
-			process.stdout.write(
-				`\nSelected [${selectedTargets.join(', ')}]. Enter identity, next, production, a comma-separated combination, or all: `
-			)
-			const answer = (await readAnswer()).toLowerCase()
-			values =
-				answer === ''
-					? selectedTargets
-					: answer === 'all'
-						? [...TARGETS]
-						: answer.split(',').map((value) => value.trim())
+		const options = [
+			...(installerMode === 'choose' ? [{ label: 'Identity', value: 'identity' }] : []),
+			{ label: 'Next — test a release before promotion', value: 'next' },
+			{ label: 'Production — use a stable release', value: 'production' }
+		]
+		const choice =
+			installerMode === 'identity'
+				? 'identity'
+				: tui
+					? await tui.choose({ label: 'Install', options })
+					: await question(
+							installerMode === 'platform'
+								? 'Platform: next or production'
+								: 'Install: identity, next, or production',
+							installerMode === 'platform' ? 'production' : 'identity'
+						)
+		try {
+			const target = installationSelection(installerMode as string, choice)
+			installationRelease(target, generated)
+			setValueAt(draft, ['deploymentTargets'], [target])
+			saveDraft()
+			return [target]
+		} catch (error) {
+			reportFailure(error instanceof Error ? error.message : 'Invalid installation selection.')
+			if (installerMode !== 'choose' && !generated.rollouts?.identity?.verifiedAt) throw error
 		}
-		const ordered = orderedDeploymentTargets(values)
-		if (ordered.length === 0 || values.some((value) => !TARGETS.includes(value as Target))) {
-			reportFailure('Check at least one of identity, next, or production.')
-			continue
-		}
-		selectedTargets = ordered
-		setValueAt(draft, ['deploymentTargets'], selectedTargets)
-		saveDraft()
-		return selectedTargets
 	}
 }
 
@@ -2314,7 +2312,7 @@ try {
 	setUiContext(
 		'Review',
 		'Plan validated',
-		`The input for ${selectedTargets.join(', ')} is valid. Apply creates or reconciles ${selectedTargets.length * 2} private buckets, ${selectedTargets.filter((target) => target !== 'identity').length} Polar webhook(s), generated credentials, exact aven.id A/AAAA records, and ${configurationTargets.length * 2} namespaced GitHub Environments. When all three targets are prepared, it provisions and deploys the first installation. Previously prepared targets are refreshed only to keep shared references current.`
+		`The input for ${selectedTargets.join(', ')} is valid. Apply creates or reconciles ${selectedTargets.length * 2} private buckets, ${selectedTargets.filter((target) => target !== 'identity').length} Polar webhook(s), generated credentials, exact aven.id A/AAAA records, and ${configurationTargets.length * 2} namespaced GitHub Environments. It provisions and deploys only the selected target. Platform setup also attaches its caller to the existing identity release. Previously prepared targets are refreshed only to keep shared references current.`
 	)
 	const apply = tui
 		? await tui.choose({
@@ -2338,9 +2336,11 @@ try {
 		await withProgress('Starting provider reconciliation…', runBootstrapApply)
 		promoteCompletedCredentials()
 		Object.assign(generated, loadOrCreateGeneratedSecrets(generatedPath))
-		if (startup === 'rotate' && generated.initialRollout) {
-			generated.initialRollout.deployRunId = undefined
-			generated.initialRollout.verifiedAt = undefined
+		if (startup === 'rotate' && generated.rollouts?.[selectedTargets[0]]) {
+			const rollout = generated.rollouts[selectedTargets[0]] as TargetRollout
+			rollout.deployRunId = undefined
+			rollout.identityAttachmentRunId = undefined
+			rollout.verifiedAt = undefined
 			saveGeneratedSecrets(generatedPath, generated)
 			refreshCompletedCredentials(bootstrapInput)
 		}
@@ -2348,8 +2348,8 @@ try {
 		if (running !== undefined)
 			process.stdout.write(
 				running
-					? `SUCCESS: the first avenOS installation for ${generated.deploymentPrefix} is running.\nImport ${credentialsPath} into the password manager, verify it, then securely delete the local bootstrap directory. Future updates run through CI.\n`
-					: `SUCCESS: bootstrap ${generated.deploymentPrefix} is configured for ${selectedTargets.join(', ')}. Resume the same generation and add every missing target to create the first running installation.\nCredentials: ${credentialsPath}\n`
+					? `SUCCESS: ${selectedTargets.join(', ')} for ${generated.deploymentPrefix} is running.\nImport ${credentialsPath} into the password manager, verify it, then retain the private record securely if you will add another platform. Future updates run through CI.\n`
+					: `SUCCESS: bootstrap ${generated.deploymentPrefix} is configured for ${selectedTargets.join(', ')}. Resume the same generation to finish this target.\nCredentials: ${credentialsPath}\n`
 			)
 	}
 } catch (error) {

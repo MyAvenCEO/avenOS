@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
 	assertDeploymentAuthority,
-	assertInitialDeployment,
 	assertNextReleaseCommit,
 	assertRunProvenance,
 	releaseImages,
@@ -80,15 +79,6 @@ describe('release trust boundary', () => {
 			else expect(output).toBe('')
 		}
 	})
-	test('normal updates cannot redeploy every target including shared identity', () => {
-		expect(() => assertInitialDeployment('all', false, false)).toThrow()
-		expect(() => assertInitialDeployment('all', true, true)).toThrow()
-		expect(() => assertInitialDeployment('all', true, false)).not.toThrow()
-		for (const target of ['next', 'production', 'identity']) {
-			expect(() => assertInitialDeployment(target, false, false)).not.toThrow()
-			expect(() => assertInitialDeployment(target, true, false)).toThrow()
-		}
-	})
 	test('next requires its current commit while prod can restore an earlier verified release into next', () => {
 		expect(() =>
 			assertNextReleaseCommit('refs/heads/next', 'next', 'a'.repeat(40), 'b'.repeat(40))
@@ -107,8 +97,9 @@ describe('release trust boundary', () => {
 		expect(() => assertDeploymentAuthority('refs/heads/next', 'next')).not.toThrow()
 		for (const target of ['production', 'identity', 'all'])
 			expect(() => assertDeploymentAuthority('refs/heads/next', target)).toThrow()
-		for (const target of ['next', 'production', 'identity', 'all'])
+		for (const target of ['next', 'production', 'identity'])
 			expect(() => assertDeploymentAuthority('refs/heads/prod', target)).not.toThrow()
+		expect(() => assertDeploymentAuthority('refs/heads/prod', 'all')).toThrow()
 	})
 	test('requires each exact package digest and rejects substitutions or extra fields', () => {
 		const valid = validateReleaseManifest(manifest())

@@ -63,6 +63,8 @@
 		"email:check": "bun run --cwd services/checkout email:check",
 		"test:infra": "bun run --cwd infrastructure/platform test",
 		"test:bootstrap": "bun run --cwd infrastructure/bootstrap test",
+		"install:identity": "bun ./scripts/deployment-bootstrap-guided.ts --installer identity",
+		"install:platform": "bun ./scripts/deployment-bootstrap-guided.ts --installer platform",
 		"bootstrap:deployment:guided": "bun ./scripts/deployment-bootstrap-guided.ts",
 		"bootstrap:deployment": "bun ./scripts/deployment-bootstrap.ts",
 		"bootstrap:deployment:preflight": "bun ./scripts/deployment-credentials-preflight.ts",

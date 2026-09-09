@@ -33,6 +33,7 @@ jobs:
       AWS_EC2_METADATA_DISABLED: "true"
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
       PULUMI_STACK: ${{ vars.PULUMI_STACK }}
+      IDENTITY_PLATFORM_TARGETS_JSON: ${{ vars.IDENTITY_PLATFORM_TARGETS_JSON }}
       NEXT_PULUMI_STACK: ${{ vars.NEXT_PULUMI_STACK }}
       NEXT_PULUMI_BACKEND: ${{ vars.NEXT_PULUMI_BACKEND }}
       NEXT_STATE_S3_ACCESS_KEY_ID: ${{ secrets.NEXT_STATE_S3_ACCESS_KEY_ID }}
@@ -85,9 +86,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
-      - name: Install identity DNS lookup tool
-        if: inputs.target == 'identity'
-        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends dnsutils
       - name: Record deployed commit
         env:
           RELEASE_SHA: ${{ fromJSON(inputs.manifest).sha }}

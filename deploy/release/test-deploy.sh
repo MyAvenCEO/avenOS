@@ -20,6 +20,7 @@ pulumi() {
     identityIpv4Address|platformIpv4Address) printf '%s\n' 192.0.2.10 ;;
     platformIpv6Address) printf '%s\n' 2001:db8::10 ;;
     identityHostPublicKey|platformHostPublicKey) printf '%s\n' 'ssh-ed25519 AAAATEST' ;;
+    platformIdentityProvisioningSecret) printf '%064d\n' 0 ;;
     tenantGrantPublicKey) printf '%s\n' test-public-key ;;
     *) printf '%s\n' test-secret ;;
   esac
@@ -70,6 +71,27 @@ ssh-keyscan() {
 
 scp() {
   assert_ssh_arguments "$@"
+  if [[ "$DEPLOYMENT_TARGET" == identity ]]; then
+    local source=${@: -2:1}
+    local expected
+    expected=$(jq length <<<"$IDENTITY_PLATFORM_TARGETS_JSON")
+    if [[ "$expected" == 0 ]]; then
+      grep -Fq 'IDENTITY_ALLOW_NO_PLATFORMS="true"' "$source/.env"
+      grep -Fq 'IDENTITY_PROVISIONING_SECRETS=""' "$source/.env"
+      ! grep -q 'remote_ip' "$source/Caddyfile"
+      grep -q 'respond @untrusted_internal 404' "$source/Caddyfile"
+    else
+      grep -Fq 'IDENTITY_ALLOW_NO_PLATFORMS="false"' "$source/.env"
+      grep -q 'not remote_ip' "$source/Caddyfile"
+    fi
+    for target in next production; do
+      if ! jq -e --arg target "$target" 'index($target) != null' <<<"$IDENTITY_PLATFORM_TARGETS_JSON" >/dev/null; then
+        local domain=aven.ceo
+        [[ "$target" == next ]] && domain=next.aven.ceo
+        ! grep -Fq "https://portal.$domain" "$source/.env"
+      fi
+    done
+  fi
 }
 
 curl() {
@@ -87,6 +109,7 @@ bun() {
 
 run_target() (
   export DEPLOYMENT_TARGET=$1
+  export IDENTITY_PLATFORM_TARGETS_JSON=${2:-'["next","production"]'}
   export PULUMI_STACK="organization/aven-platform/$DEPLOYMENT_TARGET"
   export PULUMI_BACKEND=s3://test-state
   export NEXT_PULUMI_STACK=organization/aven-platform/next
@@ -99,6 +122,16 @@ run_target() (
   export PRODUCTION_STATE_S3_ACCESS_KEY_ID=test
   export PRODUCTION_STATE_S3_SECRET_ACCESS_KEY=test
   export PRODUCTION_PULUMI_CONFIG_PASSPHRASE=test
+  # Unselected credentials must not be required or read.
+  if [[ "$DEPLOYMENT_TARGET" == identity ]]; then
+    for target in next production; do
+      if ! jq -e --arg target "$target" 'index($target) != null' <<<"$IDENTITY_PLATFORM_TARGETS_JSON" >/dev/null; then
+        for suffix in PULUMI_STACK PULUMI_BACKEND STATE_S3_ACCESS_KEY_ID STATE_S3_SECRET_ACCESS_KEY PULUMI_CONFIG_PASSPHRASE; do
+          unset "${target^^}_${suffix}"
+        done
+      fi
+    done
+  fi
   export GHCR_USER=test
   export GHCR_TOKEN=test
   export OPERATIONS_IMAGE=operations:test
@@ -142,6 +175,16 @@ for target in identity next production; do
   run_target "$target" >"$output_file" 2>&1
   if grep -Fq 'test-secret' "$output_file"; then
     echo "release deployment exposed a Pulumi secret for $target" >&2
+    exit 1
+  fi
+done
+for selection in '[]' '["next"]' '["production"]'; do
+  run_target identity "$selection" >"$output_file" 2>&1 || { cat "$output_file"; exit 1; }
+done
+# Validate the caller list before any SSH or state access.
+for selection in '["next","next"]' '["other"]' 'null' '{}'; do
+  if run_target identity "$selection" >"$output_file" 2>&1; then
+    echo 'Invalid identity caller selection was accepted' >&2
     exit 1
   fi
 done

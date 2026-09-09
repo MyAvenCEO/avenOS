@@ -4,18 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: Select one deployment; all is reserved for initial installation
+        description: Select one independent deployment
         default: next
         required: true
         type: choice
-        options: [all, identity, next, production]
-      initial_installation:
-        description: Explicitly install all three targets for a fresh installation
-        default: false
-        required: true
-        type: boolean
+        options: [identity, next, production]
       release_run_id:
-        description: Successful platform-release run from protected next (immutable images)
+        description: Successful verified platform-release run (immutable images)
         required: true
         type: string
       next_proof_run_id:
@@ -54,45 +49,16 @@ jobs:
           RELEASE_RUN_ID: ${{ inputs.release_run_id }}
           NEXT_PROOF_RUN_ID: ${{ inputs.next_proof_run_id }}
           DEPLOYMENT_TARGET: ${{ inputs.target }}
-          INITIAL_INSTALLATION: ${{ inputs.initial_installation }}
           RECOVER_FROM_BACKUP: ${{ inputs.recover_from_backup }}
           DEPLOYMENT_ENVIRONMENT_PREFIX: ${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}
           DEPLOYMENT_TARGETS_JSON: ${{ vars.DEPLOYMENT_TARGETS_JSON }}
         run: bun scripts/verify-platform-release.ts
 
-  identity:
+  deploy:
     needs: validate
-    if: inputs.target == 'all' || inputs.target == 'identity'
     uses: ./.github/workflows/platform-deploy-target.yml
     secrets: inherit
     with:
-      target: identity
-      manifest: ${{ needs.validate.outputs.manifest }}
-      recover_from_backup: ${{ inputs.recover_from_backup }}
-
-  next:
-    needs: [validate, identity]
-    if: >-
-      ${{ !cancelled() && needs.validate.result == 'success' &&
-      (needs.identity.result == 'success' || needs.identity.result == 'skipped') &&
-      (inputs.target == 'all' || inputs.target == 'next') }}
-    uses: ./.github/workflows/platform-deploy-target.yml
-    secrets: inherit
-    with:
-      target: next
-      manifest: ${{ needs.validate.outputs.manifest }}
-      recover_from_backup: ${{ inputs.recover_from_backup }}
-
-  production:
-    needs: [validate, identity, next]
-    if: >-
-      ${{ !cancelled() && needs.validate.result == 'success' &&
-      (needs.identity.result == 'success' || needs.identity.result == 'skipped') &&
-      (needs.next.result == 'success' || needs.next.result == 'skipped') &&
-      (inputs.target == 'all' || inputs.target == 'production') }}
-    uses: ./.github/workflows/platform-deploy-target.yml
-    secrets: inherit
-    with:
-      target: production
+      target: ${{ inputs.target }}
       manifest: ${{ needs.validate.outputs.manifest }}
       recover_from_backup: ${{ inputs.recover_from_backup }}

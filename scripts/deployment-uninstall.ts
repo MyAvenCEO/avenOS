@@ -496,7 +496,7 @@ async function removePolar(target: 'next' | 'production'): Promise<void> {
 
 async function removeIdentityDns(): Promise<void> {
 	beginProgress('Remove identity DNS', 'Removing only this generation’s saved aven.id addresses.')
-	const expected = generated.initialRollout?.identityDns
+	const expected = (generated.rollouts?.identity ?? generated.initialRollout)?.identityDns
 	if (!expected) {
 		completeProgress('No saved identity addresses exist; aven.id DNS was left unchanged.')
 		return

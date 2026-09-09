@@ -21,10 +21,12 @@ bash -n \
   "$root/deploy/release/deploy.sh" \
   "$root/deploy/release/environment.sh" \
   "$root/deploy/release/ssh-staging.sh" \
+  "$root/deploy/release/identity-caddy.sh" \
   "$root/deploy/release/test-deploy.sh" \
   "$root/deploy/validate.sh" \
   "$root/deploy/operations/test-recovery.sh"
 bash "$root/deploy/release/test-deploy.sh"
+bun "$root/deploy/e2e/identity-callers.ts"
 sh -n "$root/deploy/runtime/db-init.sh"
 python3 "$root/deploy/runtime/prepare-test.py"
 python3 "$root/deploy/runtime/rollout-test.py"
@@ -37,7 +39,7 @@ bun test "$root/deploy/local/llm-catalog.test.ts" "$root/deploy/e2e/llm-catalog.
 
 grep -Fq "if: inputs.target != 'identity'" "$root/.github/workflows/platform-deploy-target.yml"
 bun "$root/app/node_modules/typescript/bin/tsc" --noEmit --skipLibCheck --module esnext --moduleResolution bundler --target es2023 --typeRoots "$root/app/node_modules/@types" --types bun "$root/deploy/e2e/customer-runtime-journey.ts" "$root/scripts/lib/platform-verification.test.ts"
-bun test "$root/scripts/lib/platform-verification.test.ts" "$root/scripts/lib/platform-release.test.ts" "$root/deploy/e2e/mail-topology.test.ts"
+bun test "$root/scripts/lib/platform-verification.test.ts" "$root/scripts/lib/platform-release.test.ts" "$root/scripts/lib/installation.test.ts" "$root/deploy/e2e/mail-topology.test.ts"
 bun test "$root/scripts/lib/release-promotion.test.ts"
 bun "$root/app/node_modules/typescript/bin/tsc" --noEmit --skipLibCheck --module esnext --moduleResolution bundler --target es2023 --typeRoots "$root/app/node_modules/@types" --types bun "$root/scripts/promote-release.ts" "$root/scripts/lib/release-promotion.test.ts"
 bun test "$root/scripts/lib/client-release.test.ts"
@@ -113,10 +115,7 @@ env \
   IDENTITY_PROVISIONING_SECRETS=01234567890123456789012345678901,abcdefghijklmnopqrstuvwxyz012345 \
   IDENTITY_MAIL_ORIGINS=https://portal.next.aven.ceo,https://portal.aven.ceo \
   TRUSTED_WEB_ORIGINS=https://next.aven.ceo,https://portal.next.aven.ceo,https://aven.ceo,https://portal.aven.ceo \
-  NEXT_PLATFORM_PUBLIC_IPV4=192.0.2.10 \
-  NEXT_PLATFORM_PUBLIC_IPV6=2001:db8::10 \
-  PRODUCTION_PLATFORM_PUBLIC_IPV4=192.0.2.20 \
-  PRODUCTION_PLATFORM_PUBLIC_IPV6=2001:db8::20 \
+  IDENTITY_PLATFORM_IPS='192.0.2.10 2001:db8::10 192.0.2.20 2001:db8::20' \
   ACME_EMAIL=test@example.test \
   BACKUP_RESTIC_REPOSITORY=/tmp/restic/identity \
   BACKUP_RESTIC_PASSWORD=test-backup-password \
@@ -192,10 +191,7 @@ env \
 
 docker run --rm \
   --env IDENTITY_DOMAIN=aven.id \
-  --env NEXT_PLATFORM_PUBLIC_IPV4=192.0.2.10 \
-  --env NEXT_PLATFORM_PUBLIC_IPV6=2001:db8::10 \
-  --env PRODUCTION_PLATFORM_PUBLIC_IPV4=192.0.2.20 \
-  --env PRODUCTION_PLATFORM_PUBLIC_IPV6=2001:db8::20 \
+  --env 'IDENTITY_PLATFORM_IPS=192.0.2.10 2001:db8::10 192.0.2.20 2001:db8::20' \
   --env ACME_EMAIL=test@example.test \
   --volume "$root/deploy/identity/Caddyfile:/etc/caddy/Caddyfile:ro" \
   caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648 caddy validate --config /etc/caddy/Caddyfile

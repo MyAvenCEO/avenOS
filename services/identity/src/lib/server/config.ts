@@ -15,7 +15,7 @@ const provisioningSecrets = z.string().transform((value, context) => {
 		.split(',')
 		.map((entry) => entry.trim())
 		.filter(Boolean)
-	if (!secrets.length || secrets.some((secret) => secret.length < 32)) {
+	if (secrets.some((secret) => secret.length < 32)) {
 		context.addIssue({ code: 'custom', message: 'must contain secrets of at least 32 characters' })
 		return z.NEVER
 	}
@@ -49,6 +49,7 @@ export const identityConfigSchema = z
 		BETTER_AUTH_SECRET: z.string().min(32),
 		BACKUP_HEALTH_FILE: z.string().optional(),
 		IDENTITY_PROVISIONING_SECRETS: provisioningSecrets,
+		IDENTITY_ALLOW_NO_PLATFORMS: bool.default(false),
 		IDENTITY_MAIL_ORIGINS: z
 			.string()
 			.default('')
@@ -67,6 +68,18 @@ export const identityConfigSchema = z
 		LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info')
 	})
 	.superRefine((config, context) => {
+		if (!config.IDENTITY_PROVISIONING_SECRETS.length && !config.IDENTITY_ALLOW_NO_PLATFORMS)
+			context.addIssue({
+				code: 'custom',
+				path: ['IDENTITY_PROVISIONING_SECRETS'],
+				message: 'empty callers require explicit standalone identity mode'
+			})
+		if (config.IDENTITY_ALLOW_NO_PLATFORMS && config.IDENTITY_PROVISIONING_SECRETS.length)
+			context.addIssue({
+				code: 'custom',
+				path: ['IDENTITY_ALLOW_NO_PLATFORMS'],
+				message: 'standalone identity cannot have platform callers'
+			})
 		if (
 			config.IDENTITY_MAIL_ORIGINS.length &&
 			config.IDENTITY_MAIL_ORIGINS.length !== config.IDENTITY_PROVISIONING_SECRETS.length
@@ -107,7 +120,7 @@ export const identityConfigSchema = z
 		if (config.NODE_ENV === 'production' && origin.protocol !== 'https:')
 			context.addIssue({ code: 'custom', path: ['PUBLIC_BASE_URL'], message: 'must use HTTPS' })
 		if (config.NODE_ENV === 'production') {
-			if (!config.IDENTITY_MAIL_ORIGINS.length)
+			if (!config.IDENTITY_MAIL_ORIGINS.length && config.IDENTITY_PROVISIONING_SECRETS.length)
 				context.addIssue({
 					code: 'custom',
 					path: ['IDENTITY_MAIL_ORIGINS'],

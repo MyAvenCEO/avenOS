@@ -77,7 +77,7 @@ Signed App Store, Android, and distribution-specific application builds have sep
 credentials and guides under `docs/deploy/`; they are not part of the server-platform
 deployment.
 
-`platform-release`, running from protected `next`, publishes immutable GHCR digests only
+`platform-release`, running from protected `next` or stable `prod`, publishes immutable GHCR digests only
 after verification passes. Secret-bearing deployment jobs consume its verified manifest;
 they do not rebuild candidate application code. `Platform release gate` is the stable
 required promotion check emitted by `platform-ci`, including documentation-only changes.
@@ -485,3 +485,18 @@ Local image-building test runs also supply a fresh OS-layer identifier. The norm
 container security scan still blocks fixable high/critical findings on the resulting
 images. Verifying an existing release manifest does not read a package token to rebuild
 images.
+
+## Installer verification
+
+`bun run install:identity` installs shared identity. `bun run install:platform` selects
+next or production using the same private record. The generic
+`bootstrap:deployment:guided` command offers both entry points. See
+[Initial provisioning](initial-provisioning.md) for protected checkout requirements.
+
+`test:deploy` includes independent target selection, saved per-target progress, actual
+release-verifier provenance cases, absent-platform deployment staging and identity
+caller-list rejection. A real local Caddy test verifies denied standalone callers and
+exact source-address admission after attachment, including spoofed forwarding headers. Identity tests prove that standalone mode denies every bearer
+and that enabling a platform still requires its security-mail channel. The full release
+gate runs for both `next` and stable `prod` publishers; neither can bypass security or
+end-to-end verification.

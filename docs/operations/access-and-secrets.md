@@ -45,7 +45,7 @@ for:
 3. separate encrypted Restic repositories or credentials for `next` and production.
 
 Hetzner does not expose S3 credential creation through an API. Use separate Object Storage
-projects for `identity`, `next`, and production. Generate the nine provider credentials
+projects for `identity`, `next`, and production. Generate the three provider credentials for each selected target
 named in the bootstrap guide, then enter them once. Pulumi creates
 and versions the buckets through S3 and installs explicit deny policies. A target's
 deployment credential writes only its state and backup buckets. A separate observer
@@ -57,7 +57,7 @@ recovery storage is deferred.
 
 Each target's bootstrap administrator can repair policies only in that target project. It
 stays offline and never enters GitHub. Neither platform Environment receives identity-state or
-cross-platform-state access. The shared identity Environment receives the two platform
+cross-platform-state access. The shared identity Environment receives only configured platforms'
 observer credentials and passphrases so it can assemble their generated identity caller
 credentials.
 
@@ -140,7 +140,7 @@ operator-supplied credential before another generation exists.
 | `BACKUP_RESTIC_PASSWORD` | Encrypts the selected target's Restic repository |
 
 `identity` needs compute, its own state and backup values, and no Hetzner DNS, Polar,
-SMTP, or LLM credential. It also needs these read-only platform-state values:
+SMTP, or LLM credential. For each configured platform only, it also needs the corresponding read-only state values:
 
 | Secret | Consumer and purpose |
 | --- | --- |
@@ -200,6 +200,7 @@ The `identity` Environment also defines:
 
 | Variable | Meaning |
 | --- | --- |
+| `IDENTITY_PLATFORM_TARGETS_JSON` | Explicit caller list: `[]`, `["next"]`, `["production"]`, or both; standalone identity denies all internal requests |
 | `NEXT_PULUMI_STACK` | Exact stack: `organization/aven-platform/next` |
 | `NEXT_PULUMI_BACKEND` | Read-only backend URL using the `next` state bucket |
 | `PRODUCTION_PULUMI_STACK` | Exact stack: `organization/aven-platform/production` |
@@ -251,8 +252,8 @@ then remove the local copy as described in
 [Initial provisioning](initial-provisioning.md). Add an independent recovery holder when
 another operator becomes available.
 
-The identity GitHub Environment references the read-only variants of the two platform
-state credentials during deployment. Keep the authoritative backend credential and
+The identity GitHub Environment references read-only credentials for configured platform
+states during deployment. Keep the authoritative backend credential and
 passphrase with each target's recovery record; do not create drifting copies in the
 handbook.
 

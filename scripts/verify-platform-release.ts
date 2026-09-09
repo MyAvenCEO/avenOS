@@ -3,33 +3,23 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
 	assertDeploymentAuthority,
-	assertInitialDeployment,
 	assertNextReleaseCommit,
 	assertRunProvenance,
+	deploymentReleasePolicy,
 	sameRelease,
 	validateReleaseManifest
 } from './lib/platform-release.js'
 
 const env = process.env
 assertDeploymentAuthority(env.GITHUB_REF ?? '', env.DEPLOYMENT_TARGET ?? '')
-assertInitialDeployment(
-	env.DEPLOYMENT_TARGET ?? '',
-	env.INITIAL_INSTALLATION === 'true',
-	env.RECOVER_FROM_BACKUP === 'true'
-)
 if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch')
 	throw new Error('Deployment requires an explicit dispatch.')
 if (env.GITHUB_ACTOR?.endsWith('[bot]'))
 	throw new Error('Production deployment requires an operator dispatch, not an automation bot.')
 if (!/^avenos-[a-f0-9]{10}$/.test(env.DEPLOYMENT_ENVIRONMENT_PREFIX ?? ''))
 	throw new Error('No active generation.')
-const requested =
-	env.DEPLOYMENT_TARGET === 'all' ? ['identity', 'next', 'production'] : [env.DEPLOYMENT_TARGET]
 const prepared = JSON.parse(env.DEPLOYMENT_TARGETS_JSON ?? '[]')
-if (!Array.isArray(prepared) || !requested.every((target) => prepared.includes(target)))
-	throw new Error('Target is not prepared.')
-if (env.DEPLOYMENT_TARGET === 'all' && env.RECOVER_FROM_BACKUP === 'true')
-	throw new Error('Bulk recovery is not supported.')
+const policy = deploymentReleasePolicy(env.DEPLOYMENT_TARGET ?? '', prepared)
 const repository = env.GITHUB_REPOSITORY ?? ''
 if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('Invalid repository.')
 const releaseRunId = env.RELEASE_RUN_ID ?? ''
@@ -55,7 +45,7 @@ try {
 	const metadata = JSON.parse(
 		await run(['gh', 'api', `repos/${repository}/actions/runs/${releaseRunId}`])
 	)
-	assertRunProvenance(metadata, repository, 'platform-release.yml', ['next'])
+	assertRunProvenance(metadata, repository, 'platform-release.yml', policy.releaseBranches)
 	await run([
 		'gh',
 		'run',
@@ -81,7 +71,7 @@ try {
 		manifest.sha,
 		env.GITHUB_SHA ?? ''
 	)
-	if (env.DEPLOYMENT_TARGET === 'production') {
+	if (policy.requiresNextProof) {
 		const proofId = env.NEXT_PROOF_RUN_ID ?? ''
 		if (!/^[1-9][0-9]{0,15}$/.test(proofId))
 			throw new Error('Production requires the successful run ID that tested these images in next.')

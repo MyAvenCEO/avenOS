@@ -2,11 +2,9 @@
 
 Status: authoritative
 
-One local setup command creates the recoverable storage foundation, configures GitHub,
-provisions the selected infrastructure, and deploys the first installation. Selecting all
-three targets leaves shared identity, `next`, and production running. It generates a fresh
-namespace, so it can prepare a replacement installation without colliding with an existing
-set of GitHub Environments.
+Two installer entry points share one resumable engine: install identity, then install
+`next` or production. Each creates only its selected storage and infrastructure. A fresh
+namespace prevents collisions with an earlier set of GitHub Environments.
 
 The provider credentials remain the manual floor. [Hetzner exposes S3 credential
 creation only through its Console](https://docs.hetzner.com/storage/object-storage/faq/general/#is-object-storage-exclusively-managed-via-the-hetzner-s3-api),
@@ -15,6 +13,33 @@ each selected project path, gives each credential its exact description, and sec
 asks for the one-time result before it continues. Do not hand-create buckets, GitHub
 Environments, products, model entries, passwords, SSH keys, database roles, or service
 credentials.
+
+## Independent installer contract
+
+Identity and each platform have independent installation and release records. Run
+`install:identity` first, then `install:platform` and choose `next` or `production`.
+Reuse the same private installation record when adding a platform. Only selected
+resources and credentials are collected; an absent platform is not a prerequisite.
+Identity starts with no platform callers and denies every internal request until a
+platform is explicitly attached. Attachment uses identity's own protected Environment
+and its previously verified image manifest; it does not upgrade identity software.
+
+The platform installer creates only its chosen infrastructure, attaches its generated
+caller credential and exact host addresses to identity, deploys a fully verified
+immutable release, and checks only the installed endpoints. Progress is resumable per
+target, including identity attachment. No provider key enters a downloadable client.
+
+`next` releases come from protected `next`. Identity releases come from protected
+`prod`, independently of whether a production platform exists. A production-only
+installation consumes fully verified releases from protected `prod` without needing
+a next deployment. Once next is configured, production requires proof that the exact
+same release manifest succeeded in next, including its first production installation.
+The installer never moves release branches or silently weakens that proof. Build,
+security scans and end-to-end verification remain mandatory for either release branch.
+
+The current hosted domains remain fixed; arbitrary self-hosted domains require a
+separate configuration change. A local test pass is not evidence of a successful cloud
+installation with fresh provider credentials.
 
 ## What the bootstrap creates
 
@@ -39,17 +64,18 @@ For each selected target, one run creates:
 Identity, `next`, and production each use a different Object Storage project. Each project
 has an offline bootstrap administrator, a deployment credential that writes only that
 target's state and backup buckets, and an observer credential that reads only its state.
-The identity deployment receives the `next` and production observer credentials because
-it must assemble their generated identity caller tokens. No storage administrator or
+The identity deployment receives observer credentials only for configured platform targets
+so it can assemble their generated identity caller tokens. No storage administrator or
 deployment credential crosses a project boundary.
 
 ## Prepare the provider accounts
 
 The first rollout runs reviewed code from protected release branches, not arbitrary
 workstation changes. Complete [release promotion](deployment.md#promote-release-branches)
-first. The local checkout must match `prod`; `next` and `prod` must contain the same
-source tree. The wizard builds on next and deploys through prod. This prevents setup
-from executing a development ref with identity or production secrets.
+first. Use the current `prod` checkout for identity and production, or the current `next`
+checkout for next. The two branches do not need identical source trees. A production
+platform is not required to install identity from the protected stable branch. Both
+release branches run the same complete verification before publishing a manifest.
 
 Install and authenticate these command-line tools on the operator workstation:
 
@@ -76,17 +102,15 @@ When another operator becomes available, add their GitHub login as the optional 
 `reviewer` field beside `repository`. The bootstrap then requires that person to approve
 deployment Environments and prevents the initiating account from approving its own run.
 
-The wizard asks only for values needed by the checked targets. A runnable first product
-installation needs all three; a partial selection intentionally prepares only that part
-of the recoverable foundation. At the providers, create these values when their target
-appears:
+The wizard asks only for values needed by the selected target. Identity plus either
+platform is sufficient. Create only the following values belonging to that target:
 
 1. Create the GitHub Packages reader described above.
 2. Create separate Hetzner projects named `avenOS identity`, `avenOS next`, and
    `avenOS production`, and record their numeric IDs. In each project, generate an offline
    bootstrap administrator, a deployment credential, and an observer credential. The
    wizard deep-links to that project's S3 credential page and supplies the exact
-   description. Hetzner shows each of these nine secrets only once, so keep its result
+   description. Hetzner shows each selected credential only once, so keep its result
    dialog open until the wizard accepts both values on the same screen.
 3. Identify the one Hetzner project that contains the `aven.ceo` DNS zone and record its
    numeric project ID. It may be one of the three projects above or a separate project.
@@ -122,10 +146,13 @@ repeats the same idempotent convergence before checkout becomes ready.
 From the repository root, run:
 
 ```sh
-bun run bootstrap:deployment:guided
+bun run install:identity
+# Reuse the same private record, then choose next or production:
+bun run install:platform
 ```
 
-The first screen checks one or more targets. That choice removes every irrelevant page and
+Identity setup selects identity directly; platform setup asks for next or production.
+That choice removes every irrelevant page and
 recalculates the actionable step count and setup tree before data collection begins. The
 wizard then opens a target-specific checklist and divides the setup into named chapters:
 GitHub, Hetzner, Polar, Email, AI models, client release, infrastructure defaults, and
@@ -295,26 +322,29 @@ revoking superseded credentials.
 After applying the documented infrastructure defaults, the wizard shows the dry-run
 result. Select **Apply now** on the review screen to create the buckets, Polar endpoints
 and manifest products, generated secrets, and GitHub configuration, then provision and
-deploy the selected full topology. Select **Stop after validation** to leave provider
+deploy the selected target. Select **Stop after validation** to leave provider
 state unchanged. It never prints a secret or passes one in a command argument.
 
-The bootstrap stores the checked targets in `deploymentTargets`. Rerunning the same saved
-generation may check a different combination; previously entered one-time credentials
-remain in the owner-only files. A fresh complete installation still needs all three targets.
-When a target is added later, the bootstrap also refreshes previously prepared GitHub
-Environments so cross-target read-only state references remain complete. It does not rerun
-their storage or external-provider changes.
+The bootstrap stores the selected target in `deploymentTargets`. Reuse the private record
+when adding another target; previous one-time credentials remain in the owner-only files.
+Previously prepared GitHub Environments are refreshed to keep shared read-only references
+current. Their storage and provider resources are not recreated.
 
-After the provider bootstrap, the same process dispatches one combined infrastructure
-preview and one combined apply. Protected Pulumi resources reject destructive replacement.
-The setup then replaces the exact apex A and AAAA record sets for `aven.id` through United
-Domains and waits until public DNS returns those values. Finally, it runs the complete release gate once, publishes
-each image once, deploys `identity`, `next`, and production in order, and checks all seven
-public readiness endpoints. Successful GitHub run IDs, the DNS handoff, and final
-verification time are stored in the owner-only generated record and mirrored into
-`credentials.csv`, so rerunning resumes instead of repeating completed stages and the
-password-manager import remains the complete operator handoff. `initial-rollout.log`
-records only stage names, status, and GitHub run URLs; it contains no credential values.
+After bootstrap, the installer previews and applies only the selected infrastructure.
+Identity setup reconciles the exact `aven.id` A and AAAA records through United Domains,
+then deploys identity with all internal routes denied until a platform is attached.
+Platform setup attaches its caller and exact Pulumi host addresses through the protected
+identity Environment, using identity's saved verified release. This reloads identity
+configuration without upgrading its images. It then deploys the chosen platform.
+
+Each target has its own `rollouts` record: source revision, infrastructure runs, release
+run, identity attachment, deployment run and final verification time. Production in a
+staged installation reuses next's saved release and deployment proof; it does not rebuild.
+Only the selected platform's endpoints and shared identity are checked. Run IDs and DNS
+values are mirrored into the recovery CSV. `initial-rollout.log` records stage names,
+status and workflow URLs without credential values. Keep the private record securely if
+you plan to add another target; do not discard it after installing identity alone.
+
 
 If a GitHub infrastructure or deployment run fails, the wizard reads its failed-step log,
 redacts known secrets, and puts the concise provider reason directly on the recovery

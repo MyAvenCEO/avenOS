@@ -2,16 +2,16 @@
 
 Status: authoritative
 
-Build once in protected `next`, test there, and deploy the same image digests to
-production. Development on `main` never receives deployment or recovery credentials.
-Shared identity follows production trust because both platforms depend on it.
+For staged installations, build once in protected `next`, test there, and promote the
+same image digests to production. A production-only installation instead consumes a
+fully verified stable release from protected `prod`. Development on `main` never
+receives deployment or recovery credentials. Identity uses protected `prod` and its
+own verified release independently of either platform.
 
 Three workflows own separate operations: `platform-infrastructure` manages hosts,
 `platform-release` verifies and publishes images without deployment credentials, and
-`platform-deploy` installs a verified release manifest without rebuilding application
-source. Infrastructure accepts `all`. Deployment accepts it only with
-`initial_installation: true` and processes identity, next, production in that order.
-Normal deployment defaults to `next` and selects one target. Selecting a branch does not itself deploy anything.
+`platform-deploy` installs one verified release manifest without rebuilding. Deployment
+has no bulk-install bypass. Selecting a branch does not itself deploy anything.
 
 ## Deployment targets
 
@@ -24,7 +24,7 @@ Normal deployment defaults to `next` and selects one target. Selecting a branch 
 The platform stacks share no database, tenant-signing key, service credential,
 customer route, backup path, SSH identity, or Pulumi state. Both accept short-lived
 tokens from `https://aven.id`. Each platform stack generates its own internal
-provisioning credential. The shared identity deployment admits both; neither platform
+provisioning credential. The shared identity deployment admits only configured platform callers; neither platform
 deployment receives identity-state or cross-platform-state access.
 
 The `my.aven.ceo` and `my.next.aven.ceo` names are outside avenOS ownership. Before
@@ -37,7 +37,7 @@ unchanged. All new checkout traffic and DNS management use `portal.aven.ceo` and
 
 Complete [Initial provisioning](initial-provisioning.md). Its guided command owns the
 normal first rollout: it creates the fresh namespaced GitHub Environments and storage,
-dispatches the combined workflows, publishes `aven.id` through United Domains, and verifies
+dispatches workflows for one target, publishes `aven.id` through United Domains, and verifies
 the running installation. The procedures below are the independently runnable operator paths
 used by that setup and by later repair work.
 
@@ -51,18 +51,14 @@ The workflows select physical Environments through `DEPLOYMENT_ENVIRONMENT_PREFI
 reject targets absent from `DEPLOYMENT_TARGETS_JSON`; do not type or reuse a physical
 Environment name.
 
-Open **Actions → platform-infrastructure → Run workflow** on branch `prod`. Select `target: all` and
-`command: preview`. The workflow previews `identity`, `next`, and production serially.
-Review three replaceable servers, three protected volumes, their firewalls, generated
-SSH identities, and each target's DNS behavior. Reject an unexplained replacement, wider
-SSH ingress, an unprotected stateful resource, or the wrong target stack.
+Open **Actions → platform-infrastructure → Run workflow**. Use `prod` for identity or
+production and `next` for next. Select the single target and `command: preview`, review
+its server, protected volume, firewall, SSH identities and DNS records, then run the
+same target with `command: up`. Absent targets need no resources or credentials.
 
-After the preview succeeds, run the same workflow once more with `target: all` and
-`command: up`. It applies the three reviewed targets serially in `identity`, `next`,
-production order. Until the VPN cutover, expect port 22 from `0.0.0.0/0` and `::/0`;
-reject any unexpected non-SSH ingress or plaintext secret. The platform targets create
-all A and AAAA records for their own three origins. There is no DNS promotion flag and
-no legacy host to cut over.
+Until the VPN cutover, expect port 22 from `0.0.0.0/0` and `::/0`; reject unexpected
+non-SSH ingress, plaintext secrets, data-volume replacement or unexplained changes.
+Platform targets create A and AAAA records only for their own three origins.
 
 An existing CNAME at one of those origins cannot coexist with the required A and AAAA
 records. During guided initial provisioning, the setup recovery screen names the exact
@@ -114,30 +110,34 @@ Do not copy addresses from an earlier run or point `aven.id` at either platform 
 ## Deploy the software
 
 First promote the reviewed source using [Promote release branches](deployment.md#promote-release-branches).
-Run **platform-release** on `next`. Record the successful run ID; its `aven-release`
-artifact contains the source SHA and all eleven image digests. No infrastructure,
-database, SMTP, Polar, backup, or identity credential is available to this build.
+Run **platform-release** on `next` for a candidate, or on `prod` for identity or a
+production-only installation. Both paths build and scan the exact images and run the
+same complete verification gate. Record the successful run ID and its `aven-release`
+manifest. Builds receive no infrastructure, database, SMTP, Polar, backup or identity
+credential.
 
-Run **platform-deploy** on `prod`, select `target: all`, enter that `release_run_id`,
-set `initial_installation: true`, and keep `recover_from_backup: false`. The protected coordinator verifies the run's
-repository, workflow, branch, successful status, source ancestry and exact image set
-before selecting any Environment. It installs identity, next, production serially;
-production cannot run after a failed next deployment. There is no free-form `ref` input.
+Run **platform-deploy** with one target and its `release_run_id`. Identity and production
+require the protected `prod` workflow; next normally runs on `next` and requires that
+branch's exact current release SHA. The coordinator verifies repository, workflow,
+branch, successful status, source ancestry and exact image set before requesting an
+Environment. There is no free-form image or source-ref input.
 
-For a next-only deployment, run the coordinator on `next` with `target: next`; the
-release SHA must match the current `next` SHA. For production-only promotion, run on
-`prod`, supply the same `release_run_id` and a successful `next_proof_run_id` from
-`platform-deploy`. The proof must reference exactly the same release. Identity-only
-deployment also runs on `prod`.
+When `DEPLOYMENT_TARGETS_JSON` includes next, every production deployment, including
+the first, requires `next_proof_run_id` from a successful next deployment with the exact
+same manifest. Without a configured next target, production accepts only a fully
+verified stable release built on `prod`. Configuring next switches production to the
+staged policy; do not remove it to bypass promotion checks.
 
-`target: all` refuses recovery mode. Restore one target at a time through the recovery
-procedure so an accidental bulk restore cannot blur the boundary between shared identity
-and the two platform backups.
+Identity deploys independently. `IDENTITY_PLATFORM_TARGETS_JSON` is an explicit array
+of configured callers; `[]` starts standalone identity with every internal route denied.
+For each listed platform, identity reads only that platform's observer state, generated
+caller secret and exact IPv4/IPv6 addresses. Platform infrastructure must exist before
+attachment, but an absent platform needs no state or DNS. Attachment redeploys the saved
+identity image manifest with updated callers; it does not upgrade identity images.
+Neither platform Environment can read identity or the other platform's credentials.
 
-Identity deployment requires the already-managed A and AAAA records and provisioned
-Pulumi stacks for both platform targets. It resolves those records, writes their exact
-addresses into Caddy's internal-route allowlist, and reads each platform's generated
-provisioning credential through the protected identity Environment.
+Restore one target at a time through the recovery procedure.
+
 
 Each platform deployment selects its own generated identity credential, domains,
 static-site branches, tenant-grant issuer, backup label, and backup prefix from the target. The
@@ -279,9 +279,9 @@ without another account. Changes to workflows, infrastructure, authentication an
 secret handling require particular attention during that review.
 
 The old automatic `promote` workflow and repository deploy-key bypass are removed.
-Promotion changes Git state only. Initial guided provisioning requires the workstation
-to match protected `prod` and requires next and prod to contain the same source tree;
-it then dispatches the release build from next and the all-target coordinator from prod.
+Promotion changes Git state only. Guided provisioning requires the workstation to match
+the selected target's protected branch: `next` for next, `prod` for identity or production.
+It deploys one target; branch trees may differ.
 
 ## Prepare a separate runtime generation
 

@@ -9,13 +9,13 @@ permissions:
   packages: write
 
 concurrency:
-  group: aven-platform-release-next
+  group: aven-platform-release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   verify:
     needs: build
-    if: github.ref == 'refs/heads/next' && github.event_name == 'workflow_dispatch'
+    if: (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/prod') && github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/platform-verification.yml
     with:
       manifest: ${{ needs.build.outputs.manifest }}
@@ -26,7 +26,7 @@ jobs:
       PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
 
   build:
-    if: github.ref == 'refs/heads/next' && github.event_name == 'workflow_dispatch'
+    if: (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/prod') && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       manifest: ${{ steps.manifest.outputs.manifest }}

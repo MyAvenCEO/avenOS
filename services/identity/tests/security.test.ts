@@ -86,3 +86,37 @@ describe('identity security invariants', () => {
 		).toThrow(/duplicate secrets/)
 	})
 })
+
+test('standalone identity explicitly disables all callers without weakening enabled-platform authentication', () => {
+	const empty = {
+		...base,
+		NODE_ENV: 'production',
+		IDENTITY_PROVISIONING_SECRETS: '',
+		IDENTITY_MAIL_ORIGINS: ''
+	}
+	expect(() => identityConfigSchema.parse(empty)).toThrow('explicit standalone')
+	const config = identityConfigSchema.parse({ ...empty, IDENTITY_ALLOW_NO_PLATFORMS: 'true' })
+	for (const bearer of ['', 'p'.repeat(32), 'q'.repeat(32)]) {
+		const request = new Request('https://aven.id/internal/v1/accounts', {
+			headers: { authorization: `Bearer ${bearer}` }
+		})
+		expect(constantTimeAnyBearer(request, config.IDENTITY_PROVISIONING_SECRETS)).toBe(false)
+	}
+	for (const [secret, origin] of [
+		['p'.repeat(32), 'https://portal.next.aven.ceo'],
+		['q'.repeat(32), 'https://portal.aven.ceo']
+	]) {
+		const configured = {
+			...empty,
+			IDENTITY_PROVISIONING_SECRETS: secret,
+			IDENTITY_MAIL_ORIGINS: origin
+		}
+		expect(identityConfigSchema.parse(configured).IDENTITY_PROVISIONING_SECRETS).toEqual([secret])
+		expect(() =>
+			identityConfigSchema.parse({ ...configured, IDENTITY_ALLOW_NO_PLATFORMS: 'true' })
+		).toThrow('cannot have platform callers')
+		expect(() => identityConfigSchema.parse({ ...configured, IDENTITY_MAIL_ORIGINS: '' })).toThrow(
+			'security mail'
+		)
+	}
+})

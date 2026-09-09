@@ -73,19 +73,24 @@ export interface BootstrapInput {
 	}
 }
 
+export interface TargetRollout {
+	ref: string
+	targets: Target[]
+	infrastructurePreviewRunId?: number
+	infrastructureApplyRunId?: number
+	identityDns?: { ipv4: string; ipv6: string; verified: boolean }
+	identityAttachmentRunId?: number
+	nextProofRunId?: number
+	deployRunId?: number
+	releaseRunId?: number
+	verifiedAt?: string
+}
+
 export interface GeneratedSecrets {
 	deploymentPrefix: string
 	completedTargets?: Target[]
-	initialRollout?: {
-		ref: string
-		targets: Target[]
-		infrastructurePreviewRunId?: number
-		infrastructureApplyRunId?: number
-		identityDns?: { ipv4: string; ipv6: string; verified: boolean }
-		deployRunId?: number
-		releaseRunId?: number
-		verifiedAt?: string
-	}
+	initialRollout?: TargetRollout
+	rollouts?: Partial<Record<Target, TargetRollout>>
 	targets: Record<
 		Target,
 		{ bootstrapPulumiPassphrase: string; pulumiPassphrase: string; resticPassword: string }
@@ -619,23 +624,40 @@ export function loadOrCreateGeneratedSecrets(path: string): GeneratedSecrets {
 					? selectedDeploymentTargets(generated.completedTargets)
 					: []
 		}
-		if (generated.initialRollout !== undefined) {
-			if (!generated.initialRollout || typeof generated.initialRollout !== 'object')
+		if (
+			generated.rollouts !== undefined &&
+			(!generated.rollouts ||
+				typeof generated.rollouts !== 'object' ||
+				Array.isArray(generated.rollouts) ||
+				Object.keys(generated.rollouts).some((target) => !TARGETS.includes(target as Target)))
+		)
+			throw new Error(`${path} contains invalid target rollout records.`)
+		for (const [target, rollout] of Object.entries(generated.rollouts ?? {})) {
+			if (rollout?.targets?.length !== 1 || rollout.targets[0] !== target)
+				throw new Error(`${path} contains a rollout assigned to the wrong target.`)
+		}
+		for (const rollout of [
+			generated.initialRollout,
+			...Object.values(generated.rollouts ?? {})
+		].filter(Boolean) as TargetRollout[]) {
+			if (!rollout || typeof rollout !== 'object')
 				throw new Error(`${path} contains invalid initial rollout state.`)
-			selectedDeploymentTargets(generated.initialRollout.targets)
-			if (typeof generated.initialRollout.ref !== 'string' || !generated.initialRollout.ref)
+			selectedDeploymentTargets(rollout.targets)
+			if (typeof rollout.ref !== 'string' || !rollout.ref)
 				throw new Error(`${path} contains an invalid initial rollout ref.`)
 			for (const name of [
 				'infrastructurePreviewRunId',
 				'infrastructureApplyRunId',
 				'releaseRunId',
+				'identityAttachmentRunId',
+				'nextProofRunId',
 				'deployRunId'
 			] as const) {
-				const runId = generated.initialRollout[name]
+				const runId = rollout[name]
 				if (runId !== undefined && (!Number.isSafeInteger(runId) || runId <= 0))
 					throw new Error(`${path} contains an invalid ${name}.`)
 			}
-			const identityDns = generated.initialRollout.identityDns
+			const identityDns = rollout.identityDns
 			if (
 				identityDns !== undefined &&
 				(!identityDns ||
@@ -648,9 +670,8 @@ export function loadOrCreateGeneratedSecrets(path: string): GeneratedSecrets {
 			)
 				throw new Error(`${path} contains invalid initial rollout identity DNS records.`)
 			if (
-				generated.initialRollout.verifiedAt !== undefined &&
-				(typeof generated.initialRollout.verifiedAt !== 'string' ||
-					!generated.initialRollout.verifiedAt)
+				rollout.verifiedAt !== undefined &&
+				(typeof rollout.verifiedAt !== 'string' || !rollout.verifiedAt)
 			)
 				throw new Error(`${path} contains an invalid initial rollout verification time.`)
 		}
@@ -833,8 +854,9 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 			'Shared inference credential for next and production.',
 			'https://redpill.ai'
 		)
-	const rollout = generated.initialRollout
-	if (rollout) {
+	for (const rollout of Object.values(
+		generated.rollouts ?? { legacy: generated.initialRollout }
+	).filter(Boolean) as TargetRollout[]) {
 		const rolloutStatus = rollout.verifiedAt
 			? `Public installation verified at ${rollout.verifiedAt}.`
 			: 'Initial installation has not completed public verification yet.'
@@ -850,12 +872,14 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 			['Infrastructure preview', rollout.infrastructurePreviewRunId],
 			['Infrastructure apply', rollout.infrastructureApplyRunId],
 			['Verified immutable release', rollout.releaseRunId],
+			['Identity attachment', rollout.identityAttachmentRunId],
+			['Next promotion proof', rollout.nextProofRunId],
 			['Software deployment', rollout.deployRunId]
 		] as const) {
 			if (!runId) continue
 			add(
 				'bootstrap',
-				`avenOS initial ${title.toLowerCase()} run`,
+				`avenOS ${rollout.targets.join(', ')} initial ${title.toLowerCase()} run`,
 				String(runId),
 				'',
 				`${title} workflow for revision ${rollout.ref}.`,
@@ -982,6 +1006,13 @@ export function githubConfiguration(input: BootstrapInput, generated: GeneratedS
 	}
 	const identity = result[`${generated.deploymentPrefix}-identity`]
 	if (identity) {
+		identity.variables.IDENTITY_PLATFORM_TARGETS_JSON = JSON.stringify(
+			selectedTargets.filter(
+				(target) =>
+					target !== 'identity' &&
+					(input.deploymentTargets.includes(target) || generated.rollouts?.[target]?.verifiedAt)
+			)
+		)
 		for (const target of selectedTargets.filter(
 			(target): target is 'next' | 'production' => target !== 'identity'
 		)) {

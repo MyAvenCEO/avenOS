@@ -44,7 +44,7 @@ export function validateReleaseManifest(value: unknown): ReleaseManifest {
 	return v
 }
 export function assertDeploymentAuthority(ref: string, target: string) {
-	if (!['all', 'identity', 'next', 'production'].includes(target))
+	if (!['identity', 'next', 'production'].includes(target))
 		throw new Error('Unknown deployment target.')
 	if (ref !== 'refs/heads/prod' && !(ref === 'refs/heads/next' && target === 'next'))
 		throw new Error(
@@ -98,13 +98,17 @@ export function sameRelease(a: ReleaseManifest, b: ReleaseManifest): boolean {
 	)
 }
 
-export function assertInitialDeployment(target: string, initial: boolean, recovery: boolean) {
-	if (target === 'all' && (!initial || recovery))
-		throw new Error(
-			'All targets is reserved for explicit fresh installation; updates select one target.'
-		)
-	if (initial && target !== 'all')
-		throw new Error(
-			'Initial installation selects all targets; individual deployments leave identity independent.'
-		)
+export function deploymentReleasePolicy(target: string, prepared: unknown) {
+	if (
+		!Array.isArray(prepared) ||
+		!prepared.includes(target) ||
+		prepared.some((value) => !['identity', 'next', 'production'].includes(value)) ||
+		new Set(prepared).size !== prepared.length
+	)
+		throw new Error('Invalid prepared deployment targets.')
+	const requiresNextProof = target === 'production' && prepared.includes('next')
+	return {
+		requiresNextProof,
+		releaseBranches: target === 'next' || requiresNextProof ? ['next'] : ['prod']
+	}
 }
