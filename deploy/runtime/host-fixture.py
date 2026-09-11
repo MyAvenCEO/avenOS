@@ -124,28 +124,7 @@ except BaselineReady: pass""")
         intent = str(uuid.uuid4())
         request(path, keys['token'], {'id': intent, 'title': 'Retain this customer across host rollout ☃'})
         before = request(path+'/'+intent, keys['token'])
-        # Reproduce the pre-movement boundary: an unmarked primary cluster without
-        # execution metadata or a local runtime registry. The schema catalog stays exact.
-        quiesce = f'''import sys
-from pathlib import Path
-sys.path.insert(0,{str(repository / 'deploy/runtime')!r})
-import host
-platform=Path({str(platform)!r}); volume=Path({str(volume)!r})
-config=host.composition(platform)
-compose=['docker','compose','--project-directory',str(platform)]
-services=[name for name,service in config['services'].items() if name!='database' and service.get('restart') not in ('no',None) and not service.get('profiles')]
-services.append('backup')
-host.archive.run([*compose,'stop','--timeout','30',*services])
-for database,sql in [('postgres','COMMENT ON DATABASE postgres IS NULL'),
- ({('cust_'+customer.replace('-', ''))!r},'ALTER TABLE aven_platform.environment_identity DROP COLUMN execution_enabled, DROP COLUMN execution_unsettled')]:
- host.archive.run([*compose,'exec','-T','database','psql','--set=ON_ERROR_STOP=1','-U','postgres','-d',database,'-c',sql])
-for name in ('registry.json','baseline.json'):
- (volume/'lifecycle'/name).unlink()
-'''
-        run([*tool, 'python3', '-c', quiesce])
         run(command)
-        adoption = json.loads(run([*tool, 'cat', str(volume / 'lifecycle/pre-movement-transition.json')]))
-        assert adoption['phase'] == 'backed-up' and adoption['target'] == 'next'
         assert primary_container == run([*tool, 'docker', 'compose', '--project-directory', str(platform), 'ps', '--quiet', 'database'])
         assert request(path+'/'+intent, keys['token']) == before
         registry = json.loads(run([*tool, 'cat', str(volume / 'lifecycle/registry.json')]))
@@ -153,7 +132,7 @@ for name in ('registry.json','baseline.json'):
         first_bundle = first['bundle']
         first_database = f'{first["movement"]["id"]}-database'
         first_container = run([*tool, 'docker', 'compose', '--project-directory', first_bundle, 'ps', '--quiet', first_database])
-        print('Host fixture: quiesced adoption and first customer move passed.', flush=True)
+        print('Host fixture: registered baseline and first customer move passed.', flush=True)
         # A distinct immutable input revision creates a second runtime, using the same tested image digests.
         print('Host fixture: customer HTTP data written; installing the second runtime.', flush=True)
         (bundle / '.env').write_text('# second installation configuration\n')

@@ -77,7 +77,7 @@ Signed App Store, Android, and distribution-specific application builds have sep
 credentials and guides under `docs/deploy/`; they are not part of the server-platform
 deployment.
 
-`platform-release`, running from protected `next` or stable `prod`, publishes immutable GHCR digests only
+`platform-release`, running from `main`, publishes immutable GHCR digests only
 after verification passes. Secret-bearing deployment jobs consume its verified manifest;
 they do not rebuild candidate application code. `Platform release gate` is the stable
 required promotion check emitted by `platform-ci`, including documentation-only changes.
@@ -125,8 +125,6 @@ from crates.io when a supported prebuilt CI binary is not applicable.
 These tests do not contact Hetzner:
 
 ```sh
-bun run test:infra
-bun run test:bootstrap
 bun run test:deploy
 bun run test:proxy-boundary
 bun run test:recovery
@@ -135,16 +133,6 @@ bun run test:customer-runtime
 bun run test:release-archive
 ```
 
-- `test:infra` evaluates the Pulumi program, security-sensitive cloud-init output, and
-  exact-name adoption of existing platform DNS records after a partial deployment.
-- `test:bootstrap` proves bucket-policy isolation, namespaced GitHub configuration,
-  all-event Polar webhook and product-manifest reconciliation, live-model catalog
-  conversion, mode-`0600` recovery output, signed exact-name bucket creation, idempotent
-  resume, bounded S3, provider-import, and state-backend visibility retries, atomic adoption
-  of both pre-created buckets, complete-checkpoint migration resume without a repeated
-  provider update, replacement of an orphaned salt-only Pulumi stack file without
-  removing operator settings, and exact-bucket teardown planning across every partial
-  checkpoint state without contacting a provider.
 - `test:deploy` validates shell scripts, production Compose files, Caddy
   configuration, dependency order, non-root images, secret-safe build contexts, and
   immutable runtime preparation with separate credentials, storage and routes, host
@@ -400,8 +388,6 @@ bun run test:customer-platform
 bun run build:identity
 bun run build:api
 bun run build:checkout
-bun run test:infra
-bun run test:bootstrap
 bun run test:deploy
 bun run test:recovery
 bun run test:customer-movement
@@ -474,7 +460,7 @@ lower-level `test:runtime-install` command still consumes already available imag
 Release builds publish candidate image digests first, scan them, and pass their exact
 manifest to the full verification workflow. The release journey pulls those images
 and skips rebuilding service images; all customer and native tests still run. Only a
-successful complete gate publishes the deployable `aven-release` artifact. Pull
+successful complete gate publishes the attested durable release manifest. Pull
 request verification builds local fixture images because it has no release manifest.
 The build and verification jobs have no deployment Environment credentials.
 
@@ -485,18 +471,3 @@ Local image-building test runs also supply a fresh OS-layer identifier. The norm
 container security scan still blocks fixable high/critical findings on the resulting
 images. Verifying an existing release manifest does not read a package token to rebuild
 images.
-
-## Installer verification
-
-`bun run install:identity` installs shared identity. `bun run install:platform` selects
-next or production using the same private record. The generic
-`bootstrap:deployment:guided` command offers both entry points. See
-[Initial provisioning](initial-provisioning.md) for protected checkout requirements.
-
-`test:deploy` includes independent target selection, saved per-target progress, actual
-release-verifier provenance cases, absent-platform deployment staging and identity
-caller-list rejection. A real local Caddy test verifies denied standalone callers and
-exact source-address admission after attachment, including spoofed forwarding headers. Identity tests prove that standalone mode denies every bearer
-and that enabling a platform still requires its security-mail channel. The full release
-gate runs for both `next` and stable `prod` publishers; neither can bypass security or
-end-to-end verification.

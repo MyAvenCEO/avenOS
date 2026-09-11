@@ -17,13 +17,13 @@ between the direction of the product and properties the current system proves.
 | Prepare a Linux or macOS workstation | [Workstation setup](workstation-setup.md) |
 | Build the code or choose the right test level | [Build and test](build-and-test.md) |
 | Run all services and the Rust client locally | [Local full stack](local-stack.md) |
-| Bootstrap storage, recovery secrets, and GitHub | [Initial provisioning](initial-provisioning.md) |
+| Bootstrap storage, recovery secrets, and GitHub | [Initial provisioning](https://github.com/MyAvenCEO/avenOS-maintenance-tools/blob/main/docs/operations/initial-provisioning.md) |
 | Create or update identity, `next`, or production | [Deployment](deployment.md) |
 | Understand service startup order and readiness | [Startup and readiness](startup-and-readiness.md) |
-| Understand environment isolation | [Deployment targets](deployment.md#deployment-targets) |
-| Inspect health, logs, disk, or a database | [Maintenance](maintenance.md) |
+| Understand environment isolation | [Deployment targets](deployment.md#installation-channels) |
+| Inspect health, logs, disk, or a database | [Maintenance](https://github.com/MyAvenCEO/avenOS-maintenance-tools/blob/main/docs/operations/maintenance.md) |
 | Understand or restore backups | [Backup and recovery](backup-and-recovery.md) |
-| Respond to an outage or security event | [Incident response](incident-response.md) |
+| Respond to an outage or security event | [Incident response](https://github.com/MyAvenCEO/avenOS-maintenance-tools/blob/main/docs/operations/incident-response.md) |
 | Configure or recover credentials | [Access and secrets](access-and-secrets.md) |
 
 ## System in one minute
@@ -64,9 +64,8 @@ trail. Encrypted off-host logical backups are the data recovery path.
 | `next` | Supported | Isolated staging platform at the three `next.aven.ceo` origins |
 | Production | Supported | Isolated customer-facing platform at the three apex production origins |
 
-The Git branch named `prod` is a release reference, not a deployment. An operator
-still selects the production target and exact ref. Never substitute production
-credentials into `next` or reuse another target's state or backup prefix.
+Installation environments and manual promotion belong to the maintenance repository.
+The source main branch publishes verified images without deployment credentials.
 
 ## Operating principles
 

@@ -71,7 +71,7 @@ equivalent. Read-write data volumes remain explicit exceptions.
 PostgreSQL records connections and disconnections with database/user/client context,
 but not statement text or bind values. Error statement logging is disabled for ordinary
 errors. This is operational audit evidence, not a complete tamper-evident access audit.
-Container and journal retention remain bounded as described in [Maintenance](maintenance.md).
+Container and journal retention remain bounded as described in [Maintenance](https://github.com/MyAvenCEO/avenOS-maintenance-tools/blob/main/docs/operations/maintenance.md).
 
 Public HTTPS origins send host-only HSTS and content-type protection. HSTS deliberately
 omits `includeSubDomains` and preload because unrelated subdomains remain outside this

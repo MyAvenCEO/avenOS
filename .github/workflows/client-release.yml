@@ -1,9 +1,19 @@
 name: Client installers
 
-# Explicit, native builds from the same protected source used for deployment.
+# Explicit, native builds from the protected main source.
 # No infrastructure, customer, or recovery credentials enter these jobs.
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: API destination embedded in the client artifact
+        type: choice
+        options: [next, production]
+        required: true
+        default: next
+
+env:
+  CLIENT_RELEASE_TARGET: ${{ inputs.target }}
 
 permissions:
   contents: read
@@ -41,7 +51,7 @@ jobs:
             const commit = Bun.spawnSync(["git", "show", "-s", "--format=%cs", process.env.GITHUB_SHA]);
             if (commit.exitCode) throw new Error("Cannot read the source commit date");
             const date = commit.stdout.toString().trim();
-            const p = clientReleasePlan(process.env.GITHUB_REF, process.env.GITHUB_SHA, process.env.GITHUB_RUN_NUMBER, date);
+            const p = clientReleasePlan(process.env.GITHUB_REF, process.env.GITHUB_SHA, process.env.GITHUB_RUN_NUMBER, date, process.env.CLIENT_RELEASE_TARGET);
             appendFileSync(process.env.GITHUB_OUTPUT, `version=${p.version}\ntag=${p.tag}\ndate=${date}\napi=${p.apiOrigin}\nandroid_code=${p.androidVersionCode}\n`);
           '
 

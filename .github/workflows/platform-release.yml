@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify:
     needs: build
-    if: (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/prod') && github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/platform-verification.yml
     with:
       manifest: ${{ needs.build.outputs.manifest }}
@@ -26,7 +26,7 @@ jobs:
       PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
 
   build:
-    if: (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/prod') && github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       manifest: ${{ steps.manifest.outputs.manifest }}
@@ -210,7 +210,9 @@ jobs:
     needs: [build, verify]
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -219,9 +221,23 @@ jobs:
         env:
           TESTED_MANIFEST: ${{ needs.build.outputs.manifest }}
         run: jq --exit-status --argjson tested "$TESTED_MANIFEST" '. == $tested' release.json >/dev/null
-      - uses: actions/upload-artifact@v4
+      - name: Attest the fully verified release manifest
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
-          name: aven-release
-          path: release.json
-          retention-days: 90
-          if-no-files-found: error
+          subject-path: release.json
+      - name: Publish a durable release and its verification bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATTESTATION_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          tag="platform-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cp "$ATTESTATION_BUNDLE" release-attestation.jsonl
+          sha256sum release.json > release.sha256
+          gh release create "$tag" release.json release.sha256 release-attestation.jsonl \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title "$tag" \
+            --notes 'Verified application images. Install and promote this release with avenOS maintenance tools.'
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | sort' > uploaded.json
+          jq -e '. == ["release-attestation.jsonl", "release.json", "release.sha256"]' uploaded.json >/dev/null
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false

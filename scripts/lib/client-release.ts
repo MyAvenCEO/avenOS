@@ -3,14 +3,14 @@ import { createHash } from 'node:crypto'
 export const clientPlatforms = ['linux-x64', 'macos-arm64', 'android-arm64'] as const
 export type ClientPlatform = (typeof clientPlatforms)[number]
 
-export function clientReleasePlan(ref: string, sha: string, run: string, date: string) {
-	if (!['refs/heads/next', 'refs/heads/prod'].includes(ref))
-		throw new Error('Client releases must run from protected next or prod.')
+export function clientReleasePlan(ref: string, sha: string, run: string, date: string, target: string) {
+	if (ref !== 'refs/heads/main')
+		throw new Error('Client releases must run from protected main.')
 	if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('An immutable source commit is required.')
 	if (!/^[1-9]\d{0,8}$/.test(run)) throw new Error('Invalid release run number.')
 	if (!/^20\d{2}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date)))
 		throw new Error('Invalid release date.')
-	const target = ref === 'refs/heads/prod' ? 'production' : 'next'
+	if (!['next', 'production'].includes(target)) throw new Error('Choose a client destination.')
 	const [year, month, day] = date.split('-').map(Number)
 	const version = `${year - 2000}.${month}.${day}-${target}.${run}`
 	return {

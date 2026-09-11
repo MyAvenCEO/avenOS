@@ -190,9 +190,5 @@ if docker run "${common[@]}" --env PGHOST="$target_db" --env PGUSER=postgres --e
   exit 1
 fi
 
-OPERATIONS_IMAGE="$image" DATABASE_IMAGE="$database_image" RESTIC_REPOSITORY=/repository RESTIC_PASSWORD=recovery-encryption-test \
-  BACKUP_ENVIRONMENT=ci DRILL_LOCAL_REPOSITORY_DIR="$scratch/repository" DRILL_OUTPUT="$scratch/drill.json" \
-  bash "$root/deploy/operations/drill-latest.sh"
-jq -e '.status == "healthy" and .databaseCount == 2 and (.snapshotId|length) == 64' "$scratch/drill.json" >/dev/null
 RECOVERY_DATABASE_IMAGE="$database_image" python3 "$root/deploy/operations/test-restored-roles.py"
 echo 'destructive backup/restore drill passed'

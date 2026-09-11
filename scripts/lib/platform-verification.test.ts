@@ -43,7 +43,7 @@ test('CI and release require the same full verification without deployment crede
 	expect(release.jobs.verify.needs).toBe('build')
 	expect(release.jobs.verify.with?.manifest).toBe(`\${{ needs.build.outputs.manifest }}`)
 	expect(release.jobs.build.if).toBe(
-		"(github.ref == 'refs/heads/next' || github.ref == 'refs/heads/prod') && github.event_name == 'workflow_dispatch'"
+		"github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'"
 	)
 	expect(release.jobs.build.environment).toBeUndefined()
 	const gate = await workflow('platform-verification')

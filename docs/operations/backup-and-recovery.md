@@ -62,85 +62,21 @@ There is currently no supported ad hoc backup trigger. Before a rare high-risk
 operation, require a fresh successful hourly marker or add and test a narrow manual
 backup workflow rather than using an interactive server shell.
 
-## Check backup health
+## Fresh installation and disaster recovery
 
-The hourly operations workflow checks the container and freshness automatically. To
-inspect it manually:
+The maintenance tool prepares an empty runner repository, isolated environments, cloud
+resources and destination storage for both installation and recovery. Recovery additionally
+selects the retained application release and encrypted backup set. The original backup
+access credentials and encryption password remain necessary even when destination keys
+are new. Old cloud hosts, runner configuration and Pulumi state are not prerequisites for
+creating replacement infrastructure.
 
-```sh
-./tools/stack-observe/run.sh identity check
-./tools/stack-observe/run.sh platform check
-```
-
-Treat an upload without a validated manifest and successful repository check as a
-failed backup.
-
-The backup worker publishes a small atomic `public-status/health.json` containing only
-status, observation time and snapshot count. A failed attempt changes it to degraded
-immediately, even while an older successful snapshot remains fresh. The facade mounts
-only this summary read-only, not backup files or credentials, and rejects observations
-older than two hours. An upload/check result is not a successful restore-drill result.
-
-## Fresh-host disaster recovery
-
-Run recovery from protected `prod`, including when restoring `next`. Its coordinator
-accepts an earlier verified release manifest that is an ancestor of the protected
-workflow commit. A dispatch from `next` itself still requires its exact current commit.
-
-You need access to the protected repository environment, Hetzner API, both DNS
-providers, and the four-value recovery escrow described in
-[Access and secrets](access-and-secrets.md#recovery-escrow).
-
-1. Run `platform-infrastructure` with `command: up` for `identity`, `next`, and
-   `production` to create three fresh hosts and empty protected volumes.
-2. Reconcile the newly returned `aven.id` A/AAAA records through the saved United Domains
-   API key. Pulumi has already recreated both platform environments' `aven.ceo` records.
-3. Run `platform-deploy` from protected `prod` for `identity` with a retained verified
-   `release_run_id` and
-   `recover_from_backup: true`.
-4. Run the same workflow and recovery option for `next`, then for `production`, supplying
-   the matching successful `next_proof_run_id` for production. Use the manifest selection
-   rules in [Deployment](deployment.md#deploy-the-software), not an arbitrary source ref.
-5. Let each run start only PostgreSQL and role initialization, verify and restore its
-   own newest snapshot, then perform normal migrations, reconciliation, startup, and
-   public health checks.
-6. Complete checkout, passkey, native-device, artifact, document, chat, Intent, Actor,
-   environment-isolation, and public-site smoke checks before declaring recovery.
-
-The restore insertion point and the convergence gates after it are defined in
-[Startup and readiness](startup-and-readiness.md#recovery-difference).
-
-The restore accepts only the internal `fresh-target-only` confirmation and refuses a
-database containing user relations. It verifies the manifest and every dump before
-restoring, and checks the entire target for existing user relations or closed databases
-before changing roles or restoring the first dump. A failed restore preserves its partial database for inspection; retry on a
-fresh target. Missing historical role names are created `NOLOGIN`; password hashes are
-not restored. Current role initialization derives fresh passwords and reapplies
-least-privilege grants.
-
-## Restore one lost host
-
-Use the same target-specific infrastructure and deployment commands, scoped to the
-failed foundation. Restore identity only once even when both platform environments
-depend on it. Do not attach an unverified old volume and reopen writes. Keep customer
-routing closed until the restored databases, component schemas, grants, and routing
-generation reconcile.
-
-## Quarterly recovery drill
-
-Before first production use and once per quarter:
-
-1. provision disposable identity, `next`, and production hosts through the real
-   Pulumi path;
-2. restore from all three real private backup repositories;
-3. run the public, customer-data, and cross-environment isolation checklist;
-4. record snapshot IDs, manifest digests, start/end time, achieved RPO/RTO, and any
-   manual decisions; and
-5. destroy the disposable infrastructure only after recording evidence.
-
-The operator must prove the escrow can be recovered independently of the workstation.
-When another authorized person exists, they should also prove they can locate it. A
-backup is not accepted as recoverable merely because its scheduled upload succeeded.
+The recovery set includes identity and commerce/control databases, every customer database,
+and the retained fleet release/configuration archive. Customer databases alone cannot
+reconstruct accounts, passkeys, billing or routing. Restore checks empty destination storage
+and reconciles database roles before admitting application traffic. Actor execution remains
+paused where external effects need reconciliation. The separate maintenance runbooks own
+provider setup, workflow dispatch and live infrastructure drills.
 
 ## Continuous proof
 
@@ -171,14 +107,10 @@ access, escrow, DNS, infrastructure creation, and operator timing.
 ## Retained release archive
 
 Hosted platform rollout retains release images and private configuration before
-customer activation and includes them in encrypted backups. Snapshots produced by
-older deployments contain database dumps without an independent image archive.
-The archive tool can also be used independently as described below. The fleet recovery
-controller is implemented but its full host fixture remains an outstanding release gate;
-do not promote this lifecycle change until that proof passes.
+customer activation and includes them in encrypted backups. The archive tool can also be used independently as described below. Recovery requires the current archive contract, including the application material created by maintenance. There is no older-installation conversion path.
 
 On a Docker host with Python 3, prepare a private bundle containing `release.json`,
-`.env` (mode `0600`), `docker-compose.yml`, `db-init.sh`, and `Caddyfile`. The release
+`.env` (mode `0600`), `docker-compose.yml`, `db-init.sh`, `Caddyfile`, and the private `application-secrets.json` produced by maintenance. The release
 manifest must come from the verified release workflow, and every Compose image must
 match one of its immutable digests. After pulling those images, retain them with:
 
@@ -227,8 +159,7 @@ original files are removed. Neither fixture replaces the fresh-cloud-host drill.
 
 The host lifecycle controller invokes customer movement after preparing and backing
 up a new runtime. The same operator command supports controlled diagnostic use.
-The public installer and fresh-host fleet recovery proof remain incomplete;
-do not interpret a database fixture proof as a completed cloud rollout. The
+Cloud installation is owned by the maintenance repository. A local database fixture is not a completed cloud rollout. The
 [lifecycle specification](../customer-release-lifecycle.md) lists the remaining gates.
 
 Run on Linux from a clean checkout of the destination release, or with its installed

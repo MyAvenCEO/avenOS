@@ -33,9 +33,9 @@ and [Tauri's Android signing requirements](https://v2.tauri.app/distribute/sign/
 ## Publish a test download
 
 1. Complete the [release gate](build-and-test.md#full-stack-e2e-release-gate) and
-   promote the reviewed change to protected `next`, then to `prod` when appropriate.
-2. Open **Actions → Client installers → Run workflow**. Choose `next` for
-   `api.next.aven.ceo` or `prod` for `api.aven.ceo`. Both use `aven.id`.
+   merge the reviewed change to protected `main`.
+2. Open **Actions → Client installers → Run workflow**. Run from `main` and choose the `next` destination for
+   `api.next.aven.ceo` or `production` for `api.aven.ceo`. Both use `aven.id`.
 3. Wait for both desktop jobs and Android. The publish job refuses a missing,
    stale, unexpected, or incorrectly formatted installer. It publishes only
    after all build jobs and package checks pass.

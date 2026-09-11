@@ -168,8 +168,6 @@ jobs:
           bun run --cwd services/platform-provisioner test
           bun run --cwd services/intent-service test
           bun run --cwd services/actor-runner test
-          bun run test:infra
-          bun run test:bootstrap
 
   lifecycle:
     runs-on: ubuntu-latest

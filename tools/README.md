@@ -2,7 +2,7 @@
 
 Repository-maintained restricted operator tools live here. The authoritative
 procedures and required access are in
-[Maintain an installation](../docs/operations/maintenance.md).
+[Maintain an installation](https://github.com/MyAvenCEO/avenOS-maintenance-tools/blob/main/docs/operations/maintenance.md).
 
 | Tool | Purpose | Entry point |
 | --- | --- | --- |
