@@ -54,6 +54,10 @@ bun run lint
 
 Use `bun run lint:fix` only when you intend to accept its edits.
 
+CI validates commit messages on pull requests and pushes to `main`. Before a squash
+merge, also pipe the planned merge message into `bunx commitlint`; GitHub's final
+merge message can differ from the individual commits checked on the pull request.
+
 ## Build production artifacts
 
 Build the web services:
