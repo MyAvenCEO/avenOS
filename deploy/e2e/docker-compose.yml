@@ -164,7 +164,7 @@ services:
       DATABASE_URL: postgres://aven_checkout_http:checkout-runtime-e2e@platform-database/aven_checkout
       EMAIL_QUEUE_ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
       ALLOW_FAKE_PAYMENTS: "true"
-      POLAR_WEBHOOK_SECRET: polar-webhook-e2e
+      POLAR_WEBHOOK_SECRET: whsec_c3ludGhldGljLXdlYmhvb2sta2V5LWZvci10ZXN0cyEh
     networks: [platform-private, public-test]
 
   api-migrate:
@@ -227,7 +227,7 @@ services:
       DOWNLOAD_URL: https://downloads.example.test/aven
       EMAIL_QUEUE_ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
       ALLOW_FAKE_PAYMENTS: "true"
-      POLAR_WEBHOOK_SECRET: polar-webhook-e2e
+      POLAR_WEBHOOK_SECRET: whsec_c3ludGhldGljLXdlYmhvb2sta2V5LWZvci10ZXN0cyEh
       POW_DIFFICULTY_BITS: "8"
     ports:
       - 127.0.0.1:${E2E_CHECKOUT_HOST_PORT:-13200}:13200

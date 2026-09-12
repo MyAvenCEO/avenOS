@@ -21,8 +21,8 @@ function fixtures() {
 }
 
 describe('client release contract', () => {
-	test('protected branches select one platform but always the shared identity', () => {
-		const prod = clientReleasePlan('refs/heads/prod', sha, '17', '2026-09-07')
+	test('protected main selects an explicit client destination but always the shared identity', () => {
+		const prod = clientReleasePlan('refs/heads/main', sha, '17', '2026-09-07', 'production')
 		expect(prod).toMatchObject({
 			version,
 			source: sha,
@@ -31,14 +31,20 @@ describe('client release contract', () => {
 			identityOrigin: 'https://aven.id',
 			androidVersionCode: 30_000_017
 		})
-		expect(clientReleasePlan('refs/heads/next', sha, '18', '2026-09-07').apiOrigin).toBe(
+		expect(clientReleasePlan('refs/heads/main', sha, '18', '2026-09-07', 'next').apiOrigin).toBe(
 			'https://api.next.aven.ceo'
 		)
-		for (const ref of ['refs/heads/main', 'refs/heads/feature', 'refs/tags/v1', 'prod'])
-			expect(() => clientReleasePlan(ref, sha, '17', '2026-09-07')).toThrow('protected')
+		for (const ref of [
+			'refs/heads/next',
+			'refs/heads/prod',
+			'refs/heads/feature',
+			'refs/tags/v1',
+			'prod'
+		])
+			expect(() => clientReleasePlan(ref, sha, '17', '2026-09-07', 'next')).toThrow('protected')
 		for (const run of ['0', '../escape', '1\nanything', '3000000000'])
-			expect(() => clientReleasePlan('refs/heads/prod', sha, run, '2026-09-07')).toThrow()
-		expect(() => clientReleasePlan('refs/heads/prod', 'main', '17', '2026-09-07')).toThrow()
+			expect(() => clientReleasePlan('refs/heads/main', sha, run, '2026-09-07', 'next')).toThrow()
+		expect(() => clientReleasePlan('refs/heads/main', 'main', '17', '2026-09-07', 'next')).toThrow()
 	})
 	test('all four native installers are mandatory; source-only, stale, and extra files fail', () => {
 		const files = fixtures()

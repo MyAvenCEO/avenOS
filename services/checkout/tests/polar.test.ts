@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 // The Polar boundary at the unit seam: the factory picks the provider by
 // config, Standard-Webhooks signatures round-trip (and tampering is caught),
 // and the raw-wire parsers normalize Polar envelopes into the shapes the
@@ -17,7 +18,7 @@ import {
 import { productBenefitSpecs, productSeeds } from '../src/lib/server/billing/seeds.js'
 import { testConfig } from './helpers.js'
 
-const SECRET = 'whsec_test_secret'
+const SECRET = 'whsec_c3ludGhldGljLXdlYmhvb2sta2V5LWZvci10ZXN0cyEh'
 
 function thrownBy(fn: () => unknown): unknown {
 	try {
@@ -125,6 +126,25 @@ describe('standard webhooks', () => {
 		expect(() => assertWebhookSignature(body, headers, SECRET)).not.toThrow()
 	})
 
+	it('accepts an independently signed Standard Webhooks payload and rejects the retired Polar encoding', () => {
+		const body = '{"type":"order.paid","data":{"id":"independent-fixture"}}'
+		const timestamp = String(Math.floor(Date.now() / 1000)),
+			id = 'msg_fixture'
+		const payload = `${id}.${timestamp}.${body}`
+		const hmac = (key: Buffer) => createHmac('sha256', key).update(payload).digest('base64')
+		const headers = {
+			'webhook-id': id,
+			'webhook-timestamp': timestamp,
+			'webhook-signature': `v1,${hmac(Buffer.from(SECRET.slice(6), 'base64'))}`
+		}
+		expect(() => assertWebhookSignature(body, headers, SECRET)).not.toThrow()
+		headers['webhook-signature'] = `v1,${hmac(Buffer.from(SECRET, 'utf8'))}`
+		expect(thrownBy(() => assertWebhookSignature(body, headers, SECRET))).toMatchObject({
+			status: 403,
+			code: 'WEBHOOK_SIGNATURE_INVALID'
+		})
+	})
+
 	it('rejects a tampered body with 403', () => {
 		const body = JSON.stringify({ type: 'order.paid', data: { id: 'ord_1' } })
 		const headers = signWebhookHeaders(body, SECRET)
@@ -136,7 +156,11 @@ describe('standard webhooks', () => {
 	it('rejects a wrong secret and missing headers with 403', () => {
 		const body = '{}'
 		const headers = signWebhookHeaders(body, SECRET)
-		expect(thrownBy(() => assertWebhookSignature(body, headers, 'another-secret'))).toMatchObject({
+		expect(
+			thrownBy(() =>
+				assertWebhookSignature(body, headers, 'whsec_' + Buffer.alloc(32, 1).toString('base64'))
+			)
+		).toMatchObject({
 			status: 403,
 			code: 'WEBHOOK_SIGNATURE_INVALID'
 		})

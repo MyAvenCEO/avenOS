@@ -5,3 +5,13 @@
 !deploy/operations/restore.sh
 !deploy/operations/entrypoint.sh
 !deploy/operations/healthcheck.sh
+
+!deploy/identity/
+!deploy/identity/*
+!deploy/platform/
+!deploy/platform/*
+!deploy/runtime/
+!deploy/runtime/*.py
+!deploy/runtime/db-init.sh
+!deploy/release/
+!deploy/release/archive.py

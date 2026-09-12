@@ -901,7 +901,7 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 	})
 	const ignoredWebhookHeaders = signWebhookHeaders(
 		ignoredWebhookBody,
-		'polar-webhook-e2e',
+		'whsec_c3ludGhldGljLXdlYmhvb2sta2V5LWZvci10ZXN0cyEh',
 		ignoredDeliveryId
 	)
 	for (let attempt = 0; attempt < 2; attempt += 1) {

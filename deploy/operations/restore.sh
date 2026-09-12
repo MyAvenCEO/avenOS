@@ -55,6 +55,12 @@ expected=$(cat "$manifest_dir/manifest.sha256")
 actual=$(sha256sum "$manifest" | cut -d' ' -f1)
 [ "$expected" = "$actual" ] || { echo 'manifest integrity check failed' >&2; exit 1; }
 
+if [ -n "${RESTORE_RELEASE_ID:-}" ]; then
+  jq -e --arg release "$RESTORE_RELEASE_ID" '.release == $release' "$manifest" >/dev/null || {
+    echo 'backup requires its exact verified application release' >&2; exit 1;
+  }
+fi
+
 selection_digest=$(jq -r '.releaseSelectionSha256 // empty' "$manifest")
 if [ -n "$selection_digest" ]; then
   selection="$manifest_dir/release-selection.json"

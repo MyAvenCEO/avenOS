@@ -20,3 +20,12 @@ for mutation in ('missing-database', 'wrong-environment', 'older-generation', 'n
     except ValueError: pass
     else: raise AssertionError('unsafe recovery admitted: '+mutation)
 print('Recovery admission proof passed: missing, mismatched, newer, older and held customer copies remain closed.')
+
+configs={'primary':{'services':{'backup':{'environment':{'RESTIC_REPOSITORY':'s3:https://old/next/platform','RESTIC_PASSWORD':'old','AWS_ACCESS_KEY_ID':'old','AWS_SECRET_ACCESS_KEY':'old','AWS_REGION':'old','AWS_DEFAULT_REGION':'old'}},'api':{'environment':{'LLM_GATEWAY_CREDENTIALS_JSON':'old-provider','DATABASE_URL':'keep-data-key'}}}}}
+fresh=copy.deepcopy(configs['primary'])
+fresh['services']['backup']['environment'].update(RESTIC_REPOSITORY='s3:https://new/next/platform', RESTIC_PASSWORD='new', AWS_ACCESS_KEY_ID='new', AWS_SECRET_ACCESS_KEY='new', AWS_REGION='new', AWS_DEFAULT_REGION='new')
+fresh['services']['api']['environment'].update(LLM_GATEWAY_CREDENTIALS_JSON='new-provider', DATABASE_URL='must-not-replace')
+recover.refresh_external_settings(configs,fresh)
+assert configs['primary']['services']['backup']['environment']['RESTIC_REPOSITORY']=='s3:https://new/next/platform'
+assert configs['primary']['services']['api']['environment']=={'LLM_GATEWAY_CREDENTIALS_JSON':'new-provider','DATABASE_URL':'keep-data-key'}
+print('Recovery refreshes external credentials while preserving database material.')

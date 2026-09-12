@@ -7,7 +7,8 @@ const plan = clientReleasePlan(
 	process.env.GITHUB_REF ?? '',
 	process.env.GITHUB_SHA ?? '',
 	process.env.GITHUB_RUN_NUMBER ?? '',
-	process.env.CLIENT_RELEASE_DATE ?? ''
+	process.env.CLIENT_RELEASE_DATE ?? '',
+	process.env.CLIENT_RELEASE_TARGET ?? ''
 )
 const directory = path.resolve(import.meta.dir, '../dist/client-release')
 const assets = verifyClientAssets(

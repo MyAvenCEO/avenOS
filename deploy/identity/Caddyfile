@@ -13,7 +13,7 @@
 	}
 	@untrusted_internal {
 		path /internal/*
-		not remote_ip {$NEXT_PLATFORM_PUBLIC_IPV4} {$NEXT_PLATFORM_PUBLIC_IPV6} {$PRODUCTION_PLATFORM_PUBLIC_IPV4} {$PRODUCTION_PLATFORM_PUBLIC_IPV6}
+		not remote_ip {$IDENTITY_PLATFORM_IPS}
 	}
 	respond @untrusted_internal 404
 	request_body {

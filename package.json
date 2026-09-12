@@ -5,8 +5,7 @@
 	"workspaces": [
 		"libs/*",
 		"app",
-		"services/*",
-		"infrastructure/*"
+		"services/*"
 	],
 	"scripts": {
 		"customer:move": "bun services/platform-provisioner/src/move-cli.ts",
@@ -14,7 +13,6 @@
 		"test:customer-runtime": "bun deploy/e2e/customer-runtime-journey.ts",
 		"test:release-archive": "python3 deploy/release/archive-test.py",
 		"test:runtime-install": "python3 deploy/runtime/test-start.py",
-		"release:promote": "bun scripts/promote-release.ts",
 		"check:secrets": "bash scripts/security-scan.sh",
 		"check:rust-advisories": "bun scripts/rust-advisories.ts",
 		"dev:app": "bun --env-file=.env run --cwd app dev",
@@ -40,7 +38,6 @@
 		"next-version": "bun ./scripts/next-version.ts",
 		"set-version": "bun ./scripts/set-version.ts",
 		"changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
-		"release:next": "bun ./scripts/release-next.ts",
 		"check": "bun run --cwd app check",
 		"build:api": "bun run --cwd services/aven-api build",
 		"build:identity": "bun run --cwd services/identity build",
@@ -61,12 +58,6 @@
 		"email:preview": "bun run --cwd services/checkout email:preview",
 		"email:compile": "bun run --cwd services/checkout email:compile",
 		"email:check": "bun run --cwd services/checkout email:check",
-		"test:infra": "bun run --cwd infrastructure/platform test",
-		"test:bootstrap": "bun run --cwd infrastructure/bootstrap test",
-		"bootstrap:deployment:guided": "bun ./scripts/deployment-bootstrap-guided.ts",
-		"bootstrap:deployment": "bun ./scripts/deployment-bootstrap.ts",
-		"bootstrap:deployment:preflight": "bun ./scripts/deployment-credentials-preflight.ts",
-		"models:redpill-phala": "bun ./scripts/redpill-model-catalog.ts",
 		"test:deploy": "bash deploy/validate.sh",
 		"test:proxy-boundary": "bun deploy/e2e/proxy-address.ts",
 		"test:recovery": "bash deploy/operations/test-recovery.sh",

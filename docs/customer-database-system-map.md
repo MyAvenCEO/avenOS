@@ -183,10 +183,9 @@ customers individually. Interrupted operations resume from their journal; prior
 runtimes and credentials remain intact. Shared control services still reside on the
 platform host. New customer placement uses a serialized directory default and a
 release-bound immutable component catalog; changing the facade binary does not change
-that default. The first pre-movement transition requires a quiesced, encrypted backup
-and identical customer schema catalogs.
+that default. Installation starts with empty storage; unregistered older installations are rejected.
 
-The host-controller fixture proves quiesced adoption, two consecutive customer
+The host-controller fixture proves fresh installation, two consecutive customer
 rollouts, retry without replacing the selected database, and recovery after removing
 all platform databases and release configuration. Only encrypted backup repositories
 and the independent identity fixture survive. Recovery restores the retained runtime
@@ -236,7 +235,7 @@ proves exact encrypted fresh-target restore.
 ## Current deliberate gaps
 
 - Shared identity, `next`, and production now have isolated Pulumi stacks and
-  deployment targets; see [Deployment targets](operations/deployment.md#deployment-targets).
+  deployment targets; see [Deployment targets](operations/deployment.md#installation-channels).
 - Diagnostic database roles are issued manually. The SSH tunnel itself is already
   restricted, but automatic short-lived read-only role issuance and reaping remain to
   be built.

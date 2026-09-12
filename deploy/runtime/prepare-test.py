@@ -15,8 +15,10 @@ def fixture(root):
     bundle = root / 'source'
     bundle.mkdir(mode=0o700)
     compose = (repository / 'deploy/platform/docker-compose.yml').read_text()
+    # Optional settings must exercise their production defaults. In particular,
+    # synthetic recovery overrides would point restore at a nonexistent repository.
     values = {key: hashlib.sha256(key.encode()).hexdigest()
-              for key in re.findall(r'\$\{([A-Z_][A-Z0-9_]+)', compose)}
+              for key in re.findall(r'\$\{([A-Z_][A-Z0-9_]+):\?', compose)}
     for key in values:
         if key.endswith('_IMAGE'):
             values[key] = f'fixture/{key.lower()}@sha256:' + 'a' * 64
@@ -49,6 +51,14 @@ def main():
     with tempfile.TemporaryDirectory(prefix='aven-runtime-preparation-') as temporary:
         root = Path(temporary)
         bundle, original = fixture(root)
+        source = json.loads(subprocess.check_output(
+            ['docker', 'compose', '--project-directory', str(bundle), '--profile', '*', 'config', '--format', 'json']))
+        backup = source['services']['backup']['environment']
+        restore = source['services']['restore']['environment']
+        for key in ('RESTIC_REPOSITORY', 'RESTIC_PASSWORD', 'AWS_ACCESS_KEY_ID',
+                    'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'AWS_DEFAULT_REGION'):
+            assert restore[key] == backup[key]
+        assert restore['RESTORE_SNAPSHOT'] == 'latest'
         inputs = {file.name: file.read_bytes() for file in bundle.iterdir()}
         destination = root / 'green'
         arguments = (bundle, destination, 'green', 'next', 15432, 18088, root / 'data', 'fixture-control')

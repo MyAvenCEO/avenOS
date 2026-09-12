@@ -110,14 +110,15 @@ services:
       PGHOST: database
       PGUSER: postgres
       PGPASSWORD: ${IDENTITY_POSTGRES_PASSWORD:?required}
-      RESTIC_REPOSITORY: ${BACKUP_RESTIC_REPOSITORY:?required}
-      RESTIC_PASSWORD: ${BACKUP_RESTIC_PASSWORD:?required}
-      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:?required}
-      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:?required}
-      AWS_REGION: ${BACKUP_S3_REGION:?required}
-      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION:?required}
+      RESTIC_REPOSITORY: ${RESTORE_REPOSITORY:-${BACKUP_RESTIC_REPOSITORY:?required}}
+      RESTIC_PASSWORD: ${RESTORE_PASSWORD:-${BACKUP_RESTIC_PASSWORD:?required}}
+      AWS_ACCESS_KEY_ID: ${RESTORE_ACCESS_KEY:-${BACKUP_S3_ACCESS_KEY_ID:?required}}
+      AWS_SECRET_ACCESS_KEY: ${RESTORE_SECRET_KEY:-${BACKUP_S3_SECRET_ACCESS_KEY:?required}}
+      AWS_REGION: ${RESTORE_REGION:-${BACKUP_S3_REGION:?required}}
+      AWS_DEFAULT_REGION: ${RESTORE_REGION:-${BACKUP_S3_REGION:?required}}
       BACKUP_ENVIRONMENT: ${BACKUP_ENVIRONMENT:?required}
       RESTORE_CONFIRMATION: fresh-target-only
+      RESTORE_SNAPSHOT: ${RESTORE_SNAPSHOT:-latest}
       XDG_CACHE_HOME: /tmp/restic-cache
     volumes:
       - /var/lib/aven/backups:/var/lib/aven-backups
@@ -142,15 +143,16 @@ services:
       ORIGIN: https://${IDENTITY_DOMAIN:-aven.id}
       PUBLIC_BASE_URL: https://${IDENTITY_DOMAIN:-aven.id}
       WEBAUTHN_RP_ID: ${IDENTITY_DOMAIN:-aven.id}
-      TRUSTED_WEB_ORIGINS: ${TRUSTED_WEB_ORIGINS:?required}
+      TRUSTED_WEB_ORIGINS: ${TRUSTED_WEB_ORIGINS-}
       ANDROID_APP_CERT_SHA256_FINGERPRINTS: ${ANDROID_APP_CERT_SHA256_FINGERPRINTS:-}
       DATABASE_URL: postgres://aven_identity_auth:${IDENTITY_AUTH_PASSWORD}@database/aven_identity
       ACCOUNTS_DATABASE_URL: postgres://aven_identity_accounts:${IDENTITY_ACCOUNTS_PASSWORD}@database/aven_identity
       AUTHORIZATION_DATABASE_URL: postgres://aven_identity_authorization:${IDENTITY_AUTHORIZATION_PASSWORD}@database/aven_identity
       MIGRATOR_DATABASE_URL: postgres://aven_identity_migrator:${IDENTITY_MIGRATOR_PASSWORD}@database/aven_identity
       BETTER_AUTH_SECRET: ${IDENTITY_BETTER_AUTH_SECRET:?required}
-      IDENTITY_PROVISIONING_SECRETS: ${IDENTITY_PROVISIONING_SECRETS:?required}
-      IDENTITY_MAIL_ORIGINS: ${IDENTITY_MAIL_ORIGINS:?required}
+      IDENTITY_PROVISIONING_SECRETS: ${IDENTITY_PROVISIONING_SECRETS?required}
+      IDENTITY_ALLOW_NO_PLATFORMS: ${IDENTITY_ALLOW_NO_PLATFORMS:-false}
+      IDENTITY_MAIL_ORIGINS: ${IDENTITY_MAIL_ORIGINS-}
       REQUIRE_PASSKEY_PRF: "false"
     networks: [identity-private]
     security_opt: [no-new-privileges:true]
@@ -186,10 +188,7 @@ services:
         condition: service_healthy
     environment:
       IDENTITY_DOMAIN: ${IDENTITY_DOMAIN:-aven.id}
-      NEXT_PLATFORM_PUBLIC_IPV4: ${NEXT_PLATFORM_PUBLIC_IPV4:?required}
-      NEXT_PLATFORM_PUBLIC_IPV6: ${NEXT_PLATFORM_PUBLIC_IPV6:?required}
-      PRODUCTION_PLATFORM_PUBLIC_IPV4: ${PRODUCTION_PLATFORM_PUBLIC_IPV4:?required}
-      PRODUCTION_PLATFORM_PUBLIC_IPV6: ${PRODUCTION_PLATFORM_PUBLIC_IPV6:?required}
+      IDENTITY_PLATFORM_IPS: ${IDENTITY_PLATFORM_IPS-}
       ACME_EMAIL: ${ACME_EMAIL:?required}
     ports:
       - 80:80

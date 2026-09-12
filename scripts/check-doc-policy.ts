@@ -14,10 +14,7 @@ const authoritative = [
 	'docs/operations/backup-and-recovery.md',
 	'docs/operations/build-and-test.md',
 	'docs/operations/deployment.md',
-	'docs/operations/initial-provisioning.md',
-	'docs/operations/incident-response.md',
 	'docs/operations/local-stack.md',
-	'docs/operations/maintenance.md',
 	'docs/operations/security-controls.md',
 	'docs/operations/startup-and-readiness.md',
 	'docs/operations/workstation-setup.md'
@@ -59,14 +56,7 @@ for (const file of commandDocs) {
 	}
 }
 
-const platformWorkflows = [
-	'.github/workflows/platform-infrastructure.yml',
-	'.github/workflows/platform-deploy.yml',
-	'.github/workflows/platform-deploy-target.yml',
-	'.github/workflows/platform-release.yml',
-	'.github/workflows/platform-operations.yml',
-	'.github/workflows/platform-observe.yml'
-]
+const platformWorkflows = ['.github/workflows/platform-release.yml']
 const workflowSource = platformWorkflows.map(read).join('\n')
 const accessGuide = read('docs/operations/access-and-secrets.md')
 const settings = new Set<string>()
@@ -75,21 +65,6 @@ for (const match of workflowSource.matchAll(/\b(?:secrets|vars)\.([A-Z][A-Z0-9_]
 }
 
 const deploymentGuide = read('docs/operations/deployment.md')
-for (const required of [
-	'organization/aven-platform/identity',
-	'organization/aven-platform/next',
-	'organization/aven-platform/production',
-	'api.next.aven.ceo',
-	'portal.next.aven.ceo',
-	'next.aven.ceo',
-	'api.aven.ceo',
-	'portal.aven.ceo',
-	'aven.ceo',
-	'aven.id'
-]) {
-	if (!deploymentGuide.includes(required))
-		failures.push(`deployment guide must document environment contract ${required}`)
-}
 for (const stale of [
 	'Production is not an independent deployment target',
 	'Production is not yet an isolated supported deployment target',
@@ -125,10 +100,7 @@ for (const required of [
 	'docs/operations/local-stack.md',
 	'docs/operations/build-and-test.md',
 	'docs/operations/deployment.md',
-	'docs/operations/initial-provisioning.md',
-	'docs/operations/maintenance.md',
 	'docs/operations/backup-and-recovery.md',
-	'docs/operations/incident-response.md',
 	'docs/writing.md'
 ]) {
 	if (!rootReadme.includes(required)) failures.push(`README.md must link ${required}`)

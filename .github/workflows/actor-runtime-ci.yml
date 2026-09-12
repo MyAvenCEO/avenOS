@@ -16,7 +16,7 @@ on:
       - .github/actions/bun-install/action.yml
       - .github/workflows/actor-runtime-ci.yml
   push:
-    branches: [main, next]
+    branches: [main]
     paths:
       - app/**
       - libs/aven-actors/**

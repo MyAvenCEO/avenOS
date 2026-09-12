@@ -3,6 +3,7 @@
 import argparse
 import copy
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -49,6 +50,47 @@ def validate_placement(customers, identities, runtime_ids):
         if (not identity or identity['environment_id'] != customer['id']
                 or int(identity['routing_generation']) != int(customer['routing_generation'])):
             raise ValueError('customer database snapshot differs from the restored directory generation')
+
+
+
+def refresh_external_settings(configurations, source_config):
+    """Refresh provider credentials and destination backups without replacing data keys."""
+    fresh = source_config['services']
+    old = configurations['primary']['services']
+    old_repository = old['backup']['environment']['RESTIC_REPOSITORY']
+    new_repository = fresh['backup']['environment']['RESTIC_REPOSITORY']
+    old_base, _, old_leaf = old_repository.rpartition('/')
+    new_base, _, new_leaf = new_repository.rpartition('/')
+    if not old_leaf or old_leaf != new_leaf:
+        raise ValueError('invalid platform backup repository')
+    external = {'POLAR_API_KEY', 'POLAR_WEBHOOK_SECRET', 'POLAR_ORGANIZATION_ID',
+                'SMTP_URL', 'SMTP_FROM', 'SMTP_REPLY_TO', 'LLM_GATEWAY_CREDENTIALS_JSON',
+                'LLM_GATEWAY_MODELS_JSON', 'IDENTITY_PROVISIONING_SECRET',
+                'PLATFORM_PUBLIC_IPV4', 'ACME_EMAIL', 'DOWNLOAD_URL'}
+    for services in (config['services'] for config in configurations.values()):
+        for name, service in services.items():
+            # Generation prefixes are irrelevant to service-specific external credentials.
+            template = next((fresh[k] for k in sorted(fresh, key=len, reverse=True)
+                             if name == k or name.endswith('-' + k)), None)
+            if template:
+                for key in external & service.get('environment', {}).keys():
+                    if key in template.get('environment', {}):
+                        service['environment'][key] = template['environment'][key]
+            if name == 'backup' or name.endswith('-backup'):
+                environment = service['environment']
+                original = environment['RESTIC_REPOSITORY']
+                if not original.startswith(old_base + '/'):
+                    raise ValueError('runtime backup is outside its installation repository')
+                environment['RESTIC_REPOSITORY'] = new_base + original[len(old_base):]
+                for key in ('RESTIC_PASSWORD', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'AWS_DEFAULT_REGION'):
+                    environment[key] = fresh['backup']['environment'][key]
+
+        for name, service in services.items():
+            if name == 'restore' or name.endswith('-restore'):
+                backup = services[name[:-7]+'backup' if name != 'restore' else 'backup']['environment']
+                for key in ('RESTIC_REPOSITORY', 'RESTIC_PASSWORD', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'AWS_DEFAULT_REGION'):
+                    service['environment'][key] = backup[key]
+                service['environment']['RESTORE_SNAPSHOT'] = 'latest'
 
 
 def recover(source, platform, volume, target, snapshot='latest'):
@@ -142,11 +184,21 @@ def recover(source, platform, volume, target, snapshot='latest'):
                         raise ValueError('fleet bind mount is outside the retained installation')
         compose_by_id = {}
         restored_identities = {}
+        source_restore = source_config['services']['restore']['environment']
+        old_base = configurations['primary']['services']['restore']['environment']['RESTIC_REPOSITORY'].rpartition('/')[0]
+        source_base = source_restore['RESTIC_REPOSITORY'].rpartition('/')[0]
         for entry in runtimes:
             runtime_id = entry['movement']['id']
             prefix = '' if runtime_id == 'primary' else runtime_id+'-'
             bundle = Path(entry['bundle'])
             config = configurations[runtime_id]
+            restore_environment = config['services'][prefix+'restore']['environment']
+            original = restore_environment['RESTIC_REPOSITORY']
+            if not original.startswith(old_base + '/'):
+                raise ValueError('runtime restore source is outside the recovery set')
+            restore_environment['RESTIC_REPOSITORY'] = source_base + original[len(old_base):]
+            for key in ('RESTIC_PASSWORD', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'AWS_DEFAULT_REGION'):
+                restore_environment[key] = source_restore[key]
             storage = volume if runtime_id == 'primary' else volume / 'runtimes' / runtime_id
             start.directory(storage / 'postgres', 70)
             start.directory(storage / 'backups', 65532)
@@ -184,6 +236,18 @@ def recover(source, platform, volume, target, snapshot='latest'):
         default = sql(control, 'database', 'aven_api', 'SELECT runtime_id FROM customer_runtime_defaults WHERE singleton')
         if default not in configurations:
             raise ValueError('default runtime is absent from the recovery archive')
+        refresh_external_settings(configurations, source_config)
+        for entry in runtimes:
+            runtime_id = entry['movement']['id']
+            bundle = Path(entry['bundle'])
+            rollout.atomic(bundle / 'docker-compose.yml', configurations[runtime_id])
+            if runtime_id != 'primary':
+                preparation = json.loads(archive.private_file(bundle / 'preparation.json'))
+                preparation['outputs']['docker-compose.yml'] = hashlib.sha256(archive.private_file(bundle / 'docker-compose.yml')).hexdigest()
+                rollout.atomic(bundle / 'preparation.json', preparation)
+                fleet['bundles'][runtime_id] = {name: archive.private_file(bundle / name).decode() for name in (*prepare.OUTPUTS, 'preparation.json')}
+            compose_by_id[runtime_id] = local_compose(bundle, configurations[runtime_id], images)
+        rollout.atomic(platform / 'fleet.json', fleet)
         host.phase('reconcile restored credentials and customer admission')
         rollout.atomic(lifecycle / 'registry.json', registry)
         operator = rollout.operator_config(registry, volume / 'customer-movements')

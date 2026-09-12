@@ -63,7 +63,10 @@ export const serverConfigSchema = z
 		POLAR_API_KEY: z.string().default(''),
 		POLAR_SERVER: z.enum(['sandbox', 'production']).default('sandbox'),
 		POLAR_ORGANIZATION_ID: z.string().default(''),
-		POLAR_WEBHOOK_SECRET: z.string().min(8).default('dev-fake-webhook-secret')
+		POLAR_WEBHOOK_SECRET: z
+			.string()
+			.min(8)
+			.default('whsec_c3ludGhldGljLXdlYmhvb2sta2V5LWZvci10ZXN0cyEh')
 	})
 	.superRefine((config, context) => {
 		const publicUrl = new URL(config.PUBLIC_BASE_URL)
@@ -112,7 +115,10 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ServerConfi
 		throw new Error('POLAR_API_KEY is required.')
 	if (config.NODE_ENV === 'production' && !config.FACADE_BEARER_TOKEN)
 		throw new Error('FACADE_BEARER_TOKEN is required.')
-	if (config.POLAR_API_KEY && config.POLAR_WEBHOOK_SECRET === 'dev-fake-webhook-secret')
+	if (
+		config.POLAR_API_KEY &&
+		config.POLAR_WEBHOOK_SECRET === 'whsec_c3ludGhldGljLXdlYmhvb2sta2V5LWZvci10ZXN0cyEh'
+	)
 		throw new Error('POLAR_WEBHOOK_SECRET is required.')
 	if (config.NAME_PRICE_EUR !== plan('aven-name').eurPrice)
 		throw new Error('NAME_PRICE_EUR must match the avenNAME price in @myavenceo/aven-ceo/pricing.')

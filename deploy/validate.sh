@@ -10,39 +10,28 @@ sh -n \
   "$root/deploy/local/down.sh" \
   "$root/deploy/local/account.sh" \
   "$root/deploy/local/app.sh" \
-  "$root/tools/db-tunnel/open.sh" \
-  "$root/tools/stack-observe/run.sh" \
   "$root/deploy/operations/backup.sh" \
   "$root/deploy/operations/restore.sh" \
   "$root/deploy/operations/entrypoint.sh" \
   "$root/deploy/operations/healthcheck.sh"
 bash -n \
   "$root/deploy/e2e/runtime-install.sh" \
-  "$root/deploy/release/deploy.sh" \
-  "$root/deploy/release/environment.sh" \
-  "$root/deploy/release/ssh-staging.sh" \
-  "$root/deploy/release/test-deploy.sh" \
   "$root/deploy/validate.sh" \
   "$root/deploy/operations/test-recovery.sh"
-bash "$root/deploy/release/test-deploy.sh"
 sh -n "$root/deploy/runtime/db-init.sh"
 python3 "$root/deploy/runtime/prepare-test.py"
 python3 "$root/deploy/runtime/rollout-test.py"
 python3 "$root/deploy/runtime/host-test.py"
-python3 "$root/deploy/runtime/transition-test.py"
+python3 "$root/deploy/runtime/identity-test.py"
 python3 "$root/deploy/runtime/recover-test.py"
 python3 "$root/deploy/e2e/test-runtime-install.py"
 grep -Fq 'test:runtime-install' "$root/deploy/e2e/run.sh"
 bun test "$root/deploy/local/llm-catalog.test.ts" "$root/deploy/e2e/llm-catalog.test.ts"
 
-grep -Fq "if: inputs.target != 'identity'" "$root/.github/workflows/platform-deploy-target.yml"
 bun "$root/app/node_modules/typescript/bin/tsc" --noEmit --skipLibCheck --module esnext --moduleResolution bundler --target es2023 --typeRoots "$root/app/node_modules/@types" --types bun "$root/deploy/e2e/customer-runtime-journey.ts" "$root/scripts/lib/platform-verification.test.ts"
 bun test "$root/scripts/lib/platform-verification.test.ts" "$root/scripts/lib/platform-release.test.ts" "$root/deploy/e2e/mail-topology.test.ts"
-bun test "$root/scripts/lib/release-promotion.test.ts"
-bun "$root/app/node_modules/typescript/bin/tsc" --noEmit --skipLibCheck --module esnext --moduleResolution bundler --target es2023 --typeRoots "$root/app/node_modules/@types" --types bun "$root/scripts/promote-release.ts" "$root/scripts/lib/release-promotion.test.ts"
 bun test "$root/scripts/lib/client-release.test.ts"
 bun "$root/app/node_modules/typescript/bin/tsc" --noEmit --skipLibCheck --module esnext --moduleResolution bundler --target es2023 --typeRoots "$root/app/node_modules/@types" --types bun "$root/scripts/build-client-release.ts" "$root/scripts/client-release-manifest.ts" "$root/scripts/lib/client-release.ts" "$root/scripts/lib/client-release.test.ts" "$root/scripts/smoke-client-linux.ts"
-bun test "$root/scripts/reconcile-deployed-polar-webhook.test.ts"
 for workflow in platform-verification.yml; do
   grep -Fq 'uses: ./.github/actions/setup-platform-test-host' "$root/.github/workflows/$workflow" || {
     echo "$workflow must use the shared native platform test-host setup" >&2
@@ -79,11 +68,6 @@ env \
     --file "$root/deploy/local/docker-compose.yml" \
     config --quiet
 
-source "$root/deploy/release/environment.sh"
-configure_platform_environment next
-[[ "$public_domain $api_domain $checkout_domain" == 'next.aven.ceo api.next.aven.ceo portal.next.aven.ceo' ]]
-configure_platform_environment production
-[[ "$public_domain $api_domain $checkout_domain" == 'aven.ceo api.aven.ceo portal.aven.ceo' ]]
 bun test "$root/deploy/local/llm-catalog.test.ts"
 
 env \
@@ -113,10 +97,7 @@ env \
   IDENTITY_PROVISIONING_SECRETS=01234567890123456789012345678901,abcdefghijklmnopqrstuvwxyz012345 \
   IDENTITY_MAIL_ORIGINS=https://portal.next.aven.ceo,https://portal.aven.ceo \
   TRUSTED_WEB_ORIGINS=https://next.aven.ceo,https://portal.next.aven.ceo,https://aven.ceo,https://portal.aven.ceo \
-  NEXT_PLATFORM_PUBLIC_IPV4=192.0.2.10 \
-  NEXT_PLATFORM_PUBLIC_IPV6=2001:db8::10 \
-  PRODUCTION_PLATFORM_PUBLIC_IPV4=192.0.2.20 \
-  PRODUCTION_PLATFORM_PUBLIC_IPV6=2001:db8::20 \
+  IDENTITY_PLATFORM_IPS='192.0.2.10 2001:db8::10 192.0.2.20 2001:db8::20' \
   ACME_EMAIL=test@example.test \
   BACKUP_RESTIC_REPOSITORY=/tmp/restic/identity \
   BACKUP_RESTIC_PASSWORD=test-backup-password \
@@ -192,10 +173,7 @@ env \
 
 docker run --rm \
   --env IDENTITY_DOMAIN=aven.id \
-  --env NEXT_PLATFORM_PUBLIC_IPV4=192.0.2.10 \
-  --env NEXT_PLATFORM_PUBLIC_IPV6=2001:db8::10 \
-  --env PRODUCTION_PLATFORM_PUBLIC_IPV4=192.0.2.20 \
-  --env PRODUCTION_PLATFORM_PUBLIC_IPV6=2001:db8::20 \
+  --env 'IDENTITY_PLATFORM_IPS=192.0.2.10 2001:db8::10 192.0.2.20 2001:db8::20' \
   --env ACME_EMAIL=test@example.test \
   --volume "$root/deploy/identity/Caddyfile:/etc/caddy/Caddyfile:ro" \
   caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648 caddy validate --config /etc/caddy/Caddyfile
@@ -213,3 +191,5 @@ docker run --rm \
   --env ACME_EMAIL=test@example.test \
   --volume "$root/deploy/platform/Caddyfile:/etc/caddy/Caddyfile:ro" \
   caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648 caddy validate --config /etc/caddy/Caddyfile
+
+bun test scripts/lib/artifact-boundary.test.ts

@@ -39,6 +39,8 @@ def retain_input(source, releases):
     if manifest.get('version') != 1 or not re.fullmatch('[a-f0-9]{40}', manifest.get('sha', '')):
         raise ValueError('verified release manifest required')
     files = {name: archive.private_file(source / name) for name in (*archive.FILES, 'release.json')}
+    if (source / 'application-secrets.json').exists():
+        files['application-secrets.json'] = archive.private_file(source / 'application-secrets.json')
     fingerprint = hashlib.sha256(archive.canonical({name: hashlib.sha256(data).hexdigest()
                                                   for name, data in files.items()})).hexdigest()
     identity = f'r-{manifest["sha"][:12]}-{fingerprint[:8]}'
@@ -117,6 +119,8 @@ def write_platform(platform, config, manifest, source):
         archive.write(pending, data)
         if name != '.env': pending.chmod(0o644)
         pending.replace(platform / name)
+    if (source / 'application-secrets.json').exists():
+        rollout.atomic(platform / 'application-secrets.json', json.loads(archive.private_file(source / 'application-secrets.json')))
     rollout.atomic(platform / 'release.json', manifest)
     recovered_file = platform / 'restored-images.json'
     if recovered_file.exists():
@@ -199,6 +203,8 @@ def deploy(source, platform, volume, target):
         check_capacity(platform, volume, registry_file, {service['image'] for service in rendered['services'].values()})
         baseline_file = lifecycle / 'baseline.json'
         if not baseline_file.exists():
+            if (platform / 'docker-compose.yml').exists():
+                raise ValueError('Installation is unregistered; start with an empty installation.')
             rollout.atomic(baseline_file, {'version': 1, 'target': target, 'candidate': runtime_id, 'complete': False})
         baseline = json.loads(archive.private_file(baseline_file))
         if baseline['target'] != target:
@@ -207,11 +213,6 @@ def deploy(source, platform, volume, target):
             phase('initialize the original runtime')
             if baseline['candidate'] != runtime_id:
                 raise ValueError('finish the interrupted baseline release before selecting another release')
-            if (platform / 'docker-compose.yml').exists() and not registry_file.exists():
-                # The predecessor cannot participate in a migration without execution fencing.
-                # Adoption is a separate, backed-up maintenance transition; never silently replace it.
-                from transition import adopt
-                adopt(platform, candidate, lifecycle, release_archive, target)
             for name, uid in (('postgres', 70), ('backups', 65532)):
                 start.directory(volume / name, uid)
             for name, uid, mode in (('static-sites', 10003, 0o750), ('caddy/data', 0, 0o750),
@@ -267,7 +268,7 @@ def deploy(source, platform, volume, target):
             f'retained:{name}': service['image'] for name, service in updated['services'].items()}}}
         tools_directory = Path(__file__).resolve().parent
         retained_tools = {f'runtime/{name}.py': archive.private_file(tools_directory / f'{name}.py').decode()
-                          for name in ('host', 'initialize', 'prepare', 'rollout', 'start', 'transition', 'recover')}
+                          for name in ('host', 'initialize', 'prepare', 'rollout', 'start', 'recover')}
         retained_tools['runtime/db-init.sh'] = archive.private_file(tools_directory / 'db-init.sh').decode()
         retained_tools['release/archive.py'] = archive.private_file(tools_directory.parent / 'release/archive.py').decode()
         fleet = {'version': 1, 'registry': registry, 'bundles': {}, 'images': [], 'tools': retained_tools}

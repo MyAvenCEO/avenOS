@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 
 FILES = ('.env', 'docker-compose.yml', 'db-init.sh', 'Caddyfile')
-OPTIONAL_FILES = ('route.json', 'movement-runtime.json', 'preparation.json', 'fleet.json')
+OPTIONAL_FILES = ('application-secrets.json', 'route.json', 'movement-runtime.json', 'preparation.json', 'fleet.json')
 
 def digest(path):
     value = hashlib.sha256()

@@ -4,7 +4,7 @@ avenOS is the open-source foundation for an Aven: an AI intended to help one per
 run their life and company while the knowledge, skills, and working history it builds
 remain under that person's control. avenCEO is the product built on this foundation.
 This repository contains the Rust client, portable Actor runtime, service boundaries,
-and deployment automation that make the system inspectable and independently
+and published runtime artifacts that make the system inspectable and independently
 operable.
 
 The [product model](docs/product-model.md) gives precise meanings to Aven, avenCEO,
@@ -172,7 +172,6 @@ bun run test:customer-platform
 Infrastructure, deployment, and recovery have executable tests as well:
 
 ```sh
-bun run test:infra
 bun run test:deploy
 bun run test:recovery
 ```
@@ -195,15 +194,10 @@ deployment has occurred.
 [Build and test](docs/operations/build-and-test.md) lists the complete release gate,
 component commands, platform requirements, and the behavior covered by each test.
 
-Operators preparing a fresh hosted installation start with
-[Initial provisioning](docs/operations/initial-provisioning.md). The resumable
-`bun run bootstrap:deployment:guided` command collects and verifies provider-issued
-credentials, creates isolated state and backup storage, configures GitHub, provisions the
-three hosts, publishes the `aven.id` records through United Domains, then verifies,
-publishes, and deploys the first complete installation. It ends with public readiness or a recoverable
-error. The same saved-generation menu can uninstall a test installation in dependency
-order, including its backups and state, after an exact destructive confirmation. Later
-application and infrastructure updates run through CI.
+Hosted installation and recovery are developed in the separate private
+[maintenance repository](https://github.com/MyAvenCEO/avenOS-maintenance-tools).
+It consumes published application images; this source repository has no cloud deployment
+workflows. Public installer distribution follows verification of the complete journey.
 
 ## Find the code
 
@@ -219,8 +213,6 @@ application and infrastructure updates run through CI.
 | `services/actor-runner/` | Customer-scoped durable Actor execution |
 | `services/static-site-host/` | Verified managed static hosting |
 | `libs/` | Shared identity, customer-runtime, Actor, artifact, document, UI, and native libraries |
-| `infrastructure/platform/` | Pulumi resources for the identity and platform hosts |
-| `infrastructure/bootstrap/` | Pulumi resources for private state and backup storage |
 | `deploy/` | Local, E2E, deployment, backup, and recovery automation |
 | `docs/operations/` | The authoritative operations handbook |
 
@@ -255,41 +247,19 @@ The execution design is split across a few focused references:
   specifies how extracted invoice and statement facts become evidence-bearing matches,
   review decisions, and a narrowly automated exact case.
 
-## Deploy and operate it
+## Publish and install
 
-Pulumi creates three replaceable Hetzner hosts: one shared `aven.id` host and one
-isolated platform host each for `next` and production. Every target has its own
-protected volume, firewall, SSH role identities, database credentials, backup path,
-and internal secrets. GitHub Actions runs the same verified infrastructure,
-deployment, recovery, and monitoring playbook for each target.
+The [operations handbook](docs/operations/README.md) covers source builds and runtime proofs.
 
-An operator still supplies provider-issued cloud, DNS, billing, mail, model, and package
-credentials. The guided first installation validates them, configures GitHub, dispatches
-the required workflows, and updates both DNS providers. One repository administrator can
-operate the installation; an optional second-person deployment review can be enabled later.
-The deployment does not ask an operator to invent SSH keys, copy database passwords,
-or edit files on either server.
+[Application releases](docs/operations/deployment.md) explains image publication and the
+versioned handoff to maintenance tools. The source pipeline retains its security checks,
+full-stack tests and application recovery proofs. A source release does not deploy anything.
 
-Start with the [operations handbook](docs/operations/README.md). Its chapters cover:
-
-- [access, generated credentials, and secrets](docs/operations/access-and-secrets.md);
-- [bootstrapping storage and GitHub](docs/operations/initial-provisioning.md);
-- [deploying shared identity, `next`, and production](docs/operations/deployment.md);
-- [routine maintenance and observation](docs/operations/maintenance.md);
-- [backup, restore, and fresh-host recovery](docs/operations/backup-and-recovery.md);
-  and
-- [bounded incident access and response](docs/operations/incident-response.md).
-
-The active namespaced GitHub Environments use separate Pulumi stacks and protected-branch
-policies. Promotion changes a Git reference; deployment still requires an explicit target
-and exact ref. Production cannot read the `next` platform state or backup path.
-Each platform generates its own identity provisioning token; the protected identity
-deployment reads both platform states to admit those exact callers.
-
-Hosts carry no irreplaceable configuration. Git, encrypted Pulumi state, and
-encrypted off-host logical backups are the recovery sources of truth. Disaster
-recovery provisions fresh hosts through the same workflow as an initial deployment,
-then restores the selected backup before admitting writes.
+The Firefox assistant steers GitHub Actions for fresh installation, runner repositories,
+manual next-to-production promotion and disaster recovery. That tooling is private during
+development. Identity has its own release selection and each installation keeps its own
+provider credentials. See the [runtime recovery guarantees](docs/operations/backup-and-recovery.md)
+and [source build access](docs/operations/access-and-secrets.md).
 
 ## Keep the documentation true
 
