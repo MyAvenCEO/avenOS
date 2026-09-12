@@ -100,6 +100,8 @@ Alpine packages cannot patch those libraries; they require an updated binary.
 Its checksum-pinned scanner first proves that a synthetic registry credential is detected.
 The historical baseline contains exact reviewed commit/file/rule fingerprints, not broad
 path exclusions. New occurrences still fail. Never add an active credential to the baseline.
+Public synthetic fixtures have exact-value exceptions restricted to their fixture files;
+these do not exempt other values in those files.
 
 CI dependency installation temporarily authenticates through an owner-only project
 `.npmrc`, then restores its exact prior contents and permissions in the same step.

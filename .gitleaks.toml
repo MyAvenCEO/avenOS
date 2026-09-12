@@ -32,6 +32,13 @@ regexes = ['''identity-provisioning-secret-for-e2e-only''', '''customer-entitlem
 regexTarget = "match"
 
 [[allowlists]]
+description = "Public Standard Webhooks fixture: base64 of synthetic-webhook-key-for-tests!!"
+condition = "AND"
+paths = ['''(?:^|/)services/checkout/(?:src/lib/server/config\.ts|tests/polar\.test\.ts)$''', '''(?:^|/)deploy/e2e/docker-compose\.yml$''']
+regexes = ['''^whsec_c3ludGhldGljLXdlYmhvb2sta2V5LWZvci10ZXN0cyEh$''']
+regexTarget = "secret"
+
+[[allowlists]]
 description = "Public API specification idempotency identifiers, not credentials"
 condition = "AND"
 paths = ['''services/artifact-store/artifact-store-spec/ARTIFACT-STORE-EXTERNAL-INTERFACE\.md$''']
