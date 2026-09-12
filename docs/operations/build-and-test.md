@@ -458,6 +458,8 @@ The runtime command builds and scans its service images from the clean checkout;
 image builds require `NODE_AUTH_TOKEN` with package-read access. For release verification,
 both jobs instead pull the exact manifest images and run all their assertions. The
 lower-level `test:runtime-install` command still consumes already available images.
+Its tooling and operations image builds stream progress and stop after ten minutes;
+package updates and the container security scan remain required before installation.
 
 Release builds publish candidate image digests first, scan them, and pass their exact
 manifest to the full verification workflow. The release journey pulls those images

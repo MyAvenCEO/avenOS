@@ -19,6 +19,13 @@ spec.loader.exec_module(fixture)
 
 
 def run(args, data=None):
+    if args[:2] == ['docker', 'build']:
+        # Stream package updates while they happen. Capturing the entire build
+        # hides a stalled mirror until the outer proof's timeout expires.
+        result = subprocess.run([*args[:2], '--progress=plain', *args[2:]], input=data, timeout=600)
+        if result.returncode:
+            raise AssertionError('Docker image build failed; see the build output above.')
+        return ''
     result = subprocess.run(args, input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1800)
     if result.returncode:
         # This harness receives only synthetic configuration, never deployment secrets.
