@@ -3,6 +3,7 @@ name: commitlint
 # Enforce conventional commits in the source history used for release notes.
 
 on:
+  pull_request:
   push:
     branches: [main]
 
@@ -10,9 +11,13 @@ permissions:
   contents: read
   packages: read
 
+concurrency:
+  group: commitlint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   commitlint:
-    name: lint main commits
+    name: lint commits
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (full history)
@@ -29,5 +34,10 @@ jobs:
       - uses: ./.github/actions/bun-install
         with:
           token: ${{ secrets.PACKAGE_READ_TOKEN }}
-      - name: Lint pushed commit range
-        run: bunx commitlint --from ${{ github.event.before }} --to ${{ github.sha }} --verbose
+      - name: Lint commit range
+        env:
+          COMMIT_FROM: ${{ github.event.pull_request.base.sha || github.event.before }}
+          COMMIT_TO: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          [[ "$COMMIT_FROM" =~ ^[0-9a-f]{40}$ && "$COMMIT_TO" =~ ^[0-9a-f]{40}$ ]]
+          bunx commitlint --from "$COMMIT_FROM" --to "$COMMIT_TO" --verbose
