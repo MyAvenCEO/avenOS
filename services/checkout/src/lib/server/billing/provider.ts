@@ -132,14 +132,10 @@ export interface SubscriptionEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Standard Webhooks (https://www.standardwebhooks.com) — the scheme Polar
-// signs with. The secret is treated as UTF-8 exactly like the SDK's
-// validateEvent does, so real dashboard secrets and the dev default both
-// work. Signing lives here so the fake provider and the local simulator
-// produce deliveries the verifier accepts.
-
+// Secrets issued by Polar from 8 September 2026 use Standard Webhooks directly.
+// The same verifier is used by real deliveries and the deterministic fake provider.
 function standardWebhook(secret: string): Webhook {
-	return new Webhook(Buffer.from(secret, 'utf-8').toString('base64'))
+	return new Webhook(secret)
 }
 
 export function signWebhookHeaders(

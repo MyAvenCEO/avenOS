@@ -34,7 +34,13 @@ describe('client release contract', () => {
 		expect(clientReleasePlan('refs/heads/main', sha, '18', '2026-09-07', 'next').apiOrigin).toBe(
 			'https://api.next.aven.ceo'
 		)
-		for (const ref of ['refs/heads/next', 'refs/heads/prod', 'refs/heads/feature', 'refs/tags/v1', 'prod'])
+		for (const ref of [
+			'refs/heads/next',
+			'refs/heads/prod',
+			'refs/heads/feature',
+			'refs/tags/v1',
+			'prod'
+		])
 			expect(() => clientReleasePlan(ref, sha, '17', '2026-09-07', 'next')).toThrow('protected')
 		for (const run of ['0', '../escape', '1\nanything', '3000000000'])
 			expect(() => clientReleasePlan('refs/heads/main', sha, run, '2026-09-07', 'next')).toThrow()

@@ -40,3 +40,11 @@ provider secrets, promotion receipts, backup scheduling and infrastructure retir
 Published images and manifests must remain available for all supported installation and
 recovery points. The application also retains an encrypted runtime archive with its
 logical backups; see [Backup and recovery](backup-and-recovery.md).
+
+## Polar webhook contract
+
+This release verifies Standard Webhooks signatures. Use a Polar webhook secret generated
+on or after 8 September 2026 and pass its `whsec_…` value unchanged. The installation
+engine must select raw webhook payloads with Polar API version `2026-04`. An older
+Polar HMAC secret must be replaced before this release is installed; the verifier does
+not try a legacy signing scheme. See [Polar’s signing contract](https://polar.sh/docs/integrate/webhooks/delivery).

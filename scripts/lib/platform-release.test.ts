@@ -2,11 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-	releaseImages,
-	sameRelease,
-	validateReleaseManifest
-} from './platform-release.js'
+import { releaseImages, sameRelease, validateReleaseManifest } from './platform-release.js'
 
 const manifest = () => ({
 	version: 1 as const,
