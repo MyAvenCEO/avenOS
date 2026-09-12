@@ -1,11 +1,10 @@
 name: commitlint
 
-# Enforce conventional commits so the CalVer changelog stays clean and grouped. Scoped to `next`
-# pushes ONLY — CI must never trigger on feature branches or PRs (matches release-next). board 0062.
+# Enforce conventional commits in the source history used for release notes.
 
 on:
   push:
-    branches: [next]
+    branches: [main]
 
 permissions:
   contents: read
@@ -13,16 +12,19 @@ permissions:
 
 jobs:
   commitlint:
-    name: lint next commits
+    name: lint main commits
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
 
       - uses: ./.github/actions/bun-install
         with:

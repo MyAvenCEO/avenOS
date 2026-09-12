@@ -9,7 +9,7 @@ on:
       - scripts/check-doc-policy.ts
       - .github/workflows/docs-ci.yml
   push:
-    branches: [main, next]
+    branches: [main]
     paths:
       - '**/*.md'
       - package.json

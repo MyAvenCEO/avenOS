@@ -13,12 +13,29 @@ the resulting digests and runs the complete `platform-verification` gate against
 exact image set. Build and verification jobs receive package-read access and no
 installation environment secrets. Only a successful complete gate can publish a release.
 
+Source changes arrive through pull requests to `main`; installation channels are selected
+in maintenance tools. The server release contains all eleven Linux AMD64 service images.
+Identity uses its identity, database, proxy and operations images; next uses the platform
+services from the same manifest. Downloadable client releases are separate, although the
+verification gate still builds and tests a client package.
+
+Publication requires `PACKAGE_READ_TOKEN` for private build dependencies and the workflow's
+job-scoped package, release and attestation permissions. The existing GHCR packages are
+private, so installations need package-read access. Publishing the manifest does not change
+image visibility or create any cloud resources.
+
 A GitHub release named `platform-<source SHA>-<run ID>-<attempt>` contains `release.json`,
 its SHA-256 checksum and `release-attestation.jsonl`. The attestation binds the manifest
 to this repository, the main branch and the publication workflow. Consumers verify that
 identity and source digest, then deploy only the manifest's exact image digests. A checksum
 alone is not proof of who built a release. GitHub workflow artifact expiry does not remove
 the published release contract.
+
+Platform releases are published as prereleases and explicitly excluded from GitHub's Latest
+designation. The installer lists these prereleases and verifies their provenance before
+deployment. Images are pushed before verification; a failed run can leave candidate images
+in GHCR, but cannot publish a deployable release. Failure during asset publication leaves a
+draft that the installer ignores.
 
 ## Runtime payload
 
@@ -43,8 +60,6 @@ logical backups; see [Backup and recovery](backup-and-recovery.md).
 
 ## Polar webhook contract
 
-This release verifies Standard Webhooks signatures. Use a Polar webhook secret generated
-on or after 8 September 2026 and pass its `whsec_…` value unchanged. The installation
-engine must select raw webhook payloads with Polar API version `2026-04`. An older
-Polar HMAC secret must be replaced before this release is installed; the verifier does
-not try a legacy signing scheme. See [Polar’s signing contract](https://polar.sh/docs/integrate/webhooks/delivery).
+This release verifies Standard Webhooks signatures. Pass the Polar webhook secret's
+`whsec_…` value unchanged. The installation engine must select raw webhook payloads with
+Polar API version `2026-04`. See [Polar’s signing contract](https://polar.sh/docs/integrate/webhooks/delivery).

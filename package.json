@@ -38,7 +38,6 @@
 		"next-version": "bun ./scripts/next-version.ts",
 		"set-version": "bun ./scripts/set-version.ts",
 		"changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
-		"release:next": "bun ./scripts/release-next.ts",
 		"check": "bun run --cwd app check",
 		"build:api": "bun run --cwd services/aven-api build",
 		"build:identity": "bun run --cwd services/identity build",

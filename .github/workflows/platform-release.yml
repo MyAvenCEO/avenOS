@@ -236,8 +236,8 @@ jobs:
           cp "$ATTESTATION_BUNDLE" release-attestation.jsonl
           sha256sum release.json > release.sha256
           gh release create "$tag" release.json release.sha256 release-attestation.jsonl \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title "$tag" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease --latest=false --title "$tag" \
             --notes 'Verified application images. Install and promote this release with avenOS maintenance tools.'
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | sort' > uploaded.json
           jq -e '. == ["release-attestation.jsonl", "release.json", "release.sha256"]' uploaded.json >/dev/null
-          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false

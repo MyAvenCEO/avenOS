@@ -1,10 +1,10 @@
 name: platform-ci
 
-# A required check must be emitted even for documentation-only promotions.
+# A required check must be emitted even for documentation-only changes.
 on:
   pull_request:
   push:
-    branches: [main, next, prod]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

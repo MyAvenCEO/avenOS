@@ -255,7 +255,7 @@ The [operations handbook](docs/operations/README.md) covers source builds and ru
 versioned handoff to maintenance tools. The source pipeline retains its security checks,
 full-stack tests and application recovery proofs. A source release does not deploy anything.
 
-The maintenance CLI and Firefox assistant own fresh installation, runner environments,
+The Firefox assistant steers GitHub Actions for fresh installation, runner repositories,
 manual next-to-production promotion and disaster recovery. That tooling is private during
 development. Identity has its own release selection and each installation keeps its own
 provider credentials. See the [runtime recovery guarantees](docs/operations/backup-and-recovery.md)
