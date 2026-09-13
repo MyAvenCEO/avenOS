@@ -1,0 +1,51 @@
+{
+  "mode": "fixed",
+  "requestBytes": 54526260,
+  "concurrency": 8,
+  "initial": {
+    "active": 0,
+    "rss": 101416960,
+    "peak": 68657152
+  },
+  "samples": [
+    {
+      "active": 0,
+      "rss": 103014400,
+      "peak": 68681728
+    },
+    {
+      "active": 2,
+      "rss": 434765824,
+      "peak": 396394496
+    }
+  ],
+  "statuses": [
+    200,
+    200,
+    503,
+    503,
+    503,
+    503,
+    503,
+    503
+  ],
+  "oomKilled": false,
+  "after": {
+    "active": 0,
+    "rss": 434765824,
+    "peak": 397697024
+  },
+  "retryStatuses": [
+    200,
+    200,
+    200,
+    200,
+    200,
+    200
+  ],
+  "final": {
+    "active": 0,
+    "rss": 473710592,
+    "peak": 457908224
+  }
+}

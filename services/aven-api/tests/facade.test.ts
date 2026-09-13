@@ -30,6 +30,51 @@ const claims = {
 }
 
 describe('api facade', () => {
+	test('public and internal model calls share admission until completion and overload remains retryable', async () => {
+		const entered = Promise.withResolvers<void>(),
+			release = Promise.withResolvers<void>()
+		const handler = createFacadeHandler(
+			{
+				...config,
+				LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN: 'l'.repeat(32)
+			},
+			{ verify: async () => claims },
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				complete: async () => {
+					entered.resolve()
+					await release.promise
+					return {}
+				}
+			} as unknown as LlmGatewayService
+		)
+		const first = handler(
+			new Request('http://facade.test/api/llm/completions', {
+				method: 'POST',
+				body: '{}',
+				headers: { authorization: 'Bearer test' }
+			})
+		)
+		await entered.promise
+		const sendInternal = () =>
+			handler(
+				new Request('http://facade.test/internal/v1/llm/completions', {
+					method: 'POST',
+					body: '{}',
+					headers: { authorization: `Bearer ${'l'.repeat(32)}` }
+				})
+			)
+		const busy = await sendInternal()
+		expect(busy.status).toBe(503)
+		expect(busy.headers.get('retry-after')).toBe('1')
+		expect(await busy.json()).toEqual({ code: 'REQUEST_CAPACITY_EXHAUSTED', retryable: true })
+		release.resolve()
+		expect((await first).status).toBe(200)
+		expect((await sendInternal()).status).toBe(200)
+	})
 	test('serves the internal LLM contract only to the actor runner service', async () => {
 		const internalConfig = facadeConfigSchema.parse({
 			...customerSecrets,

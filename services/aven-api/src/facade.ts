@@ -14,6 +14,7 @@ import type { HostingHandler } from './hosting/handler.js'
 import { ArtifactFileService } from './lib/server/artifacts/service.js'
 import { AppError } from './lib/server/errors.js'
 import type { LlmGatewayService } from './lib/server/llm-gateway.js'
+import { bodyLimitResponse, RequestMemoryBudget } from './request-memory.js'
 
 // Covers the gateway's 40 MiB aggregate images after base64/JSON encoding, plus bounded text.
 const MAX_STRUCTURED_COMPLETION_BYTES = 80 * 1024 * 1024
@@ -94,6 +95,7 @@ export function createFacadeHandler(
 	artifacts?: ArtifactHandler,
 	llmGateway?: LlmGatewayService | null
 ) {
+	const requestMemory = new RequestMemoryBudget()
 	const runtimeDirectory = new RuntimeDirectory(config)
 	const allowedOrigins = new Set(
 		config.CORS_ORIGINS.split(',')
@@ -126,12 +128,11 @@ export function createFacadeHandler(
 					message: 'The LLM gateway is not configured.'
 				})
 			try {
-				return json(
-					200,
-					await llmGateway.complete(await readBoundedJson(request, MAX_STRUCTURED_COMPLETION_BYTES))
+				return await requestMemory.json(request, MAX_STRUCTURED_COMPLETION_BYTES, async (body) =>
+					json(200, await llmGateway.complete(body))
 				)
 			} catch (error) {
-				if (error instanceof BodyLimitError) return json(error.status, { code: error.code })
+				if (error instanceof BodyLimitError) return bodyLimitResponse(error)
 				if (error instanceof AppError)
 					return json(error.status, { code: error.code, message: error.message })
 				throw error
@@ -163,9 +164,8 @@ export function createFacadeHandler(
 			if (url.pathname === '/api/llm/completions' && request.method === 'POST') {
 				if (!llmGateway)
 					throw new AppError(503, 'LLM_GATEWAY_UNAVAILABLE', 'The LLM gateway is not configured.')
-				return json(
-					200,
-					await llmGateway.complete(await readBoundedJson(request, MAX_STRUCTURED_COMPLETION_BYTES))
+				return await requestMemory.json(request, MAX_STRUCTURED_COMPLETION_BYTES, async (body) =>
+					json(200, await llmGateway.complete(body))
 				)
 			}
 			if (url.pathname === '/api/llm/v1/chat/completions' && request.method === 'POST') {
@@ -243,7 +243,13 @@ export function createFacadeHandler(
 							'CUSTOMER_RUNTIME_UNAVAILABLE',
 							'The customer system is unavailable.'
 						)
-					return artifactHandler.user(request, claims, grant.claims, customerMatch[3] ?? '')
+					return artifactHandler.user(
+						request,
+						claims,
+						grant.claims,
+						customerMatch[3] ?? '',
+						requestMemory
+					)
 				}
 				const identityToken = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? ''
 				const suffix = customerMatch[3] ?? ''
@@ -313,7 +319,7 @@ export function createFacadeHandler(
 			}
 			return new Response(response.body, { status: response.status, headers })
 		} catch (error) {
-			if (error instanceof BodyLimitError) return json(error.status, { code: error.code })
+			if (error instanceof BodyLimitError) return bodyLimitResponse(error)
 			if (error instanceof AppError)
 				return json(error.status, { code: error.code, message: error.message })
 			if (error instanceof IdentityAuthenticationError)

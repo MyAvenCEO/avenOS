@@ -808,17 +808,28 @@ export function createDocumentSkillOperations(options: {
 			})
 		}
 		add({
-			id: `finance.validate-${family}.v3`,
+			id: `finance.validate-${family}.${invoice ? 'v4' : 'v3'}`,
 			method: `document_validate_${family}`,
-			requires: [predicate(`bookkeeping.${family}`, 'F', 'B', 'I')],
+			requires: [
+				predicate(`bookkeeping.${family}`, 'F', 'B', 'I'),
+				...(invoice ? [predicate('bookkeeping.invoice_details', 'F', 'B', 'D')] : [])
+			],
 			produces: [predicate(`bookkeeping.${family}_validation`, 'F', 'I', 'V')],
 			prepare: (invocation) => {
 				const candidate = artifact(outcome(invocation.inputs[0]), candidateType)
+				const details = invoice
+					? artifact(outcome(invocation.inputs[1]), 'bookkeeping.invoice-details')
+					: undefined
 				return {
 					key: `validate-${family}`,
 					method: `document_validate_${family}`,
-					payload: { candidate: candidate.payload },
-					inputs: [sourceInput, input(candidate.artifactId, 'candidate')]
+					payload: { candidate: candidate.payload, ...(details && { details: details.payload }) },
+					inputs: [
+						sourceInput,
+						input(candidate.artifactId, 'candidate'),
+						...(details ? [input(details.artifactId, 'details')] : [])
+					],
+					...(invoice && { parameters: { rulesetVersion: 'invoice-core-v2' } })
 				}
 			},
 			project: (result, invocation) =>

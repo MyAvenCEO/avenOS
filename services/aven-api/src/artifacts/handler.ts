@@ -1,6 +1,6 @@
 import type { TenantGrantClaims } from '@avenos/aven-customer-contracts'
 import type { IdentityClaims } from '@avenos/aven-identity'
-import { readBoundedBytes } from '@avenos/http-boundary'
+import { BodyLimitError } from '@avenos/http-boundary'
 import { z } from 'zod'
 import {
 	type ArtifactFileService,
@@ -8,6 +8,7 @@ import {
 	type PublishClientRunInput
 } from '../lib/server/artifacts/service.js'
 import { AppError } from '../lib/server/errors.js'
+import { bodyLimitResponse, RequestMemoryBudget } from '../request-memory.js'
 
 const uuid = z.uuid()
 const observedAt = z.iso.datetime()
@@ -52,13 +53,15 @@ function mediaTypeFor(envelope: Record<string, unknown>): string {
 }
 
 export class ArtifactHandler {
+	private readonly requestMemory = new RequestMemoryBudget()
 	constructor(private readonly service: ArtifactFileService) {}
 
 	async user(
 		request: Request,
 		identity: IdentityClaims,
 		tenant: Omit<TenantGrantClaims, 'iat' | 'exp'>,
-		suffix: string
+		suffix: string,
+		requestMemory = this.requestMemory
 	): Promise<Response> {
 		try {
 			const segments = suffix.replace(/^\//, '').replace(/\/$/, '').split('/').filter(Boolean)
@@ -136,24 +139,23 @@ export class ArtifactHandler {
 				)
 			}
 			if (segments[0] === 'client-runs' && segments.length === 2 && request.method === 'POST') {
-				const bytes = await readBoundedBytes(request, MAX_CLIENT_RUN_BYTES)
-				if (bytes.byteLength > MAX_CLIENT_RUN_BYTES)
-					throw new AppError(413, 'CLIENT_RUN_TOO_LARGE', 'The client run is too large.')
-				const run = JSON.parse(new TextDecoder().decode(bytes)) as Omit<
-					PublishClientRunInput,
-					'userId' | 'databaseName' | 'scopeId' | 'routingGeneration' | 'publicationId'
-				>
-				return json(
-					201,
-					await this.service.publishClientRun({
-						...run,
-						userId: identity.sub,
-						databaseName: tenant.databaseName,
-						scopeId: tenant.environmentId,
-						routingGeneration: tenant.routingGeneration,
-						publicationId: uuid.parse(segments[1])
-					})
-				)
+				return await requestMemory.json(request, MAX_CLIENT_RUN_BYTES, async (body) => {
+					const run = body as Omit<
+						PublishClientRunInput,
+						'userId' | 'databaseName' | 'scopeId' | 'routingGeneration' | 'publicationId'
+					>
+					return json(
+						201,
+						await this.service.publishClientRun({
+							...run,
+							userId: identity.sub,
+							databaseName: tenant.databaseName,
+							scopeId: tenant.environmentId,
+							routingGeneration: tenant.routingGeneration,
+							publicationId: uuid.parse(segments[1])
+						})
+					)
+				})
 			}
 			if (segments.length >= 1) {
 				const artifactId = uuid.parse(segments[0])
@@ -205,6 +207,7 @@ export class ArtifactHandler {
 			}
 			return json(404, { code: 'ROUTE_NOT_FOUND' })
 		} catch (error) {
+			if (error instanceof BodyLimitError) return bodyLimitResponse(error)
 			if (error instanceof AppError)
 				return json(error.status, { code: error.code, message: error.message })
 			if (error instanceof z.ZodError || error instanceof SyntaxError)

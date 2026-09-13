@@ -1,0 +1,28 @@
+{
+  "mode": "baseline",
+  "requestBytes": 54526260,
+  "concurrency": 8,
+  "initial": {
+    "active": 0,
+    "rss": 100106240,
+    "peak": 66273280
+  },
+  "samples": [
+    {
+      "active": 0,
+      "rss": 102502400,
+      "peak": 66433024
+    }
+  ],
+  "statuses": [
+    "RemoteDisconnected",
+    "RemoteDisconnected",
+    "RemoteDisconnected",
+    "RemoteDisconnected",
+    "RemoteDisconnected",
+    "RemoteDisconnected",
+    "RemoteDisconnected",
+    "RemoteDisconnected"
+  ],
+  "oomKilled": true
+}

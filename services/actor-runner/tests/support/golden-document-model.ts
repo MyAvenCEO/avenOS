@@ -133,7 +133,21 @@ export class GoldenInvoiceModel implements DocumentModelGateway {
 						bankingAccounts: []
 					},
 					buyer: null,
-					lineItems: [],
+					lineItems: [
+						{
+							position: null,
+							title: 'Agricultural supplies',
+							description: null,
+							quantity: null,
+							unit: null,
+							unitPriceMinor: null,
+							netMinor: 10_000,
+							taxRateBps: 1900,
+							taxMinor: 1900,
+							grossMinor: 11_900,
+							servicePeriod: null
+						}
+					],
 					taxBreakdown: [],
 					payment: null,
 					payments: [],

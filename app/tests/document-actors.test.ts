@@ -160,7 +160,9 @@ class InvoiceModelGateway implements DocumentModelGateway {
 				},
 				details: {
 					documentKind: 'invoice',
-					supplier: { name: 'ACME GmbH' }
+					supplier: { name: 'ACME GmbH' },
+					lineItems:
+						(request.images[0]?.page ?? 1) === 1 ? [{ title: 'Goods', netMinor: 1000 }] : []
 				},
 				evidence: []
 			}

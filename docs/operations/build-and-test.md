@@ -314,6 +314,24 @@ to `TEST_CHUNK_EVIDENCE_DIR` (default `/tmp/aven-chunk-real`). The statement has
 900-second provider timeout. The separate full-stack gate proves real-store contracts
 and customer isolation; the in-memory provider proof does not replace it.
 
+The facade has a separate memory-admission proof. After dependencies and the local
+`aven-e2e-api:local` image have been built by the platform gate, run:
+
+```sh
+python3 deploy/e2e/facade-memory.py --output /tmp/facade-memory.json
+```
+
+It starts and removes its own disposable container at the production 768 MiB limit,
+mounts source/dependencies read-only, binds a random loopback port and sends eight
+concurrent image-sized JSON envelopes. A stalled model transport holds admitted
+requests; no real LLM or customer service is contacted. The production facade must
+keep two requests, reject six with 503, release capacity, accept six successive large retries and stay
+under the memory limit. The result records request sizes, status codes, container
+peak memory and OOM state. `--image` selects an already available Bun 1.3.13 image;
+the harness never pulls one. For a deliberate baseline reproduction only, use
+`--source /absolute/path/to/old-worktree --expect-oom`; this expects the disposable
+container to be killed by its memory limit.
+
 Live-provider success proves the tested inputs and adapter, not general OCR accuracy,
 provider determinism or recognition of unsupported documents. Keep corpus expected
 values independent of the provider response.

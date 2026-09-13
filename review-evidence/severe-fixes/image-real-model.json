@@ -1,0 +1,235 @@
+{
+  "result": {
+    "caseId": "1dfc7fe5-0a6b-8264-89fe-1f8869246978",
+    "state": "needs_review",
+    "projectionVersion": "actor-document-v1",
+    "preferredType": "unknown",
+    "label": "detailed-manual.png",
+    "summary": "Not accepted as a supported kind at the 6500 basis-point threshold: The only visible text on page 1 is a heading \"WORKSHOP OPERATIONS MANUAL\", a \"Safety marker ALPHA-LARGE-IMAGE\" line, and an instruction \"Inspect the machine before starting work.\" The remainder of the page is an unreadable noise image. There is no merchant, date, line items, total, tax breakdown, payment state, mandate, order, offer, reminder, or statement structure, so the document is an internal operations/safety manual rather than any supported financial document kind.",
+    "metadata": {
+      "execution": "actors",
+      "planner": "general-observation-solver",
+      "executionEnvironment": "local",
+      "runtimeHost": "desktop",
+      "modelId": "qwen3.8-flash-next",
+      "modelLabel": "qwen3.8-flash-next",
+      "modelAlternatives": [
+        {
+          "id": "qwen3.8-flash-next",
+          "label": "qwen3.8-flash-next"
+        }
+      ],
+      "pageCount": 1,
+      "chunkCount": 1,
+      "completedChunks": 1,
+      "vision": "model",
+      "documentKind": "unknown"
+    },
+    "warnings": [
+      {
+        "code": "document-kind-unknown",
+        "message": "Not accepted as a supported kind at the 6500 basis-point threshold: The only visible text on page 1 is a heading \"WORKSHOP OPERATIONS MANUAL\", a \"Safety marker ALPHA-LARGE-IMAGE\" line, and an instruction \"Inspect the machine before starting work.\" The remainder of the page is an unreadable noise image. There is no merchant, date, line items, total, tax breakdown, payment state, mandate, order, offer, reminder, or statement structure, so the document is an internal operations/safety manual rather than any supported financial document kind.",
+        "retryable": false
+      }
+    ],
+    "stages": [
+      {
+        "key": "inspect",
+        "state": "succeeded",
+        "dependsOn": [],
+        "attemptCount": 1,
+        "procedureKey": "client.inspect-file"
+      },
+      {
+        "key": "decompose-pages",
+        "state": "succeeded",
+        "dependsOn": [
+          "inspect"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.decompose-pages"
+      },
+      {
+        "key": "extract-native-page-001",
+        "state": "succeeded",
+        "dependsOn": [
+          "decompose-pages"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.extract-native-text"
+      },
+      {
+        "key": "analyze-page-001",
+        "state": "succeeded",
+        "dependsOn": [
+          "decompose-pages",
+          "extract-native-page-001"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.analyze-page-model"
+      },
+      {
+        "key": "classify-document",
+        "state": "succeeded",
+        "dependsOn": [
+          "decompose-pages",
+          "extract-native-page-001"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.classify-document-model"
+      },
+      {
+        "key": "assemble-document",
+        "state": "succeeded",
+        "dependsOn": [
+          "inspect",
+          "analyze-page-001"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.assemble-document-representation"
+      },
+      {
+        "key": "aggregate-content",
+        "state": "succeeded",
+        "dependsOn": [
+          "inspect",
+          "assemble-document",
+          "analyze-page-001"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.aggregate-content-classification"
+      }
+    ],
+    "derivedArtifacts": [
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000002",
+        "typeKey": "core.file-inspection",
+        "typeVersion": 3,
+        "stageKey": "inspect"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000004",
+        "typeKey": "docs.page",
+        "typeVersion": 2,
+        "stageKey": "decompose-pages"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000006",
+        "typeKey": "docs.extracted-text",
+        "typeVersion": 2,
+        "stageKey": "extract-native-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000007",
+        "typeKey": "docs.text-layout",
+        "typeVersion": 2,
+        "stageKey": "extract-native-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000009",
+        "typeKey": "docs.extracted-text",
+        "typeVersion": 2,
+        "stageKey": "analyze-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000010",
+        "typeKey": "docs.text-layout",
+        "typeVersion": 2,
+        "stageKey": "analyze-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000011",
+        "typeKey": "core.content-classification",
+        "typeVersion": 1,
+        "stageKey": "analyze-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000012",
+        "typeKey": "core.content-description",
+        "typeVersion": 1,
+        "stageKey": "analyze-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000014",
+        "typeKey": "core.document-classification",
+        "typeVersion": 1,
+        "stageKey": "classify-document"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000016",
+        "typeKey": "docs.extracted-text",
+        "typeVersion": 2,
+        "stageKey": "assemble-document"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000017",
+        "typeKey": "docs.text-layout",
+        "typeVersion": 2,
+        "stageKey": "assemble-document"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000019",
+        "typeKey": "core.content-classification",
+        "typeVersion": 1,
+        "stageKey": "aggregate-content"
+      }
+    ]
+  },
+  "sourceBytes": 5346422,
+  "text": "WORKSHOP OPERATIONS MANUAL\nSafety marker ALPHA-LARGE-IMAGE\nInspect the machine before starting work.",
+  "receipts": [
+    {
+      "modelId": "qwen3.8-flash-next",
+      "modelLabel": "qwen3.8-flash-next",
+      "capabilities": [
+        "structured-output",
+        "text-generation",
+        "vision"
+      ],
+      "providerRequestId": "49a54e257c864b03a62a34889393ae90",
+      "httpRequestId": null,
+      "providerReportedModel": "qwen3.8-flash-next",
+      "profile": "qwen-tools",
+      "usage": {
+        "prompt_tokens": 2890,
+        "total_tokens": 3258,
+        "completion_tokens": 368,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "image_tokens": 1961
+        },
+        "reasoning_tokens": 0
+      },
+      "finishReason": "tool_calls",
+      "inputDigest": "8153080c02cff36fa97e9df7a886159412740d67baaf7a76ae8be94b5f1418ce",
+      "implementationDigest": "3f5166cbccc141325d64b1f8176d9e643b617e447365ac801778f613869b9184"
+    },
+    {
+      "modelId": "qwen3.8-flash-next",
+      "modelLabel": "qwen3.8-flash-next",
+      "capabilities": [
+        "structured-output",
+        "text-generation",
+        "vision"
+      ],
+      "providerRequestId": "8e89dc0590ce454e91a888f28d4fea5b",
+      "httpRequestId": null,
+      "providerReportedModel": "qwen3.8-flash-next",
+      "profile": "qwen-tools",
+      "usage": {
+        "prompt_tokens": 2863,
+        "total_tokens": 3076,
+        "completion_tokens": 213,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "image_tokens": 1961
+        },
+        "reasoning_tokens": 0
+      },
+      "finishReason": "tool_calls",
+      "inputDigest": "a36c230482f65e45223d1c7d316b0af7a0c79a6b0a37aa7ce6c97dc7dd0ee8ef",
+      "implementationDigest": "3f5166cbccc141325d64b1f8176d9e643b617e447365ac801778f613869b9184"
+    }
+  ],
+  "overlappingRequestRejected": true
+}
