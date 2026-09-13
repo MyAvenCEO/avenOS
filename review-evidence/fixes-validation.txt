@@ -9,7 +9,9 @@ PASS: Real qwen3.8-flash-next through production LlmGatewayService / qwen-tools.
   zero failed chunks; 140 calls. needs_review is the generic non-financial kind.
   invoice-six-items: 2 pages, 6 line items, net 600 / tax 114 / gross 714 minor,
   consistent validation, succeeded; 6 calls.
-  First two cases: 651 seconds. Invoice: 35 seconds.
+  Final targeted statement: 505 seconds. Final targeted invoice: 44 seconds.
+  Manual and detailed image passed in the preceding corpus run; their prompts
+  were unchanged. That run found the now-fixed statement overflow false flag.
   Raw results and provider receipts: review-evidence/real-model/*.json.
   detailed-image: 5,346,422-byte PNG, exact visible marker, 2 calls through
   authenticated facade. Publication storage for provider tests is in memory.

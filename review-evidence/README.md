@@ -30,14 +30,13 @@ The maintained build/test procedures remain in the
 
 The `real-model` directory contains synthetic fixture results and request receipts from
 `qwen3.8-flash-next` through the production Qwen gateway on 2026-09-13. All four
-provider cases passed: 160 exact statement rows across four pages (12 calls), six
-invoice items with 19% VAT across two pages (6 calls), and all 70 manual markers including scanned
-pages 67–70 in a PDF larger than 25 MiB (140 calls), and a 5,346,422-byte detailed
+provider cases passed in targeted runs: 160 exact statement rows across four pages (12 calls), six
+invoice items with 19% VAT across two pages (6 calls), all 70 manual markers including
+scanned pages 67–70 in a PDF larger than 25 MiB (140 calls), and a 5,346,422-byte detailed
 PNG through the authenticated facade (2 calls). Statement replay used a fresh
 runtime and made no new calls. The manual remains `needs_review` because its kind is
-outside finance; no chunk failed or went missing. The facade proof exercises the request reader as well as the real provider. All cases
-use an in-memory
-publication store. The separate platform gate includes a real-store chunking test
+outside finance; no chunk failed or went missing. The facade proof exercises the request reader as
+well as the real provider. All cases use an in-memory publication store. The separate platform gate includes a real-store chunking test
 for 70 pages, 160 transactions, both publication adapters and replay.
 
 An earlier statement run exposed two model-transcription duplicates. Extraction now
@@ -52,3 +51,14 @@ A repeated invoice run correctly held conflicting paraphrased payment terms for
 review. The prompt now requires verbatim printed payment conditions; the final
 fixture includes explicit terms and 19% VAT. Matching document-wide tax summaries
 are retained once, while differing summaries remain a coverage conflict.
+
+A later full-corpus run returned all 160 exact statement rows but incorrectly marked
+one owned chunk as overflowing because the document had more than 128 rows in total.
+The statement prompt now explicitly applies the 128-row response limit only to the
+owned chunk. The overflow marker still blocks actual within-chunk truncation.
+
+After that correction, the exact 160-row statement passed in 505 seconds and the
+six-item invoice passed in 44 seconds through the authenticated facade and real
+provider. The manual and detailed-image cases passed in the preceding corpus run;
+their prompts were unchanged by this correction. The corpus run before the
+correction was three passes and one statement coverage failure.

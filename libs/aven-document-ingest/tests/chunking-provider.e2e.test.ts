@@ -114,7 +114,19 @@ live(
 		await mkdir(outputDirectory, { recursive: true })
 		await writeFile(
 			`${outputDirectory}/statement-160.json`,
-			JSON.stringify({ result, merged, receipts, calls }, null, 2)
+			JSON.stringify(
+				{
+					result,
+					merged,
+					receipts,
+					calls,
+					parts: gateway.runs
+						.filter((run) => run.procedureKey === 'client.extract-statement-model')
+						.map((run) => run.artifacts[0]?.payload)
+				},
+				null,
+				2
+			)
 		)
 		expect(merged, JSON.stringify(result)).toBeDefined()
 		expect(transactions).toHaveLength(160)
