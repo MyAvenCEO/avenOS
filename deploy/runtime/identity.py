@@ -32,14 +32,15 @@ def deploy(source, platform, volume, recover=False):
             archive.run(['docker', 'pull', image])
         for name, uid in (('postgres', 70), ('backups', 65532), ('release-archive', 65532), ('caddy/data', 0), ('caddy/config', 0)):
             start.directory(volume / name, uid)
-        start.directory(volume / 'backups/public-status', 65532)
-        os.chmod(volume / 'backups/public-status', 0o755)
+        start.directory(volume / 'backups/public-status', 65532, mode=0o755)
         config['services']['backup']['profiles'] = ['backup']
         config['services']['restore']['environment']['RESTORE_RELEASE_ID'] = manifest['sha']
         config = host.configure_backup(config, volume / 'release-archive', manifest['sha'])
         host.write_platform(platform, config, manifest, source)
         compose = ['docker', 'compose', '--project-directory', str(platform)]
-        archive.run([*compose, 'up', '--detach', '--pull', 'never', '--wait', 'database-roles'])
+        # Compose waits for running services here. The complete stack below waits for
+        # database-roles to exit successfully through migrate's dependency condition.
+        archive.run([*compose, 'up', '--detach', '--pull', 'never', '--wait', '--wait-timeout', '240', 'database'])
         if recover:
             archive.run([*compose, '--profile', 'recovery', 'run', '--rm', 'restore'])
             archive.run([*compose, 'run', '--rm', 'database-roles'])
