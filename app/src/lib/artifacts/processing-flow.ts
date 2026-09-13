@@ -92,7 +92,7 @@ function inferredDependencies(stage: ArtifactProcessingStage, orderedKeys: strin
 
 function nodeType(stage: ArtifactProcessingStage): string {
 	const usesModel = stage.procedureKey
-		? stage.procedureKey.startsWith('model.')
+		? stage.procedureKey.endsWith('-model')
 		: /^(analyze|classify-document|extract-invoice|extract-statement)/.test(stage.key)
 	if (usesModel) {
 		return 'llm:process'
@@ -103,7 +103,7 @@ function nodeType(stage: ArtifactProcessingStage): string {
 }
 
 function stateDescription(stage: ArtifactProcessingStage): string {
-	const attempt = (stage.attemptCount ?? 0) > 1 ? ` · Versuch ${stage.attemptCount}` : ''
+	const attempt = (stage.attemptCount ?? 0) > 1 ? ` · Attempt ${stage.attemptCount}` : ''
 	const terminal = stage.terminalCode ? ` · ${stage.terminalCode}` : ''
 	return `${stage.state.replaceAll('_', ' ')}${attempt}${terminal}`
 }

@@ -167,3 +167,50 @@ describe('api facade', () => {
 		expect(response.status).toBe(404)
 	})
 })
+
+test('structured document requests above 2 MiB reach the gateway on both authenticated routes', async () => {
+	const token = 'l'.repeat(32)
+	const complete = vi.fn(async () => ({ output: 'image accepted', receipt: {} }))
+	const handler = createFacadeHandler(
+		{ ...config, LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN: token },
+		{ verify: async () => claims },
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		{ complete } as unknown as LlmGatewayService
+	)
+	const body = JSON.stringify({
+		modelId: 'vision',
+		messages: [
+			{
+				role: 'user',
+				content: [{ type: 'image', mediaType: 'image/png', base64: 'A'.repeat(3 * 1024 * 1024) }]
+			}
+		]
+	})
+	for (const path of ['/internal/v1/llm/completions', '/api/llm/completions']) {
+		const response = await handler(
+			new Request(`https://api.aven.ceo${path}`, {
+				method: 'POST',
+				headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+				body
+			})
+		)
+		expect(response.status).toBe(200)
+		expect(await response.json()).toMatchObject({ output: 'image accepted' })
+		const tooLarge = await handler(
+			new Request(`https://api.aven.ceo${path}`, {
+				method: 'POST',
+				headers: {
+					authorization: `Bearer ${token}`,
+					'content-type': 'application/json',
+					'content-length': String(80 * 1024 * 1024 + 1)
+				},
+				body: '{}'
+			})
+		)
+		expect(tooLarge.status).toBe(413)
+	}
+	expect(complete).toHaveBeenCalledTimes(2)
+})

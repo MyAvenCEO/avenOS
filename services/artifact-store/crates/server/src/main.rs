@@ -132,12 +132,12 @@ fn optional_positive_env(name: &str, default: u32) -> Result<u32, Box<dyn std::e
 
 fn configure_upload_admission(state: AppState) -> Result<AppState, Box<dyn std::error::Error>> {
     let max_upload_bytes =
-        optional_positive_u64_env("ARTIFACT_STORE_MAX_UPLOAD_BYTES", 25 * 1024 * 1024)?;
+        optional_positive_u64_env("ARTIFACT_STORE_MAX_UPLOAD_BYTES", 128 * 1024 * 1024)?;
     let max_concurrent_uploads = optional_positive_env("ARTIFACT_STORE_MAX_CONCURRENT_UPLOADS", 2)?;
     let max_live_claims = optional_positive_env("ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE", 32)?;
     let max_staged_bytes = optional_positive_u64_env(
         "ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE",
-        100 * 1024 * 1024,
+        512 * 1024 * 1024,
     )?;
     let max_logical_bytes = optional_positive_u64_env(
         "ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE",

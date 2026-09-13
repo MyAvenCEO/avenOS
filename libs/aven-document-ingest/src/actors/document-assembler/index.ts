@@ -26,69 +26,87 @@ export function createDocumentAssemblerActor(): Actor {
 			document_assemble: (payload) => {
 				try {
 					const pages = payload.pages as unknown as ExtractedPage[]
-					const method = pages.some((page) => page.method === 'ocr') ? 'ocr' : 'native'
-					let text = ''
-					let complete = pages.every((page) => page.complete)
-					const spans: ExtractedPage['spans'] = []
+					const groups: ExtractedPage[][] = []
+					let group: ExtractedPage[] = [],
+						bytes = 0,
+						count = 0
 					for (const page of pages) {
-						const separator = text === '' ? '' : '\n\n'
-						const byteOffset = utf8Length(text + separator)
-						if (byteOffset + utf8Length(page.text) > MAX_TEXT_BYTES) {
-							complete = false
-							break
+						const size = utf8Length(page.text) + (group.length ? 2 : 0)
+						if (
+							group.length &&
+							(bytes + size > MAX_TEXT_BYTES || count + page.spans.length > MAX_LAYOUT_SPANS)
+						) {
+							groups.push(group)
+							group = []
+							bytes = 0
+							count = 0
 						}
-						text += separator + page.text
-						for (const span of page.spans) {
-							if (spans.length >= MAX_LAYOUT_SPANS) {
-								complete = false
-								break
-							}
-							spans.push({
-								...span,
-								start: byteOffset + span.start,
-								endExclusive: byteOffset + span.endExclusive
-							})
-						}
+						group.push(page)
+						bytes += utf8Length(page.text) + (group.length > 1 ? 2 : 0)
+						count += page.spans.length
 					}
-					const bytes = new TextEncoder().encode(text)
+					if (group.length) groups.push(group)
+					if (!groups.length || groups.length > 32)
+						throw new Error('Document representation requires a bounded page batch')
+					const artifacts = groups.flatMap((pages, ordinal) => {
+						let text = ''
+						const spans: ExtractedPage['spans'] = []
+						for (const page of pages) {
+							const separator = text === '' ? '' : '\n\n'
+							const offset = utf8Length(text + separator)
+							text += separator + page.text
+							spans.push(
+								...page.spans.map((span) => ({
+									...span,
+									start: span.start + offset,
+									endExclusive: span.endExclusive + offset
+								}))
+							)
+						}
+						const complete = pages.every((page) => page.complete)
+						const suffix = ordinal ? `-${ordinal}` : ''
+						return [
+							artifact(
+								`text${suffix}`,
+								'docs.extracted-text',
+								{
+									method: pages.some((page) => page.method === 'ocr') ? 'ocr' : 'native',
+									language: 'und',
+									pageCount: pages.length,
+									characterCount: [...text].length,
+									complete
+								},
+								'text',
+								ordinal,
+								{
+									mediaType: 'text/plain; charset=utf-8',
+									base64: bytesToBase64(new TextEncoder().encode(text))
+								}
+							),
+							artifact(
+								`layout${suffix}`,
+								'docs.text-layout',
+								{ coordinateSpace: 'normalized-millionths', spans, complete },
+								'layout',
+								ordinal
+							)
+						]
+					})
 					return success(
 						{
 							ok: true,
 							procedureKey: 'client.assemble-document-representation',
-							artifacts: [
-								artifact(
-									'text',
-									'docs.extracted-text',
-									{
-										method,
-										language: 'und',
-										pageCount: pages.length,
-										characterCount: [...text].length,
-										complete
-									},
-									'text',
-									0,
-									{ mediaType: 'text/plain; charset=utf-8', base64: bytesToBase64(bytes) }
-								),
-								artifact(
-									'layout',
-									'docs.text-layout',
-									{ coordinateSpace: 'normalized-millionths', spans, complete },
-									'layout'
-								)
-							],
-							evidence: [
-								{
-									ordinal: 0,
-									outputLocalKey: 'layout',
-									outputLocator: wholeArtifact(),
-									inputRole: 'source',
-									inputOrdinal: 0,
-									inputLocator: wholeArtifact()
-								}
-							]
+							artifacts,
+							evidence: artifacts.map((output, ordinal) => ({
+								ordinal,
+								outputLocalKey: output.localKey,
+								outputLocator: wholeArtifact(),
+								inputRole: 'source',
+								inputOrdinal: 0,
+								inputLocator: wholeArtifact()
+							}))
 						},
-						`Assembled ${pages.length} page representation(s).`
+						`Assembled all ${pages.length} pages in ${groups.length} representation chunks.`
 					)
 				} catch (error) {
 					return failure(error)

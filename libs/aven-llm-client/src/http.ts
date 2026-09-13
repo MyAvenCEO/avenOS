@@ -37,9 +37,13 @@ export class HttpLlmGatewayClient implements LlmGatewayClient {
 		return (body as { models: LlmModelDescriptor[] }).models
 	}
 
-	async complete(request: LlmCompletionRequest): Promise<LlmCompletionResponse> {
+	async complete(
+		request: LlmCompletionRequest,
+		options?: { signal?: AbortSignal }
+	): Promise<LlmCompletionResponse> {
 		return (await this.#request(new URL(`${this.#baseUrl}/completions`), {
 			method: 'POST',
+			signal: options?.signal,
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(request)
 		})) as LlmCompletionResponse
@@ -50,9 +54,18 @@ export class HttpLlmGatewayClient implements LlmGatewayClient {
 			typeof this.#bearerToken === 'function' ? await this.#bearerToken() : this.#bearerToken
 		const headers = new Headers(init.headers)
 		headers.set('authorization', `Bearer ${token}`)
-		const response = await this.#fetch(new Request(url, { ...init, headers }))
+		const signal = init.signal
+			? AbortSignal.any([init.signal, AbortSignal.timeout(900_000)])
+			: AbortSignal.timeout(900_000)
+		const response = await this.#fetch(new Request(url, { ...init, headers, signal })).catch(
+			(error) => {
+				throw Object.assign(error, { retryable: true })
+			}
+		)
 		if (!response.ok) {
-			throw new Error(`LLM gateway request failed with status ${response.status}`)
+			throw Object.assign(new Error(`LLM gateway request failed with status ${response.status}`), {
+				retryable: response.status === 408 || response.status === 429 || response.status >= 500
+			})
 		}
 		return response.json()
 	}

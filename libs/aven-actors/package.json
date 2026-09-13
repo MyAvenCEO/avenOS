@@ -15,7 +15,8 @@
 		"./planner": "./src/planner.ts",
 		"./registry": "./src/registry.ts",
 		"./run": "./src/run.ts",
-		"./sandbox": "./src/sandbox.ts"
+		"./sandbox": "./src/sandbox.ts",
+		"./abort": "./src/abort.ts"
 	},
 	"scripts": {
 		"check": "tsc --noEmit",

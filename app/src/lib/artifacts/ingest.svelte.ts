@@ -14,6 +14,7 @@ import {
 	processClientDocument
 } from './client-document-processing'
 import { type ArtifactProcessingLookup, isTerminalProcessing } from './processing'
+import { transportError } from './transport-error'
 
 /**
  * THE ONE DOOR EVERY FILE COMES THROUGH.
@@ -207,11 +208,17 @@ export async function watchArtifactProcessing(
 					delay = 1_500
 				}
 			} catch (error) {
+				const failure = transportError(error)
 				consecutiveFailures += 1
 				chat.markArtifactProcessingUnavailable(
 					artifactId,
 					error instanceof Error ? error.message : String(error)
 				)
+				if (
+					failure.status === 404 ||
+					((failure.status ?? 0) >= 400 && (failure.status ?? 0) < 500 && !failure.retryable)
+				)
+					return
 				delay = Math.min(30_000, 1_000 * 2 ** Math.min(consecutiveFailures, 5))
 			}
 			await wait(delay)

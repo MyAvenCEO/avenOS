@@ -69,7 +69,11 @@ export async function normalizeStatement(
 			: `derived:${(await digest(derivedIdentity || String(candidate.summary))).slice(0, 32)}`
 	const accountIdentityBasis = accountIban ? 'iban' : accountNumber ? 'account-number' : 'derived'
 	const status = validationStatus(validation.status)
-	const statementCoverage = coverage(candidate.transactions.length)
+	const statementCoverage = String(candidate.notes ?? '').startsWith('[ROW_LIMIT_REACHED]')
+		? 'row-limit-reached'
+		: candidate.chunkCoverage
+			? 'unverified'
+			: coverage(candidate.transactions.length)
 	const transactions: StatementTransaction[] = []
 	for (const [sourceOrdinal, raw] of candidate.transactions.entries()) {
 		const transaction = object(raw, 'statement transaction')

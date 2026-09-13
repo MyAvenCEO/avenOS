@@ -1,0 +1,9 @@
+$ vitest run
+
+ RUN  v4.1.11 /home/daniel/Documents/ChatGPT/avenOS/document-ingest-review/libs/aven-document-ingest
+
+
+ Test Files  13 passed | 3 skipped (16)
+      Tests  89 passed | 24 skipped (113)
+   Start at  04:36:24
+   Duration  1.82s (transform 2.35s, setup 0ms, import 4.96s, tests 3.59s, environment 2ms)

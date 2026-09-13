@@ -1,4 +1,5 @@
 import { Actor } from '@avenos/actors'
+import { boundedDocument } from '../../decoding'
 import type { DocumentDecoder, DocumentSource } from '../../shared'
 import {
 	artifact,
@@ -25,12 +26,15 @@ export function createDocumentInspectorActor(decoder: DocumentDecoder): Actor {
 				try {
 					const source = payload.source as unknown as DocumentSource
 					const modelPageLimit = Number(payload.modelPageLimit ?? 0)
-					const document = await decoder.decode(source, {
-						modelPageLimit:
-							Number.isInteger(modelPageLimit) && modelPageLimit >= 0
-								? Math.min(modelPageLimit, MAX_DOCUMENT_PAGES)
-								: 0
-					})
+					const document = boundedDocument(
+						await decoder.decode(source, {
+							metadataOnly: true,
+							modelPageLimit:
+								Number.isInteger(modelPageLimit) && modelPageLimit >= 0
+									? Math.min(modelPageLimit, MAX_DOCUMENT_PAGES)
+									: 0
+						})
+					)
 					if (document.pages.length > MAX_DOCUMENT_PAGES) {
 						throw new Error(
 							`document has ${document.pages.length} pages; maximum is ${MAX_DOCUMENT_PAGES}`

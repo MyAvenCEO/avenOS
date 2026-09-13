@@ -51,7 +51,10 @@ export function createDocumentDecomposerActor(): Actor {
 								outputLocator: wholeArtifact(),
 								inputRole: 'source',
 								inputOrdinal: 0,
-								inputLocator: wholePage(page.page)
+								inputLocator:
+									page.textRange && page.textRange.endExclusive > page.textRange.start
+										? { kind: 'byte-range' as const, ...page.textRange }
+										: wholePage(page.page)
 							}))
 						},
 						`Decomposed ${document.pages.length} page(s).`

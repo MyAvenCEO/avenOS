@@ -111,3 +111,30 @@ describe('document LLM gateway adapter', () => {
 		await expect(gateway.status()).resolves.toMatchObject({ available: true })
 	})
 })
+
+test('refreshes model selection and preserves fractional usage as portable strings', async () => {
+	let catalog = models
+	let discoveries = 0
+	const gateway = new LlmDocumentModelGateway(undefined, {
+		discover: async () => {
+			discoveries++
+			return catalog
+		},
+		complete: async () => ({
+			...response,
+			receipt: {
+				...response.receipt,
+				usage: { tokens: 42, cost: 0.01, details: { seconds: 1.25 } }
+			}
+		})
+	})
+	expect((await gateway.status()).modelId).toBe('vision/primary')
+	catalog = [models[1]!]
+	expect((await gateway.status()).modelId).toBe('vision/primary')
+	gateway.invalidate()
+	expect((await gateway.status()).modelId).toBe('vision/alternative')
+	expect(discoveries).toBe(2)
+	expect(
+		(await gateway.complete(modelRequest('classify-document', [], 'text'))).receipt.usage
+	).toEqual({ tokens: 42, cost: '0.01', details: { seconds: '1.25' } })
+})

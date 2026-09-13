@@ -202,6 +202,7 @@ function rejectBlockers(
 	signMatch: ReconciliationMatchCandidate['signMatch']
 ): string[] {
 	const blockers: string[] = []
+	if (openItem.amountDueMinor === 0) blockers.push('invoice-already-paid')
 	if (openItem.validationStatus !== 'consistent') blockers.push('open-item-not-validated')
 	if (transaction.statementValidationStatus !== 'consistent')
 		blockers.push('statement-not-validated')

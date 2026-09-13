@@ -20,7 +20,7 @@ export function createStatementTransactionFanoutActor(): Actor {
 			document_fanout_statement_transactions: async (payload) => {
 				try {
 					const offset = payload.offset
-					if (!Number.isInteger(offset) || Number(offset) < 0 || Number(offset) > 127) {
+					if (!Number.isInteger(offset) || Number(offset) < 0 || Number(offset) > 9999) {
 						throw new Error('statement transaction offset is invalid')
 					}
 					const normalized = await normalizeStatement(

@@ -40,3 +40,18 @@ Rust 1.93.1 and PostgreSQL 17 are the tested toolchain. The
 The [build and test handbook](../../docs/operations/build-and-test.md) owns verification
 commands and the complete native/customer-database E2E gate; the
 [local stack guide](../../docs/operations/local-stack.md) owns local operation.
+
+## Evidence bounds
+
+Publication validates evidence against the exact input and output artifacts. Byte
+ranges must fit the primary blob; JSON pointers must use RFC 6901 escapes and resolve
+to an existing payload value. Invalid locators return `422 INVALID_EVIDENCE`. Page
+regions remain bounded geometric claims; the store does not decode source documents
+to verify their visual contents. Replay continues to ignore expired upload authority
+because it creates no new artifact.
+
+Document uploads default to 128 MiB, with 512 MiB of staged uploads per scope and a
+1 GiB logical storage quota. Deployment overrides can lower these bounds. The facade
+and native client enforce the same per-file limit. Version 3 statement candidates and
+invoice details allow 16 MiB of canonical payload for merged financial chunks; other
+types retain the 256 KiB payload ceiling. Per-artifact schema bounds remain enforced.

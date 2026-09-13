@@ -35,6 +35,8 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 const STAGE_LABELS: Array<[prefix: string, label: string]> = [
+	['detect-csv-statement', 'Identifying CSV statement'],
+	['admit-csv-statement', 'Reading confirmed CSV statement'],
 	['inspect', 'Inspecting file'],
 	['decompose-pages', 'Splitting into pages'],
 	['extract-native-page-', 'Reading embedded text'],
@@ -92,7 +94,7 @@ export function artifactProcessingStageLabel(key: string): string {
 	const label =
 		STAGE_LABELS.find(([prefix]) => key === prefix || key.startsWith(prefix))?.[1] ??
 		artifactTypeLabel(key)
-	const page = key.match(/page-(\d+)$/)?.[1]
+	const page = key.match(/page-(?:independent-)?(\d+)$/)?.[1]
 	return page ? `${label} · Page ${Number(page)}` : label
 }
 

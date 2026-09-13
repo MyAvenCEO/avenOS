@@ -39,11 +39,12 @@ Bun.serve({
 				)
 				.join('\n')
 			const documentText = text.match(/<document_text>\s*([\s\S]*?)\s*<\/document_text>/)?.[1] ?? ''
+			const operationsNote = documentText.startsWith('E2E operations note')
 			const marketInvoice =
 				documentText.includes('SYNTHETIC / FIKTIV') &&
 				documentText.includes('RE-DE-1001') &&
 				documentText.includes('Musterwerk Bürobedarf GmbH')
-			if (!documentText.includes('Synthetic test document') && !marketInvoice)
+			if (!documentText.includes('Synthetic test document') && !marketInvoice && !operationsNote)
 				return Response.json(
 					{ error: { message: 'Only the explicit synthetic document fixtures are supported.' } },
 					{ status: 400 }
@@ -58,6 +59,14 @@ Bun.serve({
 				images: [],
 				documentText
 			})
+			if (operationsNote && procedure === 'classify-document') {
+				Object.assign(response.structured, {
+					rawKind: 'operations-note',
+					resolvedKind: 'unknown',
+					family: 'unknown',
+					reason: 'An operations note is outside the supported finance families.'
+				})
+			}
 			if (marketInvoice && procedure === 'extract-invoice') {
 				const value = response.structured as Record<string, unknown>
 				const candidate = value.candidate as Record<string, unknown>

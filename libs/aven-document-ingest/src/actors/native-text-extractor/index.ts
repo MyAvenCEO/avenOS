@@ -1,8 +1,9 @@
 import { Actor } from '@avenos/actors'
-import type { ClientEvidence, DecodedPage } from '../../shared'
+import type { ClientEvidence, DecodedPage, DocumentDecoder, DocumentSource } from '../../shared'
 import {
 	artifact,
 	bytesToBase64,
+	decodedPage,
 	failure,
 	manifest,
 	materializePage,
@@ -11,7 +12,7 @@ import {
 	wholePage
 } from '../../shared'
 
-export function createNativeTextExtractorActor(): Actor {
+export function createNativeTextExtractorActor(decoder?: DocumentDecoder): Actor {
 	return new Actor(
 		manifest(
 			'native-text-extractor',
@@ -22,9 +23,13 @@ export function createNativeTextExtractorActor(): Actor {
 			['ceo.aven.docs.extracted_text(F, P, T)', 'ceo.aven.docs.text_layout(F, P, L)']
 		),
 		{
-			document_extract_native_text: (payload) => {
+			document_extract_native_text: async (payload) => {
 				try {
-					const page = payload.page as unknown as DecodedPage
+					const page = await decodedPage(
+						decoder,
+						payload.source as unknown as DocumentSource,
+						payload.page as unknown as DecodedPage
+					)
 					const extracted = materializePage(page)
 					const bytes = new TextEncoder().encode(extracted.text)
 					const evidence: ClientEvidence[] = [
@@ -34,7 +39,10 @@ export function createNativeTextExtractorActor(): Actor {
 							outputLocator: wholeArtifact(),
 							inputRole: 'source',
 							inputOrdinal: 0,
-							inputLocator: wholePage(page.page)
+							inputLocator:
+								page.textRange && page.textRange.endExclusive > page.textRange.start
+									? { kind: 'byte-range', ...page.textRange }
+									: wholePage(page.page)
 						}
 					]
 					if (bytes.length > 0) {
@@ -44,7 +52,10 @@ export function createNativeTextExtractorActor(): Actor {
 							outputLocator: { kind: 'byte-range', start: 0, endExclusive: bytes.length },
 							inputRole: 'source',
 							inputOrdinal: 0,
-							inputLocator: wholePage(page.page)
+							inputLocator:
+								page.textRange && page.textRange.endExclusive > page.textRange.start
+									? { kind: 'byte-range', ...page.textRange }
+									: wholePage(page.page)
 						})
 					}
 					return success(

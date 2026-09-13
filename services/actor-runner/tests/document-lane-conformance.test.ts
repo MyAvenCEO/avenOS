@@ -354,7 +354,7 @@ describe('document execution lane conformance', () => {
 			facts: expect.arrayContaining([
 				expect.objectContaining({
 					predicate: 'ceo.aven.bookkeeping.statement_candidate',
-					schema: 'ceo.aven:schema:bookkeeping:statement-candidate@2'
+					schema: 'ceo.aven:schema:bookkeeping:statement-candidate@3'
 				})
 			])
 		})
@@ -440,7 +440,7 @@ describe('document execution lane conformance', () => {
 			facts: expect.arrayContaining([
 				expect.objectContaining({
 					predicate: 'ceo.aven.bookkeeping.invoice_details',
-					schema: 'ceo.aven:schema:bookkeeping:invoice-details@2'
+					schema: 'ceo.aven:schema:bookkeeping:invoice-details@3'
 				})
 			])
 		})

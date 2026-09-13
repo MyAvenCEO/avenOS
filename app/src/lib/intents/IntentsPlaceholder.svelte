@@ -2,6 +2,10 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { Background, type Edge, type Node, SvelteFlow } from '@xyflow/svelte'
 import { onDestroy, untrack } from 'svelte'
+import {
+	cancelClientDocument,
+	retryClientDocument
+} from '$lib/artifacts/client-document-processing'
 import '@xyflow/svelte/dist/style.css'
 import AvenVibeEngine from '$lib/actors/AvenVibeEngine.svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
@@ -1325,6 +1329,23 @@ const DOT: Record<string, string> = {
 														</div>
 													{/if}
 
+													{#if file.artifactId && processing.state === 'failed' && processing.metadata.retryAvailable !== false}
+														<button
+															type="button"
+															class="text-primary underline"
+															onclick={() => void retryClientDocument(file.artifactId!, file.originalName)}
+														>
+															Retry processing
+														</button>
+													{:else if file.artifactId && processing.state === 'active'}
+														<button
+															type="button"
+															class="text-foreground/60 underline"
+															onclick={() => void cancelClientDocument(file.artifactId!)}
+														>
+															Cancel processing
+														</button>
+													{/if}
 													{#if processing.summary}
 														<p
 															class="mt-2 text-foreground/50 text-[length:var(--fs-eyebrow)] leading-relaxed"

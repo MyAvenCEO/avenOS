@@ -4,6 +4,7 @@ import {
 	MessageBus,
 	solverIdentity
 } from '@avenos/actors'
+import { abortable } from '@avenos/actors/abort'
 import type {
 	ArtifactProcessingPresentation,
 	ArtifactProcessingStage,
@@ -78,6 +79,7 @@ export class DocumentProcessingRuntime {
 	readonly #modelStatus?: () => Promise<DocumentModelStatus>
 	readonly #options: Required<DocumentProcessingRuntimeOptions>
 	readonly #presentations = new Map<string, ArtifactProcessingPresentation>()
+	readonly #controllers = new Map<string, AbortController>()
 	readonly #running = new Map<string, Promise<ArtifactProcessingPresentation>>()
 	onChange?: (artifactId: string, presentation: ArtifactProcessingPresentation) => void
 
@@ -104,7 +106,18 @@ export class DocumentProcessingRuntime {
 		return this.#presentations.get(artifactId)
 	}
 
+	cancel(artifactId: string): void {
+		this.#controllers.get(artifactId)?.abort(new Error('Document processing cancelled.'))
+	}
+	#closed = false
+	async close(): Promise<void> {
+		this.#closed = true
+		for (const id of this.#controllers.keys()) this.cancel(id)
+		await Promise.allSettled(this.#running.values())
+		for (const actor of this.#actors.all) actor.dispose()
+	}
 	start(source: DocumentSource): Promise<ArtifactProcessingPresentation> {
+		if (this.#closed) return Promise.reject(new Error('Document runtime is closed.'))
 		const active = this.#running.get(source.artifactId)
 		if (active) return active
 		const existing = this.#presentations.get(source.artifactId)
@@ -115,14 +128,19 @@ export class DocumentProcessingRuntime {
 		) {
 			return Promise.resolve(existing)
 		}
-		const running = this.#run(source).finally(() => this.#running.delete(source.artifactId))
+		const controller = new AbortController()
+		this.#controllers.set(source.artifactId, controller)
+		const running = this.#run(source).finally(() => {
+			this.#running.delete(source.artifactId)
+			this.#controllers.delete(source.artifactId)
+		})
 		this.#running.set(source.artifactId, running)
 		return running
 	}
 
 	async #run(source: DocumentSource): Promise<ArtifactProcessingPresentation> {
 		const presentation: ArtifactProcessingPresentation = {
-			caseId: await solverIdentity(source.artifactId + ':document-skill-v2'),
+			caseId: await solverIdentity(`${source.artifactId}:document-skill-v2`),
 			state: 'active',
 			projectionVersion: 'actor-document-v1',
 			preferredType: 'file',
@@ -148,7 +166,10 @@ export class DocumentProcessingRuntime {
 				: null
 			const model: DocumentModelStatus =
 				this.#modelStatus && !csv
-					? await this.#modelStatus().catch(() => ({ available: false, maxPages: MAX_MODEL_PAGES }))
+					? await abortable(
+							this.#modelStatus().catch(() => ({ available: false, maxPages: MAX_MODEL_PAGES })),
+							this.#controllers.get(source.artifactId)!.signal
+						)
 					: { available: false, maxPages: MAX_MODEL_PAGES }
 			const modelPageLimit =
 				model.available && Number.isInteger(model.maxPages) && model.maxPages >= 1
@@ -164,6 +185,7 @@ export class DocumentProcessingRuntime {
 			})
 			const results = new Map<string, DocumentStepOutcome>()
 			const run = await executeObservedProgram({
+				maxInvocations: 100_000,
 				runId:
 					presentation.caseId +
 					':' +
@@ -174,7 +196,7 @@ export class DocumentProcessingRuntime {
 				ingredients: [
 					{
 						id: source.artifactId,
-						predicate: 'ceo.aven.docs.file(' + documentAtom(source.artifactId) + ')',
+						predicate: `ceo.aven.docs.file(${documentAtom(source.artifactId)})`,
 						value: { artifactId: source.artifactId }
 					},
 					...(csvConfirmation?.payload.decision === 'accepted'
@@ -212,6 +234,7 @@ export class DocumentProcessingRuntime {
 							})
 							result = { ...executed, stageKey: definition.key }
 						} catch (error) {
+							this.#controllers.get(source.artifactId)!.signal.throwIfAborted()
 							// An uncertain publication is not a negative observation about a document.
 							const stage = presentation.stages.find((item) => item.key === definition.key)
 							if (stage?.state === 'publishing') throw error
@@ -221,7 +244,7 @@ export class DocumentProcessingRuntime {
 							}
 							const message = error instanceof Error ? error.message : String(error)
 							presentation.warnings.push({
-								code: definition.key + '-failed',
+								code: `${definition.key}-failed`,
 								message,
 								retryable: true
 							})
@@ -259,14 +282,28 @@ export class DocumentProcessingRuntime {
 			)?.payload
 			const pageCount = Number(inspection?.pageCount ?? 0)
 			presentation.metadata.pageCount = pageCount
+			presentation.metadata.chunkCount = pageCount
+			presentation.metadata.completedChunks = presentation.stages.filter(
+				(stage) => stage.key.startsWith('extract-native-page-') && stage.state === 'succeeded'
+			).length
 			const useModel =
 				this.#modelEnabled &&
-				modelPageLimit >= pageCount &&
 				modelPageLimit > 0 &&
 				pageCount > 0 &&
-				Boolean(results.get('inspect')?.result.document?.pages.every((page) => page.image))
+				Boolean(
+					results
+						.get('inspect')
+						?.result.document?.pages.every(
+							(page) => page.deferred || page.image || page.runs.length
+						)
+				)
 			presentation.metadata.vision = useModel ? 'model' : 'deterministic-fallback'
-			const kind = artifacts.find(
+			const finalArtifacts = [
+				...(results.get('classify-document')?.artifacts ?? []),
+				...(results.get('extract-invoice')?.artifacts ?? []),
+				...(results.get('extract-statement')?.artifacts ?? [])
+			]
+			const kind = finalArtifacts.find(
 				(artifact) => artifact.typeKey === 'core.document-classification'
 			)?.payload
 			const content = artifacts.find(
@@ -279,11 +316,41 @@ export class DocumentProcessingRuntime {
 					artifact.typeKey
 				)
 			)?.payload
-			const candidate = artifacts.find((artifact) =>
+			const candidate = finalArtifacts.find((artifact) =>
 				['bookkeeping.invoice-candidate', 'banking.account-statement-candidate'].includes(
 					artifact.typeKey
 				)
 			)?.payload
+			if (
+				candidate &&
+				Array.isArray(candidate.transactions) &&
+				((!candidate.chunkCoverage && candidate.transactions.length >= 128) ||
+					String(candidate.notes ?? '').startsWith('[ROW_LIMIT_REACHED]') ||
+					(candidate.chunkCoverage as { complete?: boolean } | undefined)?.complete === false)
+			) {
+				presentation.metadata.statementOverflow = true
+				presentation.warnings.push({
+					code: 'statement-row-limit',
+					message:
+						'Some extraction chunks have incomplete coverage or conflicting values. Review the retained source chunks before using the combined statement.',
+					retryable: false
+				})
+			}
+			if (candidate)
+				for (const key of [
+					'supplier',
+					'invoiceNumber',
+					'grossMinor',
+					'currency',
+					'accountHolder',
+					'periodStart',
+					'periodEnd',
+					'closingBalanceMinor'
+				]) {
+					const value = candidate[key]
+					if (typeof value === 'string' || typeof value === 'number')
+						presentation.metadata[key] = value
+				}
 			if (!inspection) {
 				presentation.state = 'failed'
 				presentation.summary =
@@ -294,9 +361,9 @@ export class DocumentProcessingRuntime {
 			} else if (inspection.outcome !== 'ok') {
 				presentation.state = 'needs_review'
 				presentation.preferredType = String(inspection.detectedMediaType)
-				presentation.summary = 'The file is ' + inspection.outcome + '; processing stopped safely.'
+				presentation.summary = `The file is ${inspection.outcome}; processing stopped safely.`
 				presentation.warnings.push({
-					code: 'file-' + inspection.outcome,
+					code: `file-${inspection.outcome}`,
 					message: presentation.summary,
 					retryable: false
 				})
@@ -310,8 +377,8 @@ export class DocumentProcessingRuntime {
 					)
 					if (validation.status !== 'consistent')
 						presentation.warnings.push({
-							code: 'finance-' + validation.status,
-							message: 'Finance validation reported ' + validation.status + '.',
+							code: `finance-${validation.status}`,
+							message: `Finance validation reported ${validation.status}.`,
 							retryable: false
 						})
 				} else
@@ -319,12 +386,13 @@ export class DocumentProcessingRuntime {
 						kind?.resolvedKind === 'unknown'
 							? String(kind.reason)
 							: content?.complete
-								? pageCount + ' page(s) processed with native text extraction.'
-								: pageCount + ' page(s) preserved; OCR or visual understanding is required.'
+								? `${pageCount} page(s) processed with native text extraction.`
+								: `${pageCount} page(s) preserved; OCR or visual understanding is required.`
 				const failures = presentation.stages.filter((stage) => stage.state === 'failed')
 				if (failures.length) presentation.metadata.failedActorCount = failures.length
 				presentation.state =
 					run.state === 'complete' &&
+					!presentation.metadata.statementOverflow &&
 					content?.complete &&
 					kind?.resolvedKind !== 'unknown' &&
 					(!validation || validation.status === 'consistent')
@@ -343,15 +411,6 @@ export class DocumentProcessingRuntime {
 						message: presentation.summary ?? 'Unknown document kind.',
 						retryable: false
 					})
-				if (modelPageLimit > 0 && pageCount > modelPageLimit)
-					presentation.warnings.push({
-						code: 'client-vision-page-limit',
-						message:
-							'Vision processing admits at most ' +
-							modelPageLimit +
-							' pages; deterministic extraction continues.',
-						retryable: false
-					})
 			}
 			if (csv) {
 				presentation.metadata.csvDetectionArtifactId = csvDetection?.artifactId ?? null
@@ -361,8 +420,7 @@ export class DocumentProcessingRuntime {
 				presentation.metadata.documentKind =
 					csvConfirmation?.payload.decision === 'accepted' ? 'bank-statement' : 'unconfirmed-csv'
 				if (
-					!csvDetection ||
-					csvDetection.payload.eligible !== true ||
+					csvDetection?.payload.eligible !== true ||
 					csvConfirmation?.payload.decision !== 'accepted'
 				) {
 					presentation.state = 'needs_review'
@@ -404,6 +462,8 @@ export class DocumentProcessingRuntime {
 		result: DocumentActorResult
 		artifacts: MaterializedArtifact[]
 	}> {
+		const signal = this.#controllers.get(source.artifactId)!.signal
+		signal.throwIfAborted()
 		const stage: ArtifactProcessingStage = {
 			key: definition.key,
 			state: 'running',
@@ -471,19 +531,27 @@ export class DocumentProcessingRuntime {
 			stage.state = 'running'
 			this.#changed(source.artifactId, presentation)
 			try {
-				const response = await this.#bus.send({
+				signal.throwIfAborted()
+				const delivery = this.#bus.send({
 					id: definition.publicationId,
 					from: 'document-runtime',
 					to: definition.actor,
 					method: definition.method,
-					payload: definition.payload
+					payload: { ...definition.payload, source }
 				})
+				const response = await abortable(delivery, signal)
+				signal.throwIfAborted()
 				result = parseDocumentActorResult(response.record)
 				break
 			} catch (error) {
 				lastError = error
 				stage.lastError = error instanceof Error ? error.message : String(error)
-				if (attempt === maximumAttempts) break
+				if (
+					signal.aborted ||
+					!(error as { retryable?: boolean })?.retryable ||
+					attempt === maximumAttempts
+				)
+					break
 				stage.state = 'retry_wait'
 				this.#changed(source.artifactId, presentation)
 				await wait(MODEL_RETRY_DELAYS_MS[attempt - 1] ?? 0)
@@ -495,6 +563,7 @@ export class DocumentProcessingRuntime {
 		stage.procedureKey = result.procedureKey
 		stage.state = 'publishing'
 		this.#changed(source.artifactId, presentation)
+		signal.throwIfAborted()
 		const receipt = await this.#gateway.publish({
 			publicationId: definition.publicationId,
 			procedureKey: result.procedureKey,

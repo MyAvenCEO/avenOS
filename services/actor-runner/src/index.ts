@@ -12,6 +12,7 @@ import {
 } from '@avenos/document-ingest/server'
 import { BoundarySignals } from '@avenos/http-boundary'
 import { HttpLlmGatewayClient } from '@avenos/llm-client/http'
+import type pg from 'pg'
 import { createApplicationExecutor } from './application-executor.js'
 import { loadActorRunnerConfig } from './config.js'
 import { createActorRunnerHandler } from './handler.js'
@@ -20,6 +21,19 @@ import { SqlPlanRunner } from './sql-runner.js'
 
 const config = loadActorRunnerConfig()
 const componentRef = 'os.aven:component:actors:run-repository@1'
+const runners = new WeakMap<pg.Pool, { runner: SqlPlanRunner; api: pg.Pool; worker: pg.Pool }>()
+const drains = new WeakMap<pg.Pool, Promise<void>>()
+const evict = async (pool: pg.Pool) => {
+	const entry = runners.get(pool)
+	if (entry) {
+		const drain = entry.runner.close()
+		drains.set(entry.api, drain)
+		drains.set(entry.worker, drain)
+		runners.delete(entry.api)
+		runners.delete(entry.worker)
+	}
+	await drains.get(pool)
+}
 const apiPools = new TenantPoolProvider({
 	host: config.CUSTOMER_DATABASE_HOST,
 	port: config.CUSTOMER_DATABASE_PORT,
@@ -28,7 +42,9 @@ const apiPools = new TenantPoolProvider({
 	roleKind: 'os.aven:db-role:actors:api@1',
 	roleSuffix: 'act_api',
 	componentRef,
-	searchPath: ['aven_actor_runs']
+	searchPath: ['aven_actor_runs'],
+	canEvict: (pool) => !runners.get(pool)?.runner.busy,
+	onEvict: evict
 })
 const workerPools = new TenantPoolProvider({
 	host: config.CUSTOMER_DATABASE_HOST,
@@ -38,7 +54,9 @@ const workerPools = new TenantPoolProvider({
 	roleKind: 'os.aven:db-role:actors:worker@1',
 	roleSuffix: 'act_worker',
 	componentRef,
-	searchPath: ['aven_actor_runs']
+	searchPath: ['aven_actor_runs'],
+	canEvict: (pool) => !runners.get(pool)?.runner.busy,
+	onEvict: evict
 })
 const tenantGrantPublicKey = await importTenantGrantPublicKey(config.TENANT_GRANT_PUBLIC_KEY)
 const documentModel = new LlmDocumentModelGateway(
@@ -55,6 +73,8 @@ const handler = createActorRunnerHandler(
 				apiPools.forGrant(grant),
 				workerPools.forGrant(grant)
 			])
+			const cached = runners.get(api)
+			if (cached) return cached.runner
 			const artifactClient = new ArtifactStoreClient({
 				baseUrl: config.ARTIFACT_STORE_BASE_URL,
 				bearerToken: () => config.ARTIFACT_STORE_BEARER_TOKEN,
@@ -89,7 +109,12 @@ const handler = createActorRunnerHandler(
 				createActorPlanExecutor(createServerActorExecutionHost())
 			)
 			const runner = new SqlPlanRunner(api, worker, execute, true)
-			await runner.recoverAcceptedRuns()
+			const entry = { runner, api, worker }
+			runners.set(api, entry)
+			runners.set(worker, entry)
+			void runner
+				.recoverAcceptedRuns()
+				.catch((error) => console.error('Actor recovery failed', error))
 			return runner
 		}
 	},
@@ -108,7 +133,7 @@ const handler = createActorRunnerHandler(
 const boundary = new BoundarySignals('facade-to-runner', (summary) =>
 	console.warn(JSON.stringify(summary))
 )
-Bun.serve({
+const server = Bun.serve({
 	port: config.PORT,
 	async fetch(request, server) {
 		const response = await handler(request)
@@ -129,3 +154,18 @@ console.info(
 		port: config.PORT
 	})
 )
+
+let stopping = false
+async function shutdown(): Promise<void> {
+	if (stopping) return
+	stopping = true
+	await server.stop(true)
+	await Promise.all([apiPools.close(), workerPools.close()])
+}
+for (const signal of ['SIGTERM', 'SIGINT'] as const)
+	process.on(signal, () => {
+		void shutdown().then(
+			() => process.exit(0),
+			() => process.exit(1)
+		)
+	})

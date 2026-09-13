@@ -17,7 +17,7 @@ use tauri::Emitter;
 
 use crate::auth::{api_endpoint, service_access_token, session_token, AuthState};
 
-const MAX_FILE_BYTES: u64 = 25 * 1024 * 1024;
+const MAX_FILE_BYTES: u64 = 128 * 1024 * 1024;
 const HASH_BUFFER_BYTES: usize = 256 * 1024;
 const MODEL_REQUEST_TIMEOUT_SECONDS: u64 = 920;
 
@@ -122,6 +122,7 @@ pub struct ArtifactContent {
 
 #[derive(Deserialize)]
 struct ApiErrorBody {
+    code: Option<String>,
     message: Option<String>,
 }
 
@@ -197,13 +198,24 @@ impl Read for ProgressReader {
     }
 }
 
+fn retryable_transport_error(error: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(error)
+        .ok()
+        .and_then(|value| value.get("retryable").and_then(serde_json::Value::as_bool))
+        .unwrap_or(false)
+}
+
+fn network_error() -> String {
+    serde_json::json!({"code":"NETWORK_UNAVAILABLE","message":"Aven API is temporarily unavailable.","retryable":true}).to_string()
+}
+
 fn response_error(response: ureq::Response, fallback: &str) -> String {
-    response
+    let status = response.status();
+    let body = response
         .into_string()
         .ok()
-        .and_then(|body| serde_json::from_str::<ApiErrorBody>(&body).ok())
-        .and_then(|body| body.message)
-        .unwrap_or_else(|| fallback.to_string())
+        .and_then(|body| serde_json::from_str::<ApiErrorBody>(&body).ok());
+    serde_json::json!({"status":status,"code":body.as_ref().and_then(|b|b.code.clone()).unwrap_or_else(||"REQUEST_REJECTED".to_string()),"message":body.and_then(|b|b.message).unwrap_or_else(||fallback.to_string()),"retryable":status==408 || status==429 || status>=500}).to_string()
 }
 
 fn valid_artifact_id(value: &str) -> bool {
@@ -235,10 +247,7 @@ fn processing_status(
     let response = match result {
         Ok(response) => response,
         Err(ureq::Error::Status(404, _)) => {
-            return Ok(ArtifactProcessingLookup {
-                pending: true,
-                presentation: None,
-            });
+            return Err(serde_json::json!({"status":404,"code":"PROCESSING_NOT_AVAILABLE","message":"No document processing run is available.","retryable":false}).to_string());
         }
         Err(ureq::Error::Status(_, response)) => {
             return Err(response_error(
@@ -246,8 +255,8 @@ fn processing_status(
                 "Artifact processing status is unavailable.",
             ));
         }
-        Err(ureq::Error::Transport(error)) => {
-            return Err(format!("Aven API unavailable: {error}"));
+        Err(ureq::Error::Transport(_)) => {
+            return Err(network_error());
         }
     };
     let body = response
@@ -384,6 +393,34 @@ pub async fn actor_run_status(
     .map_err(|error| format!("Actor Runner status task failed: {error}"))?
 }
 
+#[tauri::command]
+pub async fn actor_run_control(
+    run_id: String,
+    request_id: String,
+    action: String,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !valid_artifact_id(&run_id)
+        || !valid_artifact_id(&request_id)
+        || !matches!(action.as_str(), "cancel" | "retry")
+    {
+        return Err("Invalid run control request.".to_string());
+    }
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        customer_json(
+            token,
+            ACTOR_RUN_COMPONENT,
+            "actor-runs",
+            "POST",
+            format!("/api/actor-runs/{run_id}/{action}"),
+            Some(serde_json::json!({"requestId":request_id}).to_string()),
+        )
+    })
+    .await
+    .map_err(|error| format!("Run control task failed: {error}"))?
+}
+
 fn artifact_json(
     session: String,
     method: &str,
@@ -457,7 +494,7 @@ fn api_json_with_timeout(
         ureq::Error::Status(_, response) => {
             response_error(response, "The intent request was rejected.")
         }
-        ureq::Error::Transport(error) => format!("Aven API unavailable: {error}"),
+        ureq::Error::Transport(_) => network_error(),
     })?;
     if response.status() == 204 {
         return Ok(serde_json::Value::Null);
@@ -481,7 +518,7 @@ fn artifact_content(session: String, artifact_id: String) -> Result<ArtifactCont
             ureq::Error::Status(_, response) => {
                 response_error(response, "Artifact content is unavailable.")
             }
-            ureq::Error::Transport(error) => format!("Aven API unavailable: {error}"),
+            ureq::Error::Transport(_) => network_error(),
         })?;
     let media_type = response
         .header("content-type")
@@ -520,7 +557,7 @@ fn upload(
     }
     let length = metadata.len();
     if length > MAX_FILE_BYTES {
-        return Err("Files may not exceed 25 MiB.".to_string());
+        return Err("Files may not exceed 128 MiB.".to_string());
     }
     let original_name = path
         .file_name()
@@ -586,7 +623,7 @@ fn upload(
             ureq::Error::Status(_, response) => {
                 response_error(response, "The artifact upload was rejected.")
             }
-            ureq::Error::Transport(error) => format!("Aven API unavailable: {error}"),
+            ureq::Error::Transport(_) => network_error(),
         })?;
     let body = response
         .into_string()
@@ -622,7 +659,7 @@ pub async fn artifact_upload(
         );
         if first
             .as_ref()
-            .is_err_and(|error| error.starts_with("Aven API unavailable:"))
+            .is_err_and(|error| retryable_transport_error(error))
         {
             upload(
                 app,
@@ -793,7 +830,7 @@ pub async fn llm_openai_stream(
                 ureq::Error::Status(_, response) => {
                     response_error(response, "The LLM stream request was rejected.")
                 }
-                ureq::Error::Transport(error) => format!("Aven API unavailable: {error}"),
+                ureq::Error::Transport(_) => network_error(),
             })?;
         let mut reader = BufReader::new(response.into_reader());
         loop {
@@ -1107,6 +1144,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn upload_retry_uses_structured_transport_classification() {
+        assert!(retryable_transport_error(
+            r#"{"status":503,"retryable":true}"#
+        ));
+        assert!(!retryable_transport_error(
+            r#"{"status":400,"retryable":false}"#
+        ));
+        assert!(!retryable_transport_error("unclassified error"));
+    }
+
+    #[test]
     fn hash_is_streamed_and_exact() {
         let path = std::env::temp_dir().join(format!(
             "aven-artifact-hash-{}-{}",
@@ -1168,5 +1216,27 @@ mod tests {
         assert_eq!(encoded["dependsOn"][0], "inspect");
         assert_eq!(encoded["procedureKey"], "docs.decompose-pages");
         assert_eq!(encoded["attemptCount"], 2);
+    }
+}
+
+#[cfg(test)]
+mod transport_error_tests {
+    use super::*;
+    #[test]
+    fn structured_failures_preserve_status_code_and_retryability() {
+        for (status, retryable) in [(422, false), (429, true), (503, true)] {
+            let response = ureq::Response::new(
+                status,
+                "fixture",
+                r#"{"code":"FIXTURE_ERROR","message":"Fixture failure"}"#,
+            )
+            .unwrap();
+            let error: serde_json::Value =
+                serde_json::from_str(&response_error(response, "fallback")).unwrap();
+            assert_eq!(error["status"], status);
+            assert_eq!(error["code"], "FIXTURE_ERROR");
+            assert_eq!(error["message"], "Fixture failure");
+            assert_eq!(error["retryable"], retryable);
+        }
     }
 }

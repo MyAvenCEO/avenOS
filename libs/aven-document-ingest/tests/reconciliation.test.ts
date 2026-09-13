@@ -146,7 +146,7 @@ describe('reconciliation normalization', () => {
 			VALIDATION
 		)
 		expect(a.statement.accountRef).not.toBe(b.statement.accountRef)
-		expect(a.transactions[0]!.dedupKey).not.toBe(b.transactions[0]!.dedupKey)
+		expect(a.transactions[0]?.dedupKey).not.toBe(b.transactions[0]?.dedupKey)
 	})
 
 	test('matches historical gross value even after a partial payment and retains Unicode supplier identity', () => {
@@ -182,7 +182,7 @@ describe('reconciliation normalization', () => {
 				counterpartyName: 'Unknown'
 			})
 		])
-		expect(matches[0]!.transactionDedupKey).toBe('near')
+		expect(matches[0]?.transactionDedupKey).toBe('near')
 	})
 	test('turns extracted invoice details into a stable open item and retains matching evidence', () => {
 		const openItem = normalizeInvoiceOpenItem(
@@ -215,7 +215,7 @@ describe('reconciliation normalization', () => {
 
 		expect(openItem).toMatchObject({
 			businessKey: 'invoice:acmegmbh:re42',
-			amountDueMinor: 1200,
+			amountDueMinor: 0,
 			amountPaidMinor: 1200,
 			validationStatus: 'consistent'
 		})
@@ -441,4 +441,20 @@ describe('invoice-to-transaction ranking', () => {
 			expect.arrayContaining(['open-item-direction-unknown', 'statement-coverage-unverified'])
 		)
 	})
+})
+
+test('explicit statement overflow remains incomplete even below the row cap', async () => {
+	const normalized = await normalizeStatement(
+		{ ...statementCandidate([transaction()]), notes: '[ROW_LIMIT_REACHED] More rows visible.' },
+		VALIDATION
+	)
+	expect(normalized.statement.coverage).toBe('row-limit-reached')
+	expect(normalized.transactions[0]?.statementCoverage).toBe('row-limit-reached')
+})
+test('zero outstanding blocks an otherwise exact automatic match', () => {
+	const match = rankInvoiceTransactions(
+		{ ...OPEN_ITEM, amountDueMinor: 0, amountPaidMinor: 1200 },
+		[normalizedTransaction()]
+	)[0]!
+	expect(match.blockers).toContain('invoice-already-paid')
 })

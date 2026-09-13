@@ -98,10 +98,9 @@ directly. Host-specific capabilities enter through injected ports such as
 `DocumentDecoder` and `DocumentModelGateway`.
 
 `DocumentExecutionRouter` freezes `local` or `server` at start. Both current hosts use
-the same strict JSON boundary and Artifact Store gateway. The server host is presently
-an explicitly labelled in-process emulation. The authenticated HTTP runner is a
-separate service and does not yet execute these actors. The replacement protocol and
-cutover are defined in
+the same strict JSON boundary and Artifact Store contracts. Server placement uses
+the authenticated HTTP Actor Runner, which executes these actors with the headless
+decoder and the shared model adapter. The run protocol is defined in
 [`docs/actor-runtime-formal-spec.md`](../../../../docs/actor-runtime-formal-spec.md).
 
 ## Artifact and evidence rules

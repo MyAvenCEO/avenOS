@@ -15,7 +15,7 @@
 		-Server
 	}
 	request_body {
-		max_size 25MiB
+		max_size 160MiB
 	}
 	reverse_proxy api:3000 {
 		header_up X-Forwarded-For {remote_host}

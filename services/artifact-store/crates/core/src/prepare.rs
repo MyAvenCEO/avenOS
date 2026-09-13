@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use aven_artifact_store_contract::{
     artifact_digest, parse_canonical, publication_request_digest, AllowedTargetTypes, BlobPolicy,
@@ -13,6 +13,7 @@ use crate::{CoreError, Limits, TypeCatalog};
 
 #[derive(Clone, Debug)]
 pub struct ExistingArtifact {
+    pub payload: CanonicalValue,
     pub id: Uuid,
     pub scope_id: Uuid,
     pub type_key: TypeKey,
@@ -176,7 +177,18 @@ pub fn prepare_publication(
                 artifact.local_key
             )));
         }
-        if artifact.payload.canonical_bytes().len() > limits.max_payload_bytes {
+        // Chunk aggregates have a separately bounded, versioned contract. Ordinary
+        // artifacts retain the small payload limit.
+        let payload_limit = if artifact.type_version == 3
+            && matches!(
+                artifact.type_key.as_str(),
+                "banking.account-statement-candidate" | "bookkeeping.invoice-details"
+            ) {
+            16 * 1024 * 1024
+        } else {
+            limits.max_payload_bytes
+        };
+        if artifact.payload.canonical_bytes().len() > payload_limit {
             return Err(CoreError::InvalidPublication(format!(
                 "artifact {} payload exceeds limit",
                 artifact.local_key
@@ -358,85 +370,147 @@ fn validate_contiguous<'a>(
 
 fn validate_evidence(
     submission: &PublicationSubmission,
-    _existing: &BTreeMap<Uuid, ExistingArtifact>,
+    existing: &BTreeMap<Uuid, ExistingArtifact>,
     prepared: &[PreparedArtifact],
 ) -> Result<(), CoreError> {
     let PublicationBody::Run { run } = &submission.intent.body else {
         return Ok(());
     };
-    let outputs: BTreeSet<_> = prepared
-        .iter()
-        .map(|artifact| &artifact.local_key)
-        .collect();
-    let inputs: BTreeSet<_> = run
-        .inputs
-        .iter()
-        .map(|input| (&input.role, input.ordinal))
-        .collect();
     for (expected, evidence) in submission.intent.evidence.iter().enumerate() {
-        let expected_ordinal = u32::try_from(expected)
-            .map_err(|_| CoreError::InvalidPublication("too much evidence".to_owned()))?;
-        if evidence.ordinal != expected_ordinal {
-            return Err(CoreError::InvalidPublication(format!(
-                "evidence expected ordinal {expected}, got {}",
-                evidence.ordinal
-            )));
-        }
-        if !outputs.contains(&evidence.output_local_key) {
-            return Err(CoreError::InvalidPublication(
-                "evidence names a foreign output".to_owned(),
+        if usize::try_from(evidence.ordinal).ok() != Some(expected) {
+            return Err(CoreError::InvalidEvidence(
+                "evidence ordinals must be contiguous".into(),
             ));
         }
-        if !inputs.contains(&(&evidence.input_role, evidence.input_ordinal)) {
-            return Err(CoreError::InvalidPublication(
-                "evidence names an undeclared input".to_owned(),
-            ));
-        }
-        validate_locator(&evidence.output_locator)?;
-        validate_locator(&evidence.input_locator)?;
+        let output = prepared
+            .iter()
+            .find(|artifact| artifact.local_key == evidence.output_local_key)
+            .ok_or_else(|| CoreError::InvalidEvidence("evidence names a foreign output".into()))?;
+        let input = run
+            .inputs
+            .iter()
+            .find(|input| {
+                input.role == evidence.input_role && input.ordinal == evidence.input_ordinal
+            })
+            .and_then(|input| existing.get(&input.artifact_id))
+            .ok_or_else(|| {
+                CoreError::InvalidEvidence("evidence names an undeclared input".into())
+            })?;
+        validate_locator(
+            &evidence.output_locator,
+            &output.payload,
+            output.blob_length,
+        )?;
+        validate_locator(&evidence.input_locator, &input.payload, input.blob_length)?;
     }
     Ok(())
 }
 
-fn validate_locator(locator: &aven_artifact_store_contract::Locator) -> Result<(), CoreError> {
+fn validate_locator(
+    locator: &aven_artifact_store_contract::Locator,
+    payload: &CanonicalValue,
+    blob_length: Option<u64>,
+) -> Result<(), CoreError> {
     use aven_artifact_store_contract::Locator;
-    match locator {
-        Locator::ArtifactRoot => Ok(()),
+    let valid = match locator {
+        Locator::ArtifactRoot => true,
         Locator::JsonPointer { pointer } => {
-            if pointer.is_empty() || pointer.starts_with('/') {
-                Ok(())
-            } else {
-                Err(CoreError::InvalidPublication(
-                    "JSON pointer must be empty or start with '/'".to_owned(),
-                ))
+            let mut chars = pointer.chars();
+            let mut escaped = true;
+            while let Some(c) = chars.next() {
+                if c == '~' && !matches!(chars.next(), Some('0' | '1')) {
+                    escaped = false;
+                    break;
+                }
             }
+            escaped && serde_json::to_value(payload)?.pointer(pointer).is_some()
         }
         Locator::ByteRange {
             start,
             end_exclusive,
-        } if start < end_exclusive => Ok(()),
-        Locator::ByteRange { .. } => Err(CoreError::InvalidPublication(
-            "byte range must be non-empty".to_owned(),
-        )),
+        } => start < end_exclusive && blob_length.is_some_and(|length| *end_exclusive <= length),
         Locator::PageRegion {
             page,
             x,
             y,
             width,
             height,
-        } if *page > 0
-            && *width > 0
-            && *height > 0
-            && *x <= 1_000_000
-            && *y <= 1_000_000
-            && x.saturating_add(*width) <= 1_000_000
-            && y.saturating_add(*height) <= 1_000_000 =>
-        {
-            Ok(())
+        } => {
+            *page > 0
+                && *width > 0
+                && *height > 0
+                && *x <= 1_000_000
+                && *y <= 1_000_000
+                && x.saturating_add(*width) <= 1_000_000
+                && y.saturating_add(*height) <= 1_000_000
         }
-        Locator::PageRegion { .. } => Err(CoreError::InvalidPublication(
-            "page region is outside integer-millionth bounds".to_owned(),
-        )),
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(CoreError::InvalidEvidence(
+            "locator does not address valid artifact content".into(),
+        ))
+    }
+}
+
+#[cfg(test)]
+mod evidence_tests {
+    use super::*;
+    use aven_artifact_store_contract::Locator;
+
+    #[test]
+    fn json_pointers_must_resolve_and_use_rfc6901_escapes() {
+        let payload = parse_canonical(br#"{"a/b":{"~key":[1]},"literal~2":true}"#, false).unwrap();
+        for pointer in ["", "/a~1b/~0key/0", "/literal~02"] {
+            assert!(validate_locator(
+                &Locator::JsonPointer {
+                    pointer: pointer.into()
+                },
+                &payload,
+                None
+            )
+            .is_ok());
+        }
+        for pointer in [
+            "/missing",
+            "/a~1b/~0key/1",
+            "/literal~2",
+            "/a~1b/~0key/-",
+            "a",
+        ] {
+            assert!(matches!(
+                validate_locator(
+                    &Locator::JsonPointer {
+                        pointer: pointer.into()
+                    },
+                    &payload,
+                    None
+                ),
+                Err(CoreError::InvalidEvidence(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn byte_ranges_must_fit_the_primary_blob() {
+        let payload = parse_canonical(b"{}", false).unwrap();
+        let locator = Locator::ByteRange {
+            start: 0,
+            end_exclusive: 10,
+        };
+        assert!(validate_locator(&locator, &payload, Some(10)).is_ok());
+        assert!(validate_locator(&locator, &payload, Some(9)).is_err());
+        assert!(validate_locator(&locator, &payload, None).is_err());
+        assert!(validate_locator(
+            &Locator::ByteRange {
+                start: 10,
+                end_exclusive: 10
+            },
+            &payload,
+            Some(10)
+        )
+        .is_err());
     }
 }
 

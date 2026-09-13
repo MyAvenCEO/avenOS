@@ -328,3 +328,20 @@ paused because effects after a backup cannot be inferred from restored database 
 the operator must reconcile those effects before resuming execution. Successful database
 and image restoration alone does not establish that reconciliation or a fresh-cloud-host
 recovery drill has passed.
+
+## Interrupted document execution
+
+Document runs commit a running lease before execution and release pooled database
+connections while processing. Movement pauses admission, crosses the claim barrier,
+and waits within its existing 60-second budget for live execution markers to clear.
+A missing or expired lease with an unsettled marker stops movement for reconciliation;
+lease expiry alone does not establish that external work stopped.
+
+The runner's first authorized request after restart starts that customer's background
+recovery loop. Accepted work is queued; expired running work becomes
+`EXECUTION_UNCERTAIN` and cannot be retried through the normal control. Do not clear
+its marker or change its failure code merely to permit retry. Establish the actual
+external outcome first. Ordinary failed, settled document runs support an explicit
+Retry action that retains run identity and committed step history. Cancellation and
+the 15-minute no-progress deadline stop further document publications, but cannot undo
+an already committed publication or prove an arbitrary remote effect was cancelled.

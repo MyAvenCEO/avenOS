@@ -70,11 +70,27 @@ idempotency; a stored material hash prevents reuse of an idempotency key for a d
 command. Status and cancellation operate on that durable record, with a revision check
 protecting concurrent cancellation.
 
-Execution starts only after admission commits. If the process stops in that gap, the
-row remains `accepted`. Before serving an admitted request, the runner reclaims
-accepted rows from that customer database. This lazy, per-customer recovery is enough
-for the current side-effect-free executor and avoids giving the runner control-plane
-database privileges.
+Execution starts after admission commits, outside request handling. Each cached customer
+runner admits up to two executions at once and scans queued work every five seconds.
+It commits a running state and 30-second ownership lease using a short transaction,
+then releases the database connection while executing. Heartbeats extend the lease;
+status and progress use independent short queries. Execution has a 15-minute no-progress deadline.
+
+After service restart, the first authorized request discovers that customer's pools
+and starts its recovery loop without waiting for queued work to finish. The runner
+has no control-plane customer enumeration privilege, so a customer with no subsequent
+request is not discovered proactively. Pool eviction and process shutdown abort and
+drain active work before closing database connections.
+
+Expired running leases become `EXECUTION_UNCERTAIN`; recovery never replays them.
+An explicit retry request (`POST /api/actor-runs/{runId}/retry`) moves a settled failed
+run to planning, preserves its identity and checkpoints, and records its previous
+failure and attempt count. Repeating the same retry request ID is idempotent.
+Cancellation updates the durable state and propagates an abort signal to execution.
+Customer execution markers remain until the executor settles; expiry is not proof
+that arbitrary external work has stopped. See the
+[recovery handbook](../../docs/operations/backup-and-recovery.md) for movement and interrupted
+execution boundaries.
 
 `SqlPlanRunner` accepts a host-composed `PlanRunExecutor`. Its persistence E2E test
 injects the generic executor core, plans a deterministic skill, dynamically admits and
@@ -92,21 +108,22 @@ different examples.
 
 The deployed composition in `src/index.ts` has two explicit layers. Registered
 application skills are selected by an application executor catalog. Its first entry is
-`ceo.aven:skill:document-ingest@1`, which fetches the admitted source from the selected
+`ceo.aven:skill:docs.ingest:document-ingest@1`, which fetches the admitted source from the selected
 tenant's Artifact Store, runs the headless document runtime, and publishes every
 derived artifact with the runner's dedicated store identity. It discovers a
 vision-and-structured-output model through the API facade's service-authenticated
 internal LLM contract and uses the same model adapter and actor graph as the desktop.
 `LLM_GATEWAY_BASE_URL` and `LLM_GATEWAY_BEARER_TOKEN` configure that private edge; the
-bearer is distinct from the runner's ingress and Artifact Store identities. All other skills fall
-through to the portable generic executor. That fallback has an empty registry and
+bearer is distinct from the runner's ingress and Artifact Store identities. Uninstalled
+exploration skills fail at dispatch. Other exact-goal commands fall through to the
+portable generic executor. That fallback has an empty registry and
 fail-closed authorization, factory, and Artifact Store ports, so an unknown skill
 cannot accidentally execute.
 
 `SqlPlanRunner` requires the composed executor explicitly. Its protocol and repository
 implement metadata-only continuation suspension, postponement, and resumption. They
-must gain leases and fencing before workers execute non-idempotent effects; the current
-recovery mechanism is deliberately not a distributed job queue.
+must gain per-effect fencing before workers execute arbitrary non-idempotent effects.
+Run leases prevent silent replay but cannot make a remote side effect transactional.
 
 ## Local start
 
@@ -187,3 +204,10 @@ The Docker build follows the split services' packaging convention. The project
 `--secret id=npm_token,env=NODE_AUTH_TOKEN`; the build creates a minimal temporary
 registry config, performs the install, and removes the config in the same layer. The
 credential is never sent in the build context or copied into an image layer.
+
+Routine tenant-pool eviction skips runners with live execution, recovery or drain work.
+Eviction awaits runner shutdown before ending its connections. If all pools are busy,
+new tenant admission fails with a retryable service error. Starts and retries queue;
+secret continuations are refused with a conflict when execution capacity is occupied
+and must be resubmitted by the caller. Persisted progress renews the execution
+no-progress deadline, allowing long documents to continue while chunks complete.

@@ -8,7 +8,7 @@ import {
 import type { ArtifactLocator, ClientArtifactDraft, ClientEvidence } from '@avenos/artifact-store'
 import type { DocumentModelImage, DocumentModelReceipt } from './model'
 
-export const MAX_DOCUMENT_PAGES = 63
+export const MAX_DOCUMENT_PAGES = 10_000
 export const MAX_TEXT_BYTES = 2_000_000
 // The generic gateway counts instructions and the procedure prompt against its
 // 2 MiB aggregate text limit. Keep room for those trusted fields.
@@ -41,11 +41,17 @@ export const DOCUMENT_SCHEMA_BINDINGS: Readonly<Record<string, DocumentSchemaBin
 		'file-inspection',
 		'core.file-inspection',
 		'inspection',
+		3
+	),
+	'ceo.aven.docs.page': binding('docs', 'page', 'docs.page', 'page', 2),
+	'ceo.aven.docs.extracted_text': binding(
+		'docs',
+		'extracted-text',
+		'docs.extracted-text',
+		'text',
 		2
 	),
-	'ceo.aven.docs.page': binding('docs', 'page', 'docs.page', 'page'),
-	'ceo.aven.docs.extracted_text': binding('docs', 'extracted-text', 'docs.extracted-text', 'text'),
-	'ceo.aven.docs.text_layout': binding('docs', 'text-layout', 'docs.text-layout', 'layout'),
+	'ceo.aven.docs.text_layout': binding('docs', 'text-layout', 'docs.text-layout', 'layout', 2),
 	'ceo.aven.docs.content_classification': binding(
 		'docs',
 		'content-classification',
@@ -58,8 +64,14 @@ export const DOCUMENT_SCHEMA_BINDINGS: Readonly<Record<string, DocumentSchemaBin
 		'core.content-description',
 		'description'
 	),
-	'ceo.aven.docs.document_text': binding('docs', 'document-text', 'docs.extracted-text', 'text'),
-	'ceo.aven.docs.document_layout': binding('docs', 'document-layout', 'docs.text-layout', 'layout'),
+	'ceo.aven.docs.document_text': binding('docs', 'document-text', 'docs.extracted-text', 'text', 2),
+	'ceo.aven.docs.document_layout': binding(
+		'docs',
+		'document-layout',
+		'docs.text-layout',
+		'layout',
+		2
+	),
 	'ceo.aven.docs.document_classification': binding(
 		'docs',
 		'document-classification',
@@ -71,14 +83,14 @@ export const DOCUMENT_SCHEMA_BINDINGS: Readonly<Record<string, DocumentSchemaBin
 		'invoice-candidate',
 		'bookkeeping.invoice-candidate',
 		'candidate',
-		2
+		3
 	),
 	'ceo.aven.bookkeeping.invoice_details': binding(
 		'bookkeeping',
 		'invoice-details',
 		'bookkeeping.invoice-details',
 		'details',
-		2
+		3
 	),
 	'ceo.aven.bookkeeping.invoice_validation': binding(
 		'bookkeeping',
@@ -91,7 +103,7 @@ export const DOCUMENT_SCHEMA_BINDINGS: Readonly<Record<string, DocumentSchemaBin
 		'statement-candidate',
 		'banking.account-statement-candidate',
 		'candidate',
-		2
+		3
 	),
 	'ceo.aven.bookkeeping.statement_validation': binding(
 		'bookkeeping',
@@ -105,12 +117,19 @@ export const DOCUMENT_SCHEMA_BINDINGS: Readonly<Record<string, DocumentSchemaBin
 		'bookkeeping.open-item',
 		'open-item'
 	),
-	'ceo.aven.banking.statement': binding('banking', 'statement', 'banking.statement', 'statement'),
+	'ceo.aven.banking.statement': binding(
+		'banking',
+		'statement',
+		'banking.statement',
+		'statement',
+		2
+	),
 	'ceo.aven.banking.transaction': binding(
 		'banking',
 		'transaction',
 		'banking.transaction',
-		'transaction'
+		'transaction',
+		2
 	),
 	'ceo.aven.reconciliation.match_candidate': binding(
 		'reconciliation',
@@ -206,6 +225,9 @@ export interface DecodedTextRun {
 }
 
 export interface DecodedPage {
+	/** Deferred pages are materialized independently from the immutable source. */
+	deferred?: boolean
+	textRange?: { start: number; endExclusive: number }
 	page: number
 	rotation: 0 | 90 | 180 | 270
 	width: number
@@ -221,8 +243,34 @@ export interface DecodedDocument {
 	pages: DecodedPage[]
 }
 
+export interface DocumentDecodeOptions {
+	modelPageLimit: number
+	metadataOnly?: boolean
+	textRange?: { start: number; endExclusive: number }
+	pageRange?: { start: number; count: number }
+}
 export interface DocumentDecoder {
-	decode(source: DocumentSource, options?: { modelPageLimit: number }): Promise<DecodedDocument>
+	decode(source: DocumentSource, options?: DocumentDecodeOptions): Promise<DecodedDocument>
+}
+export async function decodedPage(
+	decoder: DocumentDecoder | undefined,
+	source: DocumentSource | undefined,
+	page: DecodedPage,
+	vision = false
+): Promise<DecodedPage> {
+	if (!page.deferred) return page
+	if (!decoder || !source) throw new Error('Deferred page requires its source decoder')
+	const document = await decoder.decode(source, {
+		modelPageLimit: vision ? 1 : 0,
+		pageRange: { start: page.page, count: 1 },
+		textRange: page.textRange
+	})
+	const result = document.pages.find((item) => item.page === page.page)
+	if (document.outcome !== 'ok' || !result || result.deferred)
+		throw new Error(`Could not decode source page ${page.page}`)
+	if (vision && !result.image && !result.runs.some((run) => run.text.trim()))
+		throw new Error(`Source page ${page.page} has no usable image or text for model analysis`)
+	return result
 }
 
 /**
@@ -327,7 +375,11 @@ export function success(result: DocumentActorResult, wire: string) {
 export function failure(error: unknown) {
 	const message = error instanceof Error ? error.message : String(error)
 	return {
-		record: JSON.stringify({ ok: false, error: message }),
+		record: JSON.stringify({
+			ok: false,
+			error: message,
+			retryable: (error as { retryable?: boolean })?.retryable === true
+		}),
 		wire: message
 	}
 }

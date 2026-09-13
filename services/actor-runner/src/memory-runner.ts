@@ -50,6 +50,7 @@ const materialCommand = (request: PlanRunStartRequest): string =>
  * does not pretend to be the durable SQL repository specified for production.
  */
 export class MemoryPlanRunner implements PlanRunner {
+	readonly #controllers = new Map<string, AbortController>()
 	readonly #records = new Map<string, PlanRunRecord>()
 	readonly #idempotency = new Map<string, { runId: string; material: string }>()
 
@@ -152,10 +153,35 @@ export class MemoryPlanRunner implements PlanRunner {
 		}
 	}
 
+	async retry(
+		runId: string,
+		requestId: string,
+		context?: PlanRunExecutionContext
+	): Promise<PlanRunHandle> {
+		const record = this.#required(runId)
+		if (record.retryRequestId === requestId) return handle(record)
+		if (record.state !== 'failed') throw new PlanRunConflict('Only a failed run can be retried.')
+		record.attemptFailures = [
+			...(record.attemptFailures ?? []),
+			{ message: record.failure?.message ?? 'Failed', endedAt: record.updatedAt }
+		]
+		record.retryRequestId = requestId
+		record.attemptCount = (record.attemptCount ?? 1) + 1
+		delete record.failure
+		this.#transition(record, 'planning')
+		queueMicrotask(() => void this.#run(runId, this.#request(record), context))
+		return handle(record)
+	}
+
 	async cancel(runId: string, _requestId: string): Promise<PlanRunHandle> {
 		const record = this.#required(runId)
 		if (record.state === 'cancelled') return portableRunClone(handle(record))
-		assertPlanRunTransition(record.state, 'cancelled')
+		try {
+			assertPlanRunTransition(record.state, 'cancelled')
+		} catch {
+			throw new PlanRunConflict(`Cannot cancel a ${record.state} run.`)
+		}
+		this.#controllers.get(runId)?.abort(new Error('Execution cancelled.'))
 		this.#transition(record, 'cancelled')
 		return portableRunClone(handle(record))
 	}
@@ -167,11 +193,16 @@ export class MemoryPlanRunner implements PlanRunner {
 	): Promise<void> {
 		const record = this.#required(runId)
 		try {
-			if (record.state !== 'accepted') return
-			this.#transition(record, 'planning')
+			if (!['accepted', 'planning'].includes(record.state)) return
+			if (record.state === 'accepted') this.#transition(record, 'planning')
 			this.#transition(record, 'running')
+			const controller = new AbortController()
+			this.#controllers.set(runId, controller)
 			const result = await this.execute(portableRunClone(request), {
 				...context,
+				signal: context?.signal
+					? AbortSignal.any([context.signal, controller.signal])
+					: controller.signal,
 				reportProgress: async (progress) => {
 					const current = this.#required(runId)
 					if (current.state !== 'running')
@@ -193,6 +224,8 @@ export class MemoryPlanRunner implements PlanRunner {
 				retryable: false
 			}
 			this.#transition(current, 'failed')
+		} finally {
+			this.#controllers.delete(runId)
 		}
 	}
 
@@ -274,7 +307,7 @@ function requiredContinuation(record: PlanRunRecord, continuationId: string): Pl
 			candidate.continuationId === continuationId &&
 			(candidate.state === 'open' || candidate.state === 'postponed')
 	)
-	if (!continuation) throw new Error('continuation is not open')
+	if (!continuation) throw new PlanRunConflict('Continuation is not open.')
 	return continuation
 }
 

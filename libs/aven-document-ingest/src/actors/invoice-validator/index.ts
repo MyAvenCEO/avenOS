@@ -19,11 +19,10 @@ export function createInvoiceValidatorActor(): Actor {
 					const tax = candidate.taxMinor
 					const gross = candidate.grossMinor
 					const arithmetic =
-						typeof net === 'number' &&
-						typeof tax === 'number' &&
-						typeof gross === 'number' &&
-						Math.abs(net + tax - gross) <= 2
-							? 'PASS'
+						typeof net === 'number' && typeof tax === 'number' && typeof gross === 'number'
+							? Math.abs(net + tax - gross) <= 2
+								? 'PASS'
+								: 'FAIL'
 							: 'UNKNOWN'
 					const identity =
 						typeof candidate.supplier === 'string' &&
@@ -33,11 +32,15 @@ export function createInvoiceValidatorActor(): Actor {
 							? 'PASS'
 							: 'FAIL'
 					const outcomes = [arithmetic, identity]
-					const status = outcomes.includes('FAIL')
-						? 'inconsistent'
-						: outcomes.includes('UNKNOWN')
+					const status =
+						candidate.chunkCoverage &&
+						(candidate.chunkCoverage as { complete?: boolean }).complete !== true
 							? 'insufficient-coverage'
-							: 'consistent'
+							: outcomes.includes('FAIL')
+								? 'inconsistent'
+								: outcomes.includes('UNKNOWN')
+									? 'insufficient-coverage'
+									: 'consistent'
 					const validation = {
 						rulesetVersion: 'invoice-core-v1',
 						status,
@@ -48,7 +51,8 @@ export function createInvoiceValidatorActor(): Actor {
 								outcome: arithmetic,
 								severity: 'hard',
 								paths: ['/netMinor', '/taxMinor', '/grossMinor'],
-								message: 'Net plus tax agrees with gross, or requires explicit adjustment coverage.'
+								message:
+									'Known net plus tax must agree with gross within two minor units. Review separately documented adjustments when totals disagree.'
 							},
 							{
 								ruleId: 'invoice.identity-present',

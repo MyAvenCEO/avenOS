@@ -154,8 +154,7 @@ imports migrate.
 At module initialization it:
 
 1. creates one `LlmDocumentModelGateway` backed by the generic Tauri LLM transport;
-2. creates local document actors and registers them on the application bus for
-   wholesale discovery;
+2. creates local document actors for the runtime's private execution bus;
 3. creates one queued Artifact Store gateway around the raw Tauri publication command;
 4. constructs the local `DocumentProcessingRuntime` adapter;
 5. constructs an authenticated Tauri Plan Runner client and remote document host;
@@ -163,7 +162,8 @@ At module initialization it:
 7. connects routed projection changes to the chat actor and intent store.
 
 The local processing runtime registers its actors on a private `MessageBus`. The
-application bus exposes the same local set to the current actor explorer. No server
+application bus does not expose document execution methods to chat, including generic
+`send` dispatch. No server
 decoder, server actor, or server runtime is constructed in the desktop process.
 
 ## Lifecycles
@@ -188,7 +188,6 @@ client-document-processing module loads
   -> create one model gateway
   -> create the local actor set
   -> construct up to 16 local Actor instances
-  -> register local instances on the app bus
   -> register local instances on the runtime bus
 ```
 
@@ -245,19 +244,19 @@ the committed artifacts and production run are durable.
 ### Winding down
 
 Completing a desktop document run does not tear down actor instances. They remain registered
-and ready for the next document. The current desktop composition has no dynamic
-document-actor shutdown path; application/process shutdown releases the instances.
-The server executor disposes its per-run Actor instances in a `finally` block.
+and ready for the next document. `DocumentProcessingRuntime.cancel` stops the selected
+run before further publication; `close` cancels its runs, drains their promises and
+disposes the actors. The server executor disposes its per-run instances in a `finally`
+block. A native model request already in flight may finish after local cancellation;
+its result cannot start another publication in that cancelled runtime.
 
 The generic `MessageBus.unregister(ref)` operation removes an actor and calls
 `actor.dispose()`, which releases a QuickJS sandbox session when present. A future
 dynamic host must explicitly unregister/dispose actors during host
 shutdown, stop admitting new envelopes, drain or reject queued work, and close its
-transport resources. Each local document **actor instance** is currently registered
-with both the application discovery bus and its host's private execution bus. The
-desktop composition root must therefore coordinate removal from both registries while
-calling `dispose` exactly once. `DocumentProcessingRuntime` does not yet expose
-`close`, drain, cancellation, or lease APIs.
+transport resources. Document instances belong only to their host's private execution
+bus. Runner leases and customer execution markers belong to `SqlPlanRunner`, outside
+the document runtime.
 
 ```mermaid
 flowchart LR
@@ -446,9 +445,10 @@ The production catalog is installed explicitly and its Actor factories are curre
 eager. Skill bindings remain TypeScript contributions, not arbitrary untrusted
 downloadable recipes. The older fixed-output `AdHocProgram` executor remains for its
 other consumers; document execution does not pretend that its promised facts support
-dynamic observation. Per-step distributed claims, a durable failed-attempt journal,
-host cancellation propagation and generic third-party skill installation remain
-separate work. These limits do not create a second finance orchestration path.
+dynamic observation. Per-step distributed claims, a durable per-step failed-attempt
+journal and generic third-party skill installation remain separate work. The server
+run record retains prior failure summaries when a person explicitly retries a run;
+unknown exploration skills fail at dispatch. These limits do not create a second finance orchestration path.
 
 ## One actor step and its commit boundary
 
@@ -640,8 +640,8 @@ retried without executing the actor or model again during that run.
 
 ### Separate retry domains
 
-- Model-backed actor execution gets bounded retries because transient inference failure
-  may recover.
+- Model-backed actor execution retries at most three times only for declared retryable
+  transport failures. Invalid model output fails that invocation immediately.
 - Deterministic actor execution fails immediately on the same invalid input.
 - Artifact publication is serialized per client and retries only declared transient
   transport, availability, or upload-admission failures.
@@ -826,3 +826,55 @@ contracts change.
 - [Client-owned document ingestion](client-document-ingest.md)
 - [Generic authenticated LLM gateway](llm-gateway.md)
 - [Actor skills and ad-hoc problem solving](actor-skills-and-problem-solving.md)
+
+## Bounds and failure controls
+
+Both decoders share image marker parsing, dimensions, text decoding and viewport
+coordinates. JPEG inspection skips embedded thumbnails by segment length; PDF text
+boxes use the viewport transform, including rotation and crop offsets. PDF headers
+within the first 1,024 bytes are accepted before text-like filename detection.
+
+Source admission is 128 MiB and at most 10,000 logical chunks. PDFs use physical
+pages; text uses disjoint UTF-8 ranges of at most 16,000 bytes, preferring newline
+boundaries. Images remain one page. CSV retains its separate deterministic review
+lane. Inspection persists page metadata, not all rendered images. A page is decoded
+and rendered when its invocation needs it, at up to four million pixels independent
+of document length. Each render remains limited to 12 MiB; inspection JSON to 24 MiB.
+
+The existing solver tracks every page and every bounded publication. Decomposition
+and assembly use batches of 32 pages; assembly emits additional text/layout pairs
+rather than truncating the document at one representation artifact. Committed chunks
+replay after restart without repeating their decoding or model calls. A failed or
+uncertain publication cannot masquerade as a completed chunk.
+
+Financial extraction owns one disjoint page or text chunk per model invocation. The
+first and last chunks provide labeled identity/totals context, never additional rows.
+Native text takes precedence over model transcription where present. Classification
+and extraction parts combine only after the closed page collection has completed.
+Document-wide tax summaries are retained once when chunks agree; conflicting summaries
+require review. Payment-condition text must be copied from explicit printed terms.
+Metadata conflicts, repeated explicit transaction IDs, and per-call row-limit markers
+require review. Equal-looking transactions without a repeated explicit ID remain
+separate occurrences. Merged statements and invoice details support 10,000 rows and
+16 MiB payloads. This release versions the relevant types and publication identities;
+previous documents can incur a new model pass on their next reopen.
+
+A single dense physical page remains bounded by 2 MiB native text, 512 layout spans,
+200,000 bytes of OCR text and 128 financial rows per model response. A boundary hit
+is incomplete and requires review; adaptive subdivision of a physical page is not
+implemented. Chunk coverage records completed invocations, not independent proof of
+semantic completeness. Statement reconciliation coverage remains unverified without
+a closed connector proof. Unsupported file formats remain unsupported; chunking does
+not add new office/archive decoders.
+
+Known invoice totals that disagree fail arithmetic validation; absent operands remain
+unknown. A printed zero outstanding balance remains zero in the open item. Paid items
+are blocked from automatic matching; historical settlement inference is not performed.
+
+The desktop reloads the original name and media type from the immutable source before
+reopening a run, so an edited Intent title cannot change admission identity. Startup
+and monitoring errors produce failed presentations. Polling backs off from one to
+five seconds; a monitoring failure does not itself cancel a server run. The file
+processing panel offers explicit Cancel and Retry controls. Retry preserves the server
+run identity and committed publications, and requires a failed, settled execution.
+Model discovery refreshes after 60 seconds and can be invalidated explicitly.

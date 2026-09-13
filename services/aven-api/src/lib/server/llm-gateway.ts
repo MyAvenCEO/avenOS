@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { portableUsage } from '@avenos/llm-client'
 import { z } from 'zod'
 import type { ServerConfig } from './config.js'
 import { AppError } from './errors.js'
@@ -791,10 +792,7 @@ export class LlmGatewayService {
 			providerReportedModel:
 				typeof raw.model === 'string' ? raw.model : model.configuration.upstreamModel,
 			profile: model.configuration.profile,
-			usage:
-				raw.usage && typeof raw.usage === 'object' && !Array.isArray(raw.usage)
-					? (raw.usage as Record<string, unknown>)
-					: null,
+			usage: portableUsage(raw.usage),
 			finishReason: finishReason(raw),
 			requestKey,
 			inputDigest: sha256(

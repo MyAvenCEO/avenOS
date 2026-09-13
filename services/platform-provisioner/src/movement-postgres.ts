@@ -191,20 +191,25 @@ export class PostgresMovementDriver implements MovementDriver {
 		destination: boolean,
 		signal: AbortSignal
 	): Promise<void> {
-		// Pause first, then wait for every executor holding the shared barrier to leave.
+		// Pause admission, cross the short claim barrier, then drain live execution markers.
 		// A timeout preserves the pause. Never kill an executor to claim its effects stopped.
 		await this.database(movement, destination, async (client) => {
 			await client.query(
 				'UPDATE aven_platform.environment_identity SET execution_enabled=false WHERE singleton'
 			)
 			await client.query(`SELECT pg_advisory_lock(${executionLock})`)
-			const unsettled = (
-				await client.query<{ unsettled: number }>(
-					'SELECT cardinality(execution_unsettled) AS unsettled FROM aven_platform.environment_identity WHERE singleton'
+
+			while (true) {
+				signal.throwIfAborted()
+				const state = await client.query<{ unsettled: number; live: number }>(
+					`SELECT cardinality(execution_unsettled) AS unsettled,(SELECT count(*) FROM aven_actor_runs.runs WHERE id=ANY(execution_unsettled) AND state='running' AND (record->'lease'->>'expiresAt')::timestamptz > clock_timestamp())::integer AS live FROM aven_platform.environment_identity WHERE singleton`
 				)
-			).rows[0]?.unsettled
-			if (unsettled !== 0)
-				throw new Error('interrupted Actor execution requires reconciliation before movement')
+				const { unsettled, live } = state.rows[0]!
+				if (unsettled === 0) break
+				if (live !== unsettled)
+					throw new Error('interrupted Actor execution requires reconciliation before movement')
+				await new Promise((resolve) => setTimeout(resolve, 100))
+			}
 			signal.throwIfAborted()
 			const roles = await this.customerRoles(movement, destination)
 			if (!roles.length) throw new Error('customer roles are absent')

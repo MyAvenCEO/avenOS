@@ -20,5 +20,10 @@ export function createApplicationExecutor(
 	)
 	if (bySkill.size !== applications.length)
 		throw new Error('application skill executors must be unique')
-	return (request, context) => (bySkill.get(request.skillRef) ?? fallback)(request, context)
+	return (request, context) => {
+		const execute = bySkill.get(request.skillRef)
+		if (!execute && request.goalSpec?.mode === 'explore')
+			throw new Error('The requested exploration skill is not installed.')
+		return (execute ?? fallback)(request, context)
+	}
 }

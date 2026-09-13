@@ -406,7 +406,7 @@ export class Actor {
 	}
 
 	handles(method: string): boolean {
-		return method in this.#handlers
+		return Object.hasOwn(this.#handlers, method)
 	}
 
 	/**

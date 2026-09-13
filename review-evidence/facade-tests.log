@@ -1,0 +1,9 @@
+$ vitest run tests/artifacts.test.ts
+
+ RUN  v4.1.11 /home/daniel/Documents/ChatGPT/avenOS/document-ingest-review/services/aven-api
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  04:36:27
+   Duration  197ms (transform 74ms, setup 0ms, import 93ms, tests 25ms, environment 0ms)

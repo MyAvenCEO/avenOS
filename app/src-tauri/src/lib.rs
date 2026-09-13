@@ -175,6 +175,7 @@ pub fn run() {
 		.invoke_handler(tauri::generate_handler![
 			artifacts::actor_run_start,
 			artifacts::actor_run_status,
+			artifacts::actor_run_control,
 			artifacts::artifact_upload,
 			artifacts::artifact_processing_status,
 			artifacts::artifact_client_run_publish,
