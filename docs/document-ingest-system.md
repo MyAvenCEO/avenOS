@@ -868,7 +868,17 @@ a closed connector proof. Unsupported file formats remain unsupported; chunking 
 not add new office/archive decoders.
 
 Known invoice totals that disagree fail arithmetic validation; absent operands remain
-unknown. A printed zero outstanding balance remains zero in the open item. Paid items
+unknown. Invoice validation also consumes the line-item details. Printed line net
+amounts must sum to the document net within two minor units; missing amounts or a
+discrepancy require review. Discounts and charges represented as signed line rows
+participate in that sum. Adjustments outside those rows are not inferred, and
+identical legitimate rows are not removed. The warning is an extraction review
+signal, not a claim that an invoice with an unexplained adjustment is invalid.
+`invoice-core-v2` records this check and both candidate/details evidence. The facade
+requires the details input and matching ruleset parameter/output for v2 publications;
+legacy v1 publications retain their original candidate-only contract. The new
+validation operation cannot reuse a previous validation receipt.
+A printed zero outstanding balance remains zero in the open item. Paid items
 are blocked from automatic matching; historical settlement inference is not performed.
 
 The desktop reloads the original name and media type from the immutable source before

@@ -39,6 +39,20 @@ checkout and 160 MiB for the facade. These are outer bounds, not permission to e
 a smaller application limit. Downloads and bounded LLM response streams have separate
 budgets. An internal model adapter's larger image limit does not enlarge public ingress.
 
+Structured model requests and client-run publications share a process-wide facade
+admission budget of 128 MiB of input and eight active requests. A request reserves
+its declared length (at least 1 MiB), or its full route ceiling when length is
+unknown, before reading its body. The reader rejects bytes beyond that reservation.
+Capacity remains reserved through parsing and downstream completion; it is released
+on success or failure. A busy facade cancels the unread body and returns 503
+`REQUEST_CAPACITY_EXHAUSTED`, `retryable: true`, and `Retry-After: 1`. It does not
+queue large bodies in memory. Health and small control requests remain available.
+These large JSON routes also reject nesting beyond 64 and more than one million
+structural entries before parsing, limiting compact arrays/objects that would
+otherwise expand substantially in memory. The input budget is not an exact heap
+quota; parser, transport and other process memory remain covered by the container
+limit and the measured stress proof.
+
 ## Proxy identity and boundary signals
 
 Identity's setup-mail outbox retries through the provisioning environment's checkout

@@ -1,4 +1,6 @@
 import { expect, test } from 'vitest'
+import invoiceProof from '../../../review-evidence/real-model/invoice-six-items.json'
+import { GoldenInvoiceModel } from '../../../services/actor-runner/tests/support/golden-document-model'
 import { createDocumentActors } from '../src/actors/registry'
 import { mergeFinance } from '../src/chunks'
 import { decodePlainText, renderScale } from '../src/decoding'
@@ -7,6 +9,52 @@ import { ServerDocumentDecoder } from '../src/server'
 import { decodedPage } from '../src/shared'
 import { documentSource, textPdf } from './support/chunk-fixtures'
 import { CsvMemoryGateway } from './support/csv-corpus'
+
+test('a context row copied into another invoice chunk requires review and grounds validation in details', async () => {
+	for (const duplicate of [false, true]) {
+		const model = new GoldenInvoiceModel()
+		const baseComplete = model.complete.bind(model)
+		model.complete = async (request) => {
+			const response = await baseComplete(request)
+			if (request.procedure !== 'extract-invoice') return response
+			const page = (request.images[0]?.page ?? 1) - 1
+			const [candidate, details] = structuredClone(invoiceProof.parts[page]!)
+			if (duplicate && page === 1)
+				(details as { lineItems: unknown[] }).lineItems.push(
+					structuredClone((invoiceProof.parts[0]![1] as { lineItems: unknown[] }).lineItems[0])
+				)
+			return { ...response, structured: { candidate, details, evidence: [] } } as typeof response
+		}
+		const gateway = new CsvMemoryGateway(),
+			actors = createDocumentActors(new ServerDocumentDecoder(), model)
+		const source = documentSource(
+			textPdf([['Invoice page one'], ['Invoice page two']]),
+			'invoice.pdf'
+		)
+		try {
+			const result = await new DocumentProcessingRuntime(actors, gateway, () =>
+				model.status()
+			).start(source)
+			expect(result.metadata.validationStatus, JSON.stringify(result)).toBe(
+				duplicate ? 'insufficient-coverage' : 'consistent'
+			)
+			expect(result.state).toBe(duplicate ? 'needs_review' : 'succeeded')
+			const validation = gateway.runs.find((run) => run.procedureKey === 'client.validate-invoice')!
+			expect(validation.inputs).toEqual(
+				expect.arrayContaining([expect.objectContaining({ role: 'details' })])
+			)
+			expect(validation.parameters).toMatchObject({ rulesetVersion: 'invoice-core-v2' })
+			const count = gateway.runs.length
+			const replay = await new DocumentProcessingRuntime(actors, gateway, () =>
+				model.status()
+			).start(source)
+			expect(replay.metadata.validationStatus).toBe(result.metadata.validationStatus)
+			expect(gateway.runs).toHaveLength(count)
+		} finally {
+			for (const actor of actors.all) actor.dispose()
+		}
+	}
+})
 
 test('preserves all 70 PDF pages through bounded publications and replays without decoding', async () => {
 	const bytes = textPdf(

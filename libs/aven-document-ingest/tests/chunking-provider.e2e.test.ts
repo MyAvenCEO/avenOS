@@ -1,34 +1,43 @@
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
+import { MessageBus } from '@avenos/actors'
 import type { LlmCompletionRequest, LlmCompletionResponse } from '@avenos/llm-client'
 import { expect, test } from 'vitest'
 import { createFacadeHandler } from '../../../services/aven-api/src/facade'
 import { LlmGatewayService } from '../../../services/aven-api/src/lib/server/llm-gateway'
 import { testConfig } from '../../../services/aven-api/tests/helpers'
+import { createInvoiceValidatorActor } from '../src/actors/invoice-validator'
 import { createDocumentActors } from '../src/actors/registry'
 import { LlmDocumentModelGateway } from '../src/llm-gateway'
+import { parseDocumentActorResult } from '../src/results'
 import { DocumentProcessingRuntime } from '../src/runtime'
 import { ServerDocumentDecoder } from '../src/server'
 import { documentSource, textPdf } from './support/chunk-fixtures'
 import { CsvMemoryGateway } from './support/csv-corpus'
+
+const facadeHandlers = new WeakMap<LlmGatewayService, ReturnType<typeof createFacadeHandler>>()
 
 async function completeThroughFacade(
 	service: LlmGatewayService,
 	request: LlmCompletionRequest
 ): Promise<LlmCompletionResponse> {
 	const token = 'chunk-proof-internal-bearer'.padEnd(32, '-')
-	const handler = createFacadeHandler(
-		testConfig({ LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN: token }),
-		{
-			verify: async () => {
-				throw new Error('Internal proof must use service authentication')
-			}
-		},
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		service
-	)
+	let handler = facadeHandlers.get(service)
+	if (!handler) {
+		handler = createFacadeHandler(
+			testConfig({ LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN: token }),
+			{
+				verify: async () => {
+					throw new Error('Internal proof must use service authentication')
+				}
+			},
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			service
+		)
+		facadeHandlers.set(service, handler)
+	}
 	const response = await handler(
 		new Request('http://facade.test/internal/v1/llm/completions', {
 			method: 'POST',
@@ -333,6 +342,23 @@ live(
 		const merged = gateway.runs.find((run) => run.procedureKey === 'client.merge-invoice-chunks')
 		const candidate = merged?.artifacts[0]?.payload,
 			details = merged?.artifacts[1]?.payload
+		const validation = gateway.runs.find((run) => run.procedureKey === 'client.validate-invoice')
+			?.artifacts[0]?.payload
+		const corrupted = structuredClone(details) as { lineItems: unknown[] }
+		corrupted.lineItems.push(structuredClone(corrupted.lineItems[0]))
+		const bus = new MessageBus(),
+			validator = createInvoiceValidatorActor()
+		bus.register(validator)
+		let duplicateValidation: Record<string, unknown> | undefined
+		try {
+			const response = await bus.dispatch('provider-proof', 'document_validate_invoice', {
+				candidate,
+				details: corrupted
+			})
+			duplicateValidation = parseDocumentActorResult(response.record).artifacts[0]?.payload
+		} finally {
+			validator.dispose()
+		}
 		const outputDirectory = process.env.TEST_CHUNK_EVIDENCE_DIR ?? '/tmp/aven-chunk-real'
 		await mkdir(outputDirectory, { recursive: true })
 		await writeFile(
@@ -342,6 +368,8 @@ live(
 					result,
 					candidate,
 					details,
+					validation,
+					duplicateValidation,
 					receipts,
 					parts: gateway.runs
 						.filter((run) => run.procedureKey === 'client.extract-invoice-model')
@@ -360,6 +388,19 @@ live(
 			chunkCoverage: { complete: true, total: 2 }
 		})
 		expect(result.metadata.validationStatus).toBe('consistent')
+		expect(validation).toMatchObject({
+			rulesetVersion: 'invoice-core-v2',
+			status: 'consistent',
+			checks: expect.arrayContaining([
+				expect.objectContaining({ ruleId: 'invoice.line-net-equals-net', outcome: 'PASS' })
+			])
+		})
+		expect(duplicateValidation).toMatchObject({
+			status: 'insufficient-coverage',
+			checks: expect.arrayContaining([
+				expect.objectContaining({ ruleId: 'invoice.line-net-equals-net', outcome: 'FAIL' })
+			])
+		})
 		expect(result.state, JSON.stringify(result.warnings)).toBe('succeeded')
 		actors.all.forEach((actor) => {
 			actor.dispose()
@@ -410,11 +451,19 @@ live(
 			})
 		)!
 		const receipts: unknown[] = []
+		let overlappingRequestRejected = false
 		const model = new LlmDocumentModelGateway(
 			{
 				discover: async (caps) => service.models(caps),
 				complete: async (request) => {
-					const response = await completeThroughFacade(service, request)
+					const pending = completeThroughFacade(service, request)
+					if (!overlappingRequestRejected) {
+						await expect(completeThroughFacade(service, request)).rejects.toThrow(
+							'Facade returned 503'
+						)
+						overlappingRequestRejected = true
+					}
+					const response = await pending
 					receipts.push(response.receipt)
 					return response
 				}
@@ -435,11 +484,16 @@ live(
 		await mkdir(outputDirectory, { recursive: true })
 		await writeFile(
 			`${outputDirectory}/detailed-image.json`,
-			JSON.stringify({ result, sourceBytes: bytes.length, text, receipts }, null, 2)
+			JSON.stringify(
+				{ result, sourceBytes: bytes.length, text, receipts, overlappingRequestRejected },
+				null,
+				2
+			)
 		)
 		expect(text, JSON.stringify(result)).toContain('ALPHA-LARGE-IMAGE')
 		expect(result.stages.filter((stage) => stage.state === 'failed')).toHaveLength(0)
 		expect(receipts).toHaveLength(2)
+		expect(overlappingRequestRejected).toBe(true)
 		actors.all.forEach((actor) => {
 			actor.dispose()
 		})

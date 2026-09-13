@@ -1,20 +1,37 @@
 import { Actor } from '@avenos/actors'
 import { artifact, failure, manifest, object, success, wholeArtifact } from '../../shared'
 
+function lineNetCheck(details: Record<string, unknown> | undefined, net: unknown) {
+	const rows = details?.lineItems
+	if (!Number.isSafeInteger(net) || !Array.isArray(rows) || rows.length === 0) return 'UNKNOWN'
+	let sum = 0n
+	for (const row of rows) {
+		if (!row || typeof row !== 'object' || !Number.isSafeInteger(row.netMinor)) return 'UNKNOWN'
+		sum += BigInt(row.netMinor)
+	}
+	const difference = sum - BigInt(net as number)
+	return difference >= -2n && difference <= 2n ? 'PASS' : 'FAIL'
+}
+
 export function createInvoiceValidatorActor(): Actor {
 	return new Actor(
 		manifest(
 			'invoice-validator',
 			'Invoice validator',
-			'Runs the invoice-core-v1 arithmetic and identity checks.',
+			'Checks invoice totals, identity and line-item net reconciliation.',
 			'document_validate_invoice',
-			['ceo.aven.bookkeeping.invoice_candidate(F, I)'],
+			[
+				'ceo.aven.bookkeeping.invoice_candidate(F, I)',
+				'ceo.aven.bookkeeping.invoice_details(F, D)'
+			],
 			['ceo.aven.bookkeeping.invoice_validation(I, V)']
 		),
 		{
 			document_validate_invoice: (payload) => {
 				try {
 					const candidate = object(payload.candidate, 'invoice candidate')
+					const details =
+						payload.details == null ? undefined : object(payload.details, 'invoice details')
 					const net = candidate.netMinor
 					const tax = candidate.taxMinor
 					const gross = candidate.grossMinor
@@ -31,20 +48,23 @@ export function createInvoiceValidatorActor(): Actor {
 						candidate.invoiceNumber.trim() !== ''
 							? 'PASS'
 							: 'FAIL'
-					const outcomes = [arithmetic, identity]
-					const status =
-						candidate.chunkCoverage &&
-						(candidate.chunkCoverage as { complete?: boolean }).complete !== true
-							? 'insufficient-coverage'
-							: outcomes.includes('FAIL')
-								? 'inconsistent'
-								: outcomes.includes('UNKNOWN')
-									? 'insufficient-coverage'
-									: 'consistent'
+					const lineNet = lineNetCheck(details, net)
+					const outcomes = [arithmetic, identity, lineNet]
+					const status = [candidate.chunkCoverage, details?.chunkCoverage].some(
+						(coverage) => coverage && (coverage as { complete?: boolean }).complete !== true
+					)
+						? 'insufficient-coverage'
+						: [arithmetic, identity].includes('FAIL')
+							? 'inconsistent'
+							: outcomes.includes('UNKNOWN') || lineNet === 'FAIL'
+								? 'insufficient-coverage'
+								: 'consistent'
 					const validation = {
-						rulesetVersion: 'invoice-core-v1',
+						rulesetVersion: 'invoice-core-v2',
 						status,
-						coverageBps: outcomes.filter((outcome) => outcome !== 'UNKNOWN').length * 5000,
+						coverageBps: Math.floor(
+							(outcomes.filter((outcome) => outcome !== 'UNKNOWN').length * 10000) / outcomes.length
+						),
 						checks: [
 							{
 								ruleId: 'invoice.net-plus-tax-equals-gross',
@@ -60,6 +80,14 @@ export function createInvoiceValidatorActor(): Actor {
 								severity: 'hard',
 								paths: ['/supplier', '/invoiceNumber'],
 								message: 'Supplier and invoice number must both be present.'
+							},
+							{
+								ruleId: 'invoice.line-net-equals-net',
+								outcome: lineNet,
+								severity: 'warning',
+								paths: ['/lineItems', '/netMinor'],
+								message:
+									'Printed line net amounts must sum to document net within two minor units. Review missing amounts, duplicated or omitted rows, discounts, charges and rounding when this cannot be established; no adjustment is inferred.'
 							}
 						]
 					}
@@ -78,7 +106,19 @@ export function createInvoiceValidatorActor(): Actor {
 									inputRole: 'candidate',
 									inputOrdinal: 0,
 									inputLocator: wholeArtifact()
-								}
+								},
+								...(details
+									? [
+											{
+												ordinal: 1,
+												outputLocalKey: 'validation',
+												outputLocator: wholeArtifact(),
+												inputRole: 'details',
+												inputOrdinal: 0,
+												inputLocator: wholeArtifact()
+											}
+										]
+									: [])
 							]
 						},
 						`Invoice validation is ${status}.`

@@ -1,0 +1,983 @@
+{
+  "result": {
+    "caseId": "e299cdaa-ca89-8c3f-ad7f-a246872d330f",
+    "state": "succeeded",
+    "projectionVersion": "actor-document-v1",
+    "preferredType": "invoice",
+    "label": "invoice-six-items.pdf",
+    "summary": "Invoice INV-CHUNK-006 from Example Office Supplies Ltd to Chunk Proof Ltd, issued 2026-08-15, due 2026-09-15, EUR. Document totals (all 2 pages): Net 6.00, VAT 1.14 (19%), Gross 7.14, amount due 7.14. No payments received. Owned page 1 contains line items 1-3 only.",
+    "metadata": {
+      "execution": "actors",
+      "planner": "general-observation-solver",
+      "executionEnvironment": "local",
+      "runtimeHost": "desktop",
+      "modelId": "qwen3.8-flash-next",
+      "modelLabel": "qwen3.8-flash-next",
+      "modelAlternatives": [
+        {
+          "id": "qwen3.8-flash-next",
+          "label": "qwen3.8-flash-next"
+        }
+      ],
+      "pageCount": 2,
+      "chunkCount": 2,
+      "completedChunks": 2,
+      "vision": "model",
+      "supplier": "Example Office Supplies Ltd",
+      "invoiceNumber": "INV-CHUNK-006",
+      "grossMinor": 714,
+      "currency": "EUR",
+      "documentKind": "invoice",
+      "validationStatus": "consistent"
+    },
+    "warnings": [],
+    "stages": [
+      {
+        "key": "inspect",
+        "state": "succeeded",
+        "dependsOn": [],
+        "attemptCount": 1,
+        "procedureKey": "client.inspect-file"
+      },
+      {
+        "key": "decompose-pages",
+        "state": "succeeded",
+        "dependsOn": [
+          "inspect"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.decompose-pages"
+      },
+      {
+        "key": "extract-native-page-001",
+        "state": "succeeded",
+        "dependsOn": [
+          "decompose-pages"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.extract-native-text"
+      },
+      {
+        "key": "analyze-page-001",
+        "state": "succeeded",
+        "dependsOn": [
+          "decompose-pages",
+          "extract-native-page-001"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.analyze-page-model"
+      },
+      {
+        "key": "classify-document-page-001",
+        "state": "succeeded",
+        "dependsOn": [
+          "decompose-pages",
+          "extract-native-page-001"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.classify-document-model"
+      },
+      {
+        "key": "extract-native-page-002",
+        "state": "succeeded",
+        "dependsOn": [
+          "decompose-pages"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.extract-native-text"
+      },
+      {
+        "key": "analyze-page-002",
+        "state": "succeeded",
+        "dependsOn": [
+          "decompose-pages",
+          "extract-native-page-002"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.analyze-page-model"
+      },
+      {
+        "key": "classify-document-page-002",
+        "state": "succeeded",
+        "dependsOn": [
+          "decompose-pages",
+          "extract-native-page-002"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.classify-document-model"
+      },
+      {
+        "key": "classify-document",
+        "state": "succeeded",
+        "dependsOn": [
+          "inspect",
+          "classify-document-page-001",
+          "classify-document-page-002"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.merge-document-kinds"
+      },
+      {
+        "key": "extract-invoice-page-001",
+        "state": "succeeded",
+        "dependsOn": [
+          "decompose-pages",
+          "inspect",
+          "classify-document",
+          "analyze-page-001",
+          "analyze-page-002"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.extract-invoice-model"
+      },
+      {
+        "key": "extract-invoice-page-002",
+        "state": "succeeded",
+        "dependsOn": [
+          "decompose-pages",
+          "inspect",
+          "classify-document",
+          "analyze-page-001",
+          "analyze-page-002"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.extract-invoice-model"
+      },
+      {
+        "key": "extract-invoice",
+        "state": "succeeded",
+        "dependsOn": [
+          "inspect",
+          "extract-invoice-page-001",
+          "extract-invoice-page-002"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.merge-invoice-chunks"
+      },
+      {
+        "key": "validate-invoice",
+        "state": "succeeded",
+        "dependsOn": [
+          "extract-invoice"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.validate-invoice"
+      },
+      {
+        "key": "normalize-invoice-open-item",
+        "state": "succeeded",
+        "dependsOn": [
+          "extract-invoice",
+          "validate-invoice"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.normalize-invoice-open-item"
+      },
+      {
+        "key": "assemble-document",
+        "state": "succeeded",
+        "dependsOn": [
+          "inspect",
+          "analyze-page-001",
+          "analyze-page-002"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.assemble-document-representation"
+      },
+      {
+        "key": "aggregate-content",
+        "state": "succeeded",
+        "dependsOn": [
+          "inspect",
+          "assemble-document",
+          "analyze-page-001",
+          "analyze-page-002"
+        ],
+        "attemptCount": 1,
+        "procedureKey": "client.aggregate-content-classification"
+      }
+    ],
+    "derivedArtifacts": [
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000002",
+        "typeKey": "core.file-inspection",
+        "typeVersion": 3,
+        "stageKey": "inspect"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000004",
+        "typeKey": "docs.page",
+        "typeVersion": 2,
+        "stageKey": "decompose-pages"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000005",
+        "typeKey": "docs.page",
+        "typeVersion": 2,
+        "stageKey": "decompose-pages"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000007",
+        "typeKey": "docs.extracted-text",
+        "typeVersion": 2,
+        "stageKey": "extract-native-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000008",
+        "typeKey": "docs.text-layout",
+        "typeVersion": 2,
+        "stageKey": "extract-native-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000010",
+        "typeKey": "docs.extracted-text",
+        "typeVersion": 2,
+        "stageKey": "analyze-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000011",
+        "typeKey": "docs.text-layout",
+        "typeVersion": 2,
+        "stageKey": "analyze-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000012",
+        "typeKey": "core.content-classification",
+        "typeVersion": 1,
+        "stageKey": "analyze-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000013",
+        "typeKey": "core.content-description",
+        "typeVersion": 1,
+        "stageKey": "analyze-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000015",
+        "typeKey": "core.document-classification",
+        "typeVersion": 1,
+        "stageKey": "classify-document-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000017",
+        "typeKey": "docs.extracted-text",
+        "typeVersion": 2,
+        "stageKey": "extract-native-page-002"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000018",
+        "typeKey": "docs.text-layout",
+        "typeVersion": 2,
+        "stageKey": "extract-native-page-002"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000020",
+        "typeKey": "docs.extracted-text",
+        "typeVersion": 2,
+        "stageKey": "analyze-page-002"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000021",
+        "typeKey": "docs.text-layout",
+        "typeVersion": 2,
+        "stageKey": "analyze-page-002"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000022",
+        "typeKey": "core.content-classification",
+        "typeVersion": 1,
+        "stageKey": "analyze-page-002"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000023",
+        "typeKey": "core.content-description",
+        "typeVersion": 1,
+        "stageKey": "analyze-page-002"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000025",
+        "typeKey": "core.document-classification",
+        "typeVersion": 1,
+        "stageKey": "classify-document-page-002"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000027",
+        "typeKey": "core.document-classification",
+        "typeVersion": 1,
+        "stageKey": "classify-document"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000029",
+        "typeKey": "bookkeeping.invoice-candidate",
+        "typeVersion": 3,
+        "stageKey": "extract-invoice-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000030",
+        "typeKey": "bookkeeping.invoice-details",
+        "typeVersion": 3,
+        "stageKey": "extract-invoice-page-001"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000032",
+        "typeKey": "bookkeeping.invoice-candidate",
+        "typeVersion": 3,
+        "stageKey": "extract-invoice-page-002"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000033",
+        "typeKey": "bookkeeping.invoice-details",
+        "typeVersion": 3,
+        "stageKey": "extract-invoice-page-002"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000035",
+        "typeKey": "bookkeeping.invoice-candidate",
+        "typeVersion": 3,
+        "stageKey": "extract-invoice"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000036",
+        "typeKey": "bookkeeping.invoice-details",
+        "typeVersion": 3,
+        "stageKey": "extract-invoice"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000038",
+        "typeKey": "bookkeeping.invoice-validation",
+        "typeVersion": 1,
+        "stageKey": "validate-invoice"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000040",
+        "typeKey": "bookkeeping.open-item",
+        "typeVersion": 1,
+        "stageKey": "normalize-invoice-open-item"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000042",
+        "typeKey": "docs.extracted-text",
+        "typeVersion": 2,
+        "stageKey": "assemble-document"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000043",
+        "typeKey": "docs.text-layout",
+        "typeVersion": 2,
+        "stageKey": "assemble-document"
+      },
+      {
+        "artifactId": "00000000-0000-4000-8000-000000000045",
+        "typeKey": "core.content-classification",
+        "typeVersion": 1,
+        "stageKey": "aggregate-content"
+      }
+    ]
+  },
+  "candidate": {
+    "supplier": "Example Office Supplies Ltd",
+    "invoiceNumber": "INV-CHUNK-006",
+    "currency": "EUR",
+    "netMinor": 600,
+    "taxMinor": 114,
+    "grossMinor": 714,
+    "dueDate": "2026-09-15",
+    "summary": "Invoice INV-CHUNK-006 from Example Office Supplies Ltd to Chunk Proof Ltd, issued 2026-08-15, due 2026-09-15, EUR. Document totals (all 2 pages): Net 6.00, VAT 1.14 (19%), Gross 7.14, amount due 7.14. No payments received. Owned page 1 contains line items 1-3 only.",
+    "chunkCoverage": {
+      "total": 2,
+      "completed": 2,
+      "complete": true,
+      "conflicts": []
+    }
+  },
+  "details": {
+    "documentKind": "invoice",
+    "category": null,
+    "issueDate": "2026-08-15",
+    "customerNumber": null,
+    "orderNumber": null,
+    "supplier": {
+      "name": "Example Office Supplies Ltd",
+      "vatId": null,
+      "taxNumber": null,
+      "address": null,
+      "street": null,
+      "postalCode": null,
+      "city": null,
+      "country": null,
+      "email": null,
+      "phone": null,
+      "website": null,
+      "contactName": null,
+      "bankingAccounts": []
+    },
+    "buyer": {
+      "name": "Chunk Proof Ltd",
+      "vatId": null,
+      "taxNumber": null,
+      "address": null,
+      "street": null,
+      "postalCode": null,
+      "city": null,
+      "country": null,
+      "email": null,
+      "phone": null,
+      "website": null,
+      "contactName": null,
+      "bankingAccounts": []
+    },
+    "lineItems": [
+      {
+        "position": "1",
+        "title": "Item 1",
+        "description": null,
+        "quantity": "1",
+        "unit": null,
+        "unitPriceMinor": 100,
+        "netMinor": 100,
+        "taxRateBps": 1900,
+        "taxMinor": 19,
+        "grossMinor": 119,
+        "servicePeriod": null
+      },
+      {
+        "position": "2",
+        "title": "Item 2",
+        "description": null,
+        "quantity": "1",
+        "unit": null,
+        "unitPriceMinor": 100,
+        "netMinor": 100,
+        "taxRateBps": 1900,
+        "taxMinor": 19,
+        "grossMinor": 119,
+        "servicePeriod": null
+      },
+      {
+        "position": "3",
+        "title": "Item 3",
+        "description": null,
+        "quantity": "1",
+        "unit": null,
+        "unitPriceMinor": 100,
+        "netMinor": 100,
+        "taxRateBps": 1900,
+        "taxMinor": 19,
+        "grossMinor": 119,
+        "servicePeriod": null
+      },
+      {
+        "position": "4",
+        "title": "Item 4",
+        "description": null,
+        "quantity": "1",
+        "unit": null,
+        "unitPriceMinor": 100,
+        "netMinor": 100,
+        "taxRateBps": 1900,
+        "taxMinor": 19,
+        "grossMinor": 119,
+        "servicePeriod": null
+      },
+      {
+        "position": "5",
+        "title": "Item 5",
+        "description": null,
+        "quantity": "1",
+        "unit": null,
+        "unitPriceMinor": 100,
+        "netMinor": 100,
+        "taxRateBps": 1900,
+        "taxMinor": 19,
+        "grossMinor": 119,
+        "servicePeriod": null
+      },
+      {
+        "position": "6",
+        "title": "Item 6",
+        "description": null,
+        "quantity": "1",
+        "unit": null,
+        "unitPriceMinor": 100,
+        "netMinor": 100,
+        "taxRateBps": 1900,
+        "taxMinor": 19,
+        "grossMinor": 119,
+        "servicePeriod": null
+      }
+    ],
+    "taxBreakdown": [
+      {
+        "rateBps": 1900,
+        "baseMinor": 600,
+        "taxMinor": 114
+      }
+    ],
+    "payment": {
+      "iban": null,
+      "bic": null,
+      "beneficiary": null,
+      "amountPaidMinor": null,
+      "totalOutstandingMinor": 714,
+      "paymentTerms": "Payment by bank transfer."
+    },
+    "payments": [],
+    "referenceEntries": [],
+    "chunkCoverage": {
+      "total": 2,
+      "completed": 2,
+      "complete": true,
+      "conflicts": []
+    }
+  },
+  "validation": {
+    "rulesetVersion": "invoice-core-v2",
+    "status": "consistent",
+    "coverageBps": 10000,
+    "checks": [
+      {
+        "ruleId": "invoice.net-plus-tax-equals-gross",
+        "outcome": "PASS",
+        "severity": "hard",
+        "paths": [
+          "/netMinor",
+          "/taxMinor",
+          "/grossMinor"
+        ],
+        "message": "Known net plus tax must agree with gross within two minor units. Review separately documented adjustments when totals disagree."
+      },
+      {
+        "ruleId": "invoice.identity-present",
+        "outcome": "PASS",
+        "severity": "hard",
+        "paths": [
+          "/supplier",
+          "/invoiceNumber"
+        ],
+        "message": "Supplier and invoice number must both be present."
+      },
+      {
+        "ruleId": "invoice.line-net-equals-net",
+        "outcome": "PASS",
+        "severity": "warning",
+        "paths": [
+          "/lineItems",
+          "/netMinor"
+        ],
+        "message": "Printed line net amounts must sum to document net within two minor units. Review missing amounts, duplicated or omitted rows, discounts, charges and rounding when this cannot be established; no adjustment is inferred."
+      }
+    ]
+  },
+  "duplicateValidation": {
+    "rulesetVersion": "invoice-core-v2",
+    "status": "insufficient-coverage",
+    "coverageBps": 10000,
+    "checks": [
+      {
+        "ruleId": "invoice.net-plus-tax-equals-gross",
+        "outcome": "PASS",
+        "severity": "hard",
+        "paths": [
+          "/netMinor",
+          "/taxMinor",
+          "/grossMinor"
+        ],
+        "message": "Known net plus tax must agree with gross within two minor units. Review separately documented adjustments when totals disagree."
+      },
+      {
+        "ruleId": "invoice.identity-present",
+        "outcome": "PASS",
+        "severity": "hard",
+        "paths": [
+          "/supplier",
+          "/invoiceNumber"
+        ],
+        "message": "Supplier and invoice number must both be present."
+      },
+      {
+        "ruleId": "invoice.line-net-equals-net",
+        "outcome": "FAIL",
+        "severity": "warning",
+        "paths": [
+          "/lineItems",
+          "/netMinor"
+        ],
+        "message": "Printed line net amounts must sum to document net within two minor units. Review missing amounts, duplicated or omitted rows, discounts, charges and rounding when this cannot be established; no adjustment is inferred."
+      }
+    ]
+  },
+  "receipts": [
+    {
+      "modelId": "qwen3.8-flash-next",
+      "modelLabel": "qwen3.8-flash-next",
+      "capabilities": [
+        "structured-output",
+        "text-generation",
+        "vision"
+      ],
+      "providerRequestId": "ddbd1ba4341e4c39bc5c9ca6b5d6c2da",
+      "httpRequestId": null,
+      "providerReportedModel": "qwen3.8-flash-next",
+      "profile": "qwen-tools",
+      "usage": {
+        "prompt_tokens": 3144,
+        "total_tokens": 4309,
+        "completion_tokens": 1165,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "image_tokens": 1961
+        },
+        "reasoning_tokens": 0
+      },
+      "finishReason": "tool_calls",
+      "inputDigest": "851fa0dbea349e41c0dcec00fed4bee2ae1cb319950be07bb9eb10b7fb17c67d",
+      "implementationDigest": "3f5166cbccc141325d64b1f8176d9e643b617e447365ac801778f613869b9184"
+    },
+    {
+      "modelId": "qwen3.8-flash-next",
+      "modelLabel": "qwen3.8-flash-next",
+      "capabilities": [
+        "structured-output",
+        "text-generation",
+        "vision"
+      ],
+      "providerRequestId": "b52fbeb35b3843f88a6ade424459d5ff",
+      "httpRequestId": null,
+      "providerReportedModel": "qwen3.8-flash-next",
+      "profile": "qwen-tools",
+      "usage": {
+        "prompt_tokens": 3117,
+        "total_tokens": 3427,
+        "completion_tokens": 310,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "image_tokens": 1961
+        },
+        "reasoning_tokens": 0
+      },
+      "finishReason": "tool_calls",
+      "inputDigest": "11db86781b91661af70d0d097a497ae91923673712d936cf97d04fa9b4b8a10d",
+      "implementationDigest": "3f5166cbccc141325d64b1f8176d9e643b617e447365ac801778f613869b9184"
+    },
+    {
+      "modelId": "qwen3.8-flash-next",
+      "modelLabel": "qwen3.8-flash-next",
+      "capabilities": [
+        "structured-output",
+        "text-generation",
+        "vision"
+      ],
+      "providerRequestId": "26b3b944bbea4a87863104a240987891",
+      "httpRequestId": null,
+      "providerReportedModel": "qwen3.8-flash-next",
+      "profile": "qwen-tools",
+      "usage": {
+        "prompt_tokens": 3144,
+        "total_tokens": 4319,
+        "completion_tokens": 1175,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "image_tokens": 1961
+        },
+        "reasoning_tokens": 0
+      },
+      "finishReason": "tool_calls",
+      "inputDigest": "42b84851d7ad6c5a7199ca2565f0e1e543c864a3729285e00e1117dca983e327",
+      "implementationDigest": "3f5166cbccc141325d64b1f8176d9e643b617e447365ac801778f613869b9184"
+    },
+    {
+      "modelId": "qwen3.8-flash-next",
+      "modelLabel": "qwen3.8-flash-next",
+      "capabilities": [
+        "structured-output",
+        "text-generation",
+        "vision"
+      ],
+      "providerRequestId": "eed94d5a19ba4ab3bfb88a88b338956e",
+      "httpRequestId": null,
+      "providerReportedModel": "qwen3.8-flash-next",
+      "profile": "qwen-tools",
+      "usage": {
+        "prompt_tokens": 3117,
+        "total_tokens": 3404,
+        "completion_tokens": 287,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "image_tokens": 1961
+        },
+        "reasoning_tokens": 0
+      },
+      "finishReason": "tool_calls",
+      "inputDigest": "c562b96692310fb73af34386848e43b81aa36f21a8b0c4a559d6e64bff21b371",
+      "implementationDigest": "3f5166cbccc141325d64b1f8176d9e643b617e447365ac801778f613869b9184"
+    },
+    {
+      "modelId": "qwen3.8-flash-next",
+      "modelLabel": "qwen3.8-flash-next",
+      "capabilities": [
+        "structured-output",
+        "text-generation",
+        "vision"
+      ],
+      "providerRequestId": "08a7811523d04fc2893b5b06afa1f64f",
+      "httpRequestId": null,
+      "providerReportedModel": "qwen3.8-flash-next",
+      "profile": "qwen-tools",
+      "usage": {
+        "prompt_tokens": 6236,
+        "total_tokens": 7884,
+        "completion_tokens": 1648,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "image_tokens": 1961
+        },
+        "reasoning_tokens": 0
+      },
+      "finishReason": "tool_calls",
+      "inputDigest": "f10cc5c77b8e38c9f0f57ff989336ca1e95839f7cca48933224c40a2df58225c",
+      "implementationDigest": "3f5166cbccc141325d64b1f8176d9e643b617e447365ac801778f613869b9184"
+    },
+    {
+      "modelId": "qwen3.8-flash-next",
+      "modelLabel": "qwen3.8-flash-next",
+      "capabilities": [
+        "structured-output",
+        "text-generation",
+        "vision"
+      ],
+      "providerRequestId": "ce77a6dc50c14dc38f937fb97ec5aa77",
+      "httpRequestId": null,
+      "providerReportedModel": "qwen3.8-flash-next",
+      "profile": "qwen-tools",
+      "usage": {
+        "prompt_tokens": 6236,
+        "total_tokens": 7884,
+        "completion_tokens": 1648,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "image_tokens": 1961
+        },
+        "reasoning_tokens": 0
+      },
+      "finishReason": "tool_calls",
+      "inputDigest": "904b82e8b60cd6c10b1cbec0108d6d1013e788f1d361539181bc8bb52220401a",
+      "implementationDigest": "3f5166cbccc141325d64b1f8176d9e643b617e447365ac801778f613869b9184"
+    }
+  ],
+  "parts": [
+    [
+      {
+        "supplier": "Example Office Supplies Ltd",
+        "invoiceNumber": "INV-CHUNK-006",
+        "currency": "EUR",
+        "netMinor": 600,
+        "taxMinor": 114,
+        "grossMinor": 714,
+        "dueDate": "2026-09-15",
+        "summary": "Invoice INV-CHUNK-006 from Example Office Supplies Ltd to Chunk Proof Ltd, issued 2026-08-15, due 2026-09-15, EUR. Document totals (all 2 pages): Net 6.00, VAT 1.14 (19%), Gross 7.14, amount due 7.14. No payments received. Owned page 1 contains line items 1-3 only."
+      },
+      {
+        "documentKind": "invoice",
+        "category": null,
+        "issueDate": "2026-08-15",
+        "customerNumber": null,
+        "orderNumber": null,
+        "supplier": {
+          "name": "Example Office Supplies Ltd",
+          "vatId": null,
+          "taxNumber": null,
+          "address": null,
+          "street": null,
+          "postalCode": null,
+          "city": null,
+          "country": null,
+          "email": null,
+          "phone": null,
+          "website": null,
+          "contactName": null,
+          "bankingAccounts": []
+        },
+        "buyer": {
+          "name": "Chunk Proof Ltd",
+          "vatId": null,
+          "taxNumber": null,
+          "address": null,
+          "street": null,
+          "postalCode": null,
+          "city": null,
+          "country": null,
+          "email": null,
+          "phone": null,
+          "website": null,
+          "contactName": null,
+          "bankingAccounts": []
+        },
+        "lineItems": [
+          {
+            "position": "1",
+            "title": "Item 1",
+            "description": null,
+            "quantity": "1",
+            "unit": null,
+            "unitPriceMinor": 100,
+            "netMinor": 100,
+            "taxRateBps": 1900,
+            "taxMinor": 19,
+            "grossMinor": 119,
+            "servicePeriod": null
+          },
+          {
+            "position": "2",
+            "title": "Item 2",
+            "description": null,
+            "quantity": "1",
+            "unit": null,
+            "unitPriceMinor": 100,
+            "netMinor": 100,
+            "taxRateBps": 1900,
+            "taxMinor": 19,
+            "grossMinor": 119,
+            "servicePeriod": null
+          },
+          {
+            "position": "3",
+            "title": "Item 3",
+            "description": null,
+            "quantity": "1",
+            "unit": null,
+            "unitPriceMinor": 100,
+            "netMinor": 100,
+            "taxRateBps": 1900,
+            "taxMinor": 19,
+            "grossMinor": 119,
+            "servicePeriod": null
+          }
+        ],
+        "taxBreakdown": [
+          {
+            "rateBps": 1900,
+            "baseMinor": 600,
+            "taxMinor": 114
+          }
+        ],
+        "payment": {
+          "iban": null,
+          "bic": null,
+          "beneficiary": null,
+          "amountPaidMinor": null,
+          "totalOutstandingMinor": 714,
+          "paymentTerms": "Payment by bank transfer."
+        },
+        "payments": [],
+        "referenceEntries": []
+      }
+    ],
+    [
+      {
+        "supplier": "Example Office Supplies Ltd",
+        "invoiceNumber": "INV-CHUNK-006",
+        "currency": "EUR",
+        "netMinor": 600,
+        "taxMinor": 114,
+        "grossMinor": 714,
+        "dueDate": "2026-09-15",
+        "summary": "Invoice INV-CHUNK-006 from Example Office Supplies Ltd to Chunk Proof Ltd, issued 2026-08-15, due 2026-09-15, EUR. Document totals (all 2 pages): Net 6.00, VAT 1.14 (19%), Gross 7.14, amount due 7.14. No payments received. Owned page 2 contains line items 4-6 only."
+      },
+      {
+        "documentKind": "invoice",
+        "category": null,
+        "issueDate": "2026-08-15",
+        "customerNumber": null,
+        "orderNumber": null,
+        "supplier": {
+          "name": "Example Office Supplies Ltd",
+          "vatId": null,
+          "taxNumber": null,
+          "address": null,
+          "street": null,
+          "postalCode": null,
+          "city": null,
+          "country": null,
+          "email": null,
+          "phone": null,
+          "website": null,
+          "contactName": null,
+          "bankingAccounts": []
+        },
+        "buyer": {
+          "name": "Chunk Proof Ltd",
+          "vatId": null,
+          "taxNumber": null,
+          "address": null,
+          "street": null,
+          "postalCode": null,
+          "city": null,
+          "country": null,
+          "email": null,
+          "phone": null,
+          "website": null,
+          "contactName": null,
+          "bankingAccounts": []
+        },
+        "lineItems": [
+          {
+            "position": "4",
+            "title": "Item 4",
+            "description": null,
+            "quantity": "1",
+            "unit": null,
+            "unitPriceMinor": 100,
+            "netMinor": 100,
+            "taxRateBps": 1900,
+            "taxMinor": 19,
+            "grossMinor": 119,
+            "servicePeriod": null
+          },
+          {
+            "position": "5",
+            "title": "Item 5",
+            "description": null,
+            "quantity": "1",
+            "unit": null,
+            "unitPriceMinor": 100,
+            "netMinor": 100,
+            "taxRateBps": 1900,
+            "taxMinor": 19,
+            "grossMinor": 119,
+            "servicePeriod": null
+          },
+          {
+            "position": "6",
+            "title": "Item 6",
+            "description": null,
+            "quantity": "1",
+            "unit": null,
+            "unitPriceMinor": 100,
+            "netMinor": 100,
+            "taxRateBps": 1900,
+            "taxMinor": 19,
+            "grossMinor": 119,
+            "servicePeriod": null
+          }
+        ],
+        "taxBreakdown": [
+          {
+            "rateBps": 1900,
+            "baseMinor": 600,
+            "taxMinor": 114
+          }
+        ],
+        "payment": {
+          "iban": null,
+          "bic": null,
+          "beneficiary": null,
+          "amountPaidMinor": null,
+          "totalOutstandingMinor": 714,
+          "paymentTerms": "Payment by bank transfer."
+        },
+        "payments": [],
+        "referenceEntries": []
+      }
+    ]
+  ]
+}
