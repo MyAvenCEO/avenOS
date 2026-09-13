@@ -298,10 +298,11 @@ token option does not configure native-stack credentials. Live document waits al
 60 seconds, within the native journey's 180-second total budget. CSV detection is
 deterministic and never calls the LLM, even in this mode.
 
-The long-document provider proof uses the production gateway and decoder with an
+The long-document provider proof uses the authenticated facade, production gateway and decoder with an
 in-memory publication store. It verifies a 160-row statement, replay in a fresh runtime,
 a two-page invoice, and a 70-page PDF larger than 25 MiB with scanned pages beyond
-page 63. Run it explicitly:
+page 63. It also sends a detailed PNG larger than 2 MiB through the facade body
+reader to the real model. Run it explicitly:
 
 ```sh
 TEST_CHUNK_LLM_URL="$TEST_DOCUMENT_PROVIDER_BASE_URL" TEST_CHUNK_MODEL_ID="$TEST_DOCUMENT_PROVIDER_MODEL" bun run --cwd libs/aven-document-ingest test tests/chunking-provider.e2e.test.ts
@@ -309,7 +310,7 @@ TEST_CHUNK_LLM_URL="$TEST_DOCUMENT_PROVIDER_BASE_URL" TEST_CHUNK_MODEL_ID="$TEST
 
 This proof currently uses the `qwen-tools` profile. JSON results and model receipts go
 to `TEST_CHUNK_EVIDENCE_DIR` (default `/tmp/aven-chunk-real`). The statement has a
-20-minute budget, the invoice 10 minutes and the manual 30 minutes; requests remain bounded by the
+20-minute budget, the invoice 10 minutes, the manual 30 minutes and the PNG 5 minutes; requests remain bounded by the
 900-second provider timeout. The separate full-stack gate proves real-store contracts
 and customer isolation; the in-memory provider proof does not replace it.
 

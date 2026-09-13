@@ -851,6 +851,8 @@ Financial extraction owns one disjoint page or text chunk per model invocation. 
 first and last chunks provide labeled identity/totals context, never additional rows.
 Native text takes precedence over model transcription where present. Classification
 and extraction parts combine only after the closed page collection has completed.
+Document-wide tax summaries are retained once when chunks agree; conflicting summaries
+require review. Payment-condition text must be copied from explicit printed terms.
 Metadata conflicts, repeated explicit transaction IDs, and per-call row-limit markers
 require review. Equal-looking transactions without a repeated explicit ID remain
 separate occurrences. Merged statements and invoice details support 10,000 rows and

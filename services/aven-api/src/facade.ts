@@ -15,6 +15,9 @@ import { ArtifactFileService } from './lib/server/artifacts/service.js'
 import { AppError } from './lib/server/errors.js'
 import type { LlmGatewayService } from './lib/server/llm-gateway.js'
 
+// Covers the gateway's 40 MiB aggregate images after base64/JSON encoding, plus bounded text.
+const MAX_STRUCTURED_COMPLETION_BYTES = 80 * 1024 * 1024
+
 function hasBearer(request: Request, expected: string | undefined): boolean {
 	if (!expected) return false
 	const actual = Buffer.from(request.headers.get('authorization') ?? '')
@@ -123,7 +126,10 @@ export function createFacadeHandler(
 					message: 'The LLM gateway is not configured.'
 				})
 			try {
-				return json(200, await llmGateway.complete(await readBoundedJson(request, 2 * 1024 * 1024)))
+				return json(
+					200,
+					await llmGateway.complete(await readBoundedJson(request, MAX_STRUCTURED_COMPLETION_BYTES))
+				)
 			} catch (error) {
 				if (error instanceof BodyLimitError) return json(error.status, { code: error.code })
 				if (error instanceof AppError)
@@ -157,7 +163,10 @@ export function createFacadeHandler(
 			if (url.pathname === '/api/llm/completions' && request.method === 'POST') {
 				if (!llmGateway)
 					throw new AppError(503, 'LLM_GATEWAY_UNAVAILABLE', 'The LLM gateway is not configured.')
-				return json(200, await llmGateway.complete(await readBoundedJson(request, 2 * 1024 * 1024)))
+				return json(
+					200,
+					await llmGateway.complete(await readBoundedJson(request, MAX_STRUCTURED_COMPLETION_BYTES))
+				)
 			}
 			if (url.pathname === '/api/llm/v1/chat/completions' && request.method === 'POST') {
 				if (!llmGateway)

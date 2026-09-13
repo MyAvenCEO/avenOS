@@ -127,3 +127,24 @@ test('invoice detail collection limits cannot claim complete merged coverage', (
 	expect(merged.details?.referenceEntries).toHaveLength(65)
 	expect(merged.candidate.chunkCoverage).toMatchObject({ complete: false, total: 2 })
 })
+
+test('document-wide tax summaries are not added twice and disagreement still blocks coverage', () => {
+	const parts = [
+		{
+			candidate: { grossMinor: 714 },
+			details: { taxBreakdown: [{ rateBps: 1900, baseMinor: 600, taxMinor: 114 }] }
+		},
+		{
+			candidate: { grossMinor: 714 },
+			details: { taxBreakdown: [{ taxMinor: 114, baseMinor: 600, rateBps: 1900 }] }
+		}
+	]
+	const merged = mergeFinance(parts, true)
+	expect(merged.details?.taxBreakdown).toHaveLength(1)
+	expect(merged.candidate.chunkCoverage).toMatchObject({ complete: true })
+	parts[1]!.details.taxBreakdown[0]!.taxMinor = 115
+	expect(mergeFinance(parts, true).candidate.chunkCoverage).toMatchObject({
+		complete: false,
+		conflicts: ['/details/taxBreakdown']
+	})
+})

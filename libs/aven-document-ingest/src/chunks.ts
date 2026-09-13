@@ -1,3 +1,4 @@
+import { type ArtifactJson, canonicalArtifactJsonText } from '@avenos/artifact-store'
 import type {
 	ClientEvidence,
 	DecodedDocument,
@@ -57,7 +58,6 @@ export function mergeFinance(parts: ChunkPart[], invoice: boolean) {
 	const rowPaths = new Set([
 		'/candidate/transactions',
 		'/details/lineItems',
-		'/details/taxBreakdown',
 		'/details/payments',
 		'/details/referenceEntries'
 	])
@@ -66,6 +66,17 @@ export function mergeFinance(parts: ChunkPart[], invoice: boolean) {
 		if (!present.length) return null
 		if (Array.isArray(present[0])) {
 			const arrays = present as unknown[][]
+			if (path === '/details/taxBreakdown') {
+				// Tax breakdown is a document-wide summary, not a disjoint line-item collection.
+				const summaries = arrays.filter((array) => array.length)
+				const identity = (array: unknown[]) =>
+					JSON.stringify(
+						array.map((value) => canonicalArtifactJsonText(value as ArtifactJson)).sort()
+					)
+				if (new Set(summaries.map(identity)).size > 1 && conflicts.length < 128)
+					conflicts.push(path)
+				return summaries[0] ?? []
+			}
 			const combined = arrays.flat()
 			if (combined.length > MAX_FINANCE_ROWS)
 				throw new Error(`Combined ${path} exceeds the ${MAX_FINANCE_ROWS} row safety limit`)

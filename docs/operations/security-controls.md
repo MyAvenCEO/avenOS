@@ -24,7 +24,8 @@ facade control handlers currently normalize body errors to 400 after enforcing t
 | Checkout `/api/billing/*`, except local fake payment | 8 KiB | Purchase identifiers and commands |
 | Other checkout mutations, including name hold and local fake payment | 16 KiB | Small form/command payloads |
 | Checkout `/internal/v1/identity-mail` | 16 KiB | Environment-bound, authenticated fixed security events; no arbitrary HTML or caller-selected action URL |
-| Facade LLM routes, including internal completion | 2 MiB | Text and artifact references; not bulk embedded files |
+| Facade structured LLM completion, including internal completion | 80 MiB | Bounded text and base64 image envelopes; gateway still enforces 12 MiB/image and 40 MiB total images |
+| Facade OpenAI chat compatibility route | 2 MiB | Bounded chat request |
 | Facade customer Intent routes and Intent Service | 256 KiB | Intent mutation payload |
 | Facade Actor routes and Actor Runner commands | 1 MiB | Admission/control payload; large material belongs in Artifact Store |
 | Other facade downstream proxy mutations | 1 MiB | Bounded service commands |
