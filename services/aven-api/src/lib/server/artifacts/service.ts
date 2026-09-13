@@ -813,9 +813,22 @@ const CLIENT_PROCEDURES: Record<string, ClientProcedureDescriptor> = {
 	'client.validate-invoice': {
 		actor: 'invoice-validator',
 		validate: (input) => {
-			expectInputs(input, { source: { min: 1, max: 1 }, candidate: { min: 1, max: 1 } })
-			expectParameters(input, false)
+			const parameters = clientRecord(input.parameters, 'invoice validation parameters')
+			const keys = Object.keys(parameters)
+			const current = keys.length === 1 && parameters.rulesetVersion === 'invoice-core-v2'
+			if (keys.length !== 0 && !current) {
+				invalidClientContract('Invoice validation requires no parameters or invoice-core-v2.')
+			}
+			expectInputs(input, {
+				source: { min: 1, max: 1 },
+				candidate: { min: 1, max: 1 },
+				...(current && { details: { min: 1, max: 1 } })
+			})
 			expectArtifacts(input, [invoiceValidationOutput])
+			const validation = clientRecord(input.artifacts[0]!.payload, 'invoice validation payload')
+			if (validation.rulesetVersion !== (current ? 'invoice-core-v2' : 'invoice-core-v1')) {
+				invalidClientContract('Invoice validation output must match the requested ruleset.')
+			}
 		}
 	},
 	'client.validate-statement': {

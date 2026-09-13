@@ -30,8 +30,12 @@ these provider tests is in memory; the complete platform gate proves real-store
 publication and application journeys separately.
 
 Local regression results: document 110 passed (28 opt-in skipped), app 183 passed,
-API 44 passed, customer-platform suites passed with opt-in persistence/live cases
-skipped. Document, app, API and customer-platform type checks passed; documentation,
+API 47 passed, customer-platform suites passed with opt-in persistence/live cases
+skipped in the unit run. All 14 persistence tests also passed against a disposable
+PostgreSQL and current Artifact Store, including invoice publication through the
+facade, recovery, 70-page chunking and 160-row output. The facade accepts the v2
+details input while preserving the legacy v1 contract; seven malformed combinations
+are rejected before storage. Document, app, API and customer-platform type checks passed; documentation,
 deployment checks and source/history secret scans passed. The follow-up PR carries
 the complete CI result at the exact committed revision.
 
