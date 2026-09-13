@@ -14,13 +14,16 @@ import prepare
 archive = prepare.archive
 
 
-def directory(path, uid=0):
+def directory(path, uid=0, *, mode=0o700):
+    if mode not in (0o700, 0o755):
+        raise ValueError('unsupported runtime storage permissions')
     if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
         raise ValueError('runtime storage cannot use symbolic links')
-    path.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if not path.is_dir() or path.stat().st_mode & 0o077:
-        raise ValueError('runtime storage must be a private directory')
+    path.mkdir(mode=mode, parents=True, exist_ok=True)
+    if not path.is_dir() or (path.stat().st_mode & 0o7777) & ~mode:
+        raise ValueError('runtime storage has unsafe permissions')
     os.chown(path, uid, uid)
+    os.chmod(path, mode)
 
 
 def install_controller(image, destination, release_sha):

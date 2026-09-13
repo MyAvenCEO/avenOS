@@ -46,6 +46,12 @@ tested together with the service images. The maintenance engine extracts this pa
 the pinned image without executing an arbitrary source checkout. Migrations and billing
 catalog reconciliation remain in their owning service images.
 
+Identity startup waits for a healthy database, successful role initialization and
+migrations, then healthy application services. A successful one-shot job may exit;
+a failed role or migration job blocks startup. Retrying installation preserves the
+database and backup status. Private storage remains owner-only; only the public
+backup-health directory allows reads by the identity container.
+
 ## Installation channels
 
 The maintenance repository manually selects a published release for next and promotes its

@@ -14,13 +14,19 @@ for recovery in (False, True):
         (source/'application-secrets.json').write_text(json.dumps({'version':1,'target':'identity','values':{}}))
         config={'services':{name:{'image':image,'environment':{},'volumes':[]} for name in ('database','database-roles','identity','backup','restore')}}
         calls=[]
-        def mkdir(path, uid=0): path.mkdir(mode=0o700,parents=True,exist_ok=True)
-        def write_platform(path, *_): path.mkdir();(path/'release.json').write_text('{}')
+        def write_platform(path, *_): path.mkdir(exist_ok=True);(path/'release.json').write_text('{}')
         with patch.object(identity.os,'geteuid',return_value=0), patch.object(identity.host,'composition',return_value=config), \
-             patch.object(identity.start,'directory',side_effect=mkdir), patch.object(identity.host,'write_platform',side_effect=write_platform), \
+             patch.object(identity.start.os,'chown'), patch.object(identity.host,'write_platform',side_effect=write_platform), \
              patch.object(identity.archive,'run',side_effect=lambda args:calls.append(args)), \
              patch.object(identity.archive,'create',side_effect=lambda *_:calls.append(['retain'])), patch.object(identity.host,'own_archive'):
             identity.deploy(source,platform,volume,recovery)
+            status=volume/'backups/public-status/health.json';status.write_text('{"healthy":true}')
+            database=volume/'postgres/PG_VERSION';database.write_text('17')
+            identity.deploy(source,platform,volume)
+            assert status.read_text()=='{"healthy":true}'
+            assert database.read_text()=='17'
+            assert (volume/'postgres').stat().st_mode & 0o777 == 0o700
+            assert status.parent.stat().st_mode & 0o777 == 0o755
         retained=next(i for i,c in enumerate(calls) if c==['retain'])
         backup=next(i for i,c in enumerate(calls) if 'backup' in c and 'up' in c)
         assert retained<backup
@@ -29,9 +35,24 @@ for recovery in (False, True):
         if recovery:
             assert restores[0]<next(i for i,c in enumerate(calls) if 'run' in c and c[-1]=='database-roles')<retained
         with patch.object(identity.os,'geteuid',return_value=0), patch.object(identity.host,'composition',return_value=config), \
-             patch.object(identity.start,'directory',side_effect=mkdir), patch.object(identity.archive,'run') as commands:
+             patch.object(identity.start.os,'chown'), patch.object(identity.archive,'run') as commands:
             try:identity.deploy(source,platform,volume,True)
             except ValueError:pass
             else:raise AssertionError('recovery reused an existing identity installation')
             commands.assert_not_called()
-print('Identity retains recovery material before backup, reconciles restored roles and refuses partial-target reuse.')
+with tempfile.TemporaryDirectory(prefix='identity-storage-') as directory, patch.object(identity.start.os,'chown'):
+    root=Path(directory)
+    for mode in (0o700,0o755):
+        unsafe=root/f'unsafe-{mode}';unsafe.mkdir();unsafe.chmod(0o777)
+        try: identity.start.directory(unsafe,mode=mode)
+        except ValueError: pass
+        else: raise AssertionError('writable runtime storage was accepted')
+        link=root/f'link-{mode}';link.symlink_to(unsafe,target_is_directory=True)
+        try: identity.start.directory(link/'child',mode=mode)
+        except ValueError: pass
+        else: raise AssertionError('runtime storage followed a symbolic link')
+    public=root/'public';public.mkdir(mode=0o755)
+    try: identity.start.directory(public)
+    except ValueError: pass
+    else: raise AssertionError('private storage accepted public permissions')
+print('Identity retries preserve private data and public health; restore ordering and unsafe-storage rejection passed.')
