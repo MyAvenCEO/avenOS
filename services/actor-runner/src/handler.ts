@@ -10,7 +10,7 @@ import type { IdentityVerifier } from '@avenos/aven-identity'
 import { BodyLimitError, readBoundedBytes } from '@avenos/http-boundary'
 import { ZodError } from 'zod'
 import { parsePlanRunStartCommand } from './command.js'
-import { CustomerExecutionPaused } from './sql-runner.js'
+import { CustomerExecutionPaused, PlanRunConflict } from './sql-runner.js'
 
 const json = (status: number, body: unknown): Response =>
 	new Response(JSON.stringify(body), {
@@ -164,10 +164,27 @@ export function createActorRunnerHandler(
 					}
 				)
 			}
-			if (segments[3] === 'cancel' && segments.length === 4 && request.method === 'POST') {
+			if (
+				(segments[3] === 'cancel' || segments[3] === 'retry') &&
+				segments.length === 4 &&
+				request.method === 'POST'
+			) {
 				const body = (await readJson(request)) as { requestId?: unknown }
 				if (typeof body.requestId !== 'string' || body.requestId.length < 1) {
 					return json(400, { code: 'COMMAND_INVALID', message: 'requestId is required.' })
+				}
+				if (segments[3] === 'retry') {
+					if (!runner.retry)
+						return json(400, {
+							code: 'RETRY_UNAVAILABLE',
+							message: 'This runner does not support retry.'
+						})
+					return json(
+						202,
+						await runner.retry(runId, body.requestId, {
+							session: { identityToken: admitted.identityToken, sessionId: claims.sid }
+						})
+					)
 				}
 				return json(202, await runner.cancel(runId, body.requestId))
 			}
@@ -203,9 +220,12 @@ export function createActorRunnerHandler(
 					message: 'The request body is not valid JSON.'
 				})
 			}
-			return json(409, {
-				code: 'RUN_COMMAND_REJECTED',
-				message: error instanceof Error ? error.message : 'The actor run command was rejected.'
+			if (error instanceof PlanRunConflict)
+				return json(409, { code: 'RUN_COMMAND_REJECTED', message: error.message })
+			console.error('Actor Runner request failed', error)
+			return json(503, {
+				code: 'RUNNER_UNAVAILABLE',
+				message: 'Actor Runner is temporarily unavailable.'
 			})
 		}
 	}

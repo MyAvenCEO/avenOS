@@ -28,13 +28,13 @@ facade control handlers currently normalize body errors to 400 after enforcing t
 | Facade customer Intent routes and Intent Service | 256 KiB | Intent mutation payload |
 | Facade Actor routes and Actor Runner commands | 1 MiB | Admission/control payload; large material belongs in Artifact Store |
 | Other facade downstream proxy mutations | 1 MiB | Bounded service commands |
-| Facade artifact client-run upload | 8 MiB | Client execution envelope |
-| Facade artifact file upload | 25 MiB | Streaming binary file; Artifact Store enforces actual size |
+| Facade artifact client-run upload | 128 MiB | Bounded client execution envelope, including up to 32 text/layout pairs |
+| Facade artifact file upload | 128 MiB | Streaming binary file; Artifact Store enforces actual size |
 | Facade hosting bindings and host reports | 64 KiB | Repository/host metadata |
 | Facade internal entitlement event | 16 KiB | Customer lifecycle fact |
 
 The reverse proxy adds whole-surface ceilings of 128 KiB for identity, 1 MiB for
-checkout and 25 MiB for the facade. These are outer bounds, not permission to exceed
+checkout and 160 MiB for the facade. These are outer bounds, not permission to exceed
 a smaller application limit. Downloads and bounded LLM response streams have separate
 budgets. An internal model adapter's larger image limit does not enlarge public ingress.
 

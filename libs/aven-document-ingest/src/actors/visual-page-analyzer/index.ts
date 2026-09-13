@@ -1,10 +1,11 @@
 import { Actor } from '@avenos/actors'
 import { type DocumentModelGateway, modelRequest } from '../../model'
-import type { DecodedPage, ExtractedPage } from '../../shared'
+import type { DecodedPage, DocumentDecoder, DocumentSource, ExtractedPage } from '../../shared'
 import {
 	artifact,
 	booleanValue,
 	bytesToBase64,
+	decodedPage,
 	failure,
 	integer,
 	MAX_LAYOUT_SPANS,
@@ -19,7 +20,10 @@ import {
 	wholePage
 } from '../../shared'
 
-export function createVisualPageAnalyzerActor(model: DocumentModelGateway): Actor {
+export function createVisualPageAnalyzerActor(
+	model: DocumentModelGateway,
+	decoder?: DocumentDecoder
+): Actor {
 	return new Actor(
 		manifest(
 			'visual-page-analyzer',
@@ -41,10 +45,15 @@ export function createVisualPageAnalyzerActor(model: DocumentModelGateway): Acto
 		{
 			document_analyze_page: async (payload) => {
 				try {
-					const page = payload.page as unknown as DecodedPage
+					const page = await decodedPage(
+						decoder,
+						payload.source as unknown as DocumentSource,
+						payload.page as unknown as DecodedPage,
+						true
+					)
 					const native = payload.extracted as unknown as ExtractedPage
 					const completed = await model.complete(
-						modelRequest('analyze-page', [pageImage(page)], native.text)
+						modelRequest('analyze-page', page.image ? [pageImage(page)] : [], native.text)
 					)
 					const structured = completed.structured
 					const suppliedText = stringValue(structured.text, 'OCR text')
@@ -159,7 +168,10 @@ export function createVisualPageAnalyzerActor(model: DocumentModelGateway): Acto
 								outputLocator: wholeArtifact(),
 								inputRole: 'source',
 								inputOrdinal: 0,
-								inputLocator: wholePage(page.page)
+								inputLocator:
+									page.textRange && page.textRange.endExclusive > page.textRange.start
+										? { kind: 'byte-range' as const, ...page.textRange }
+										: wholePage(page.page)
 							})),
 							modelReceipt: completed.receipt
 						},

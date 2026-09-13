@@ -1,0 +1,3 @@
+$ bun ./scripts/check-doc-links.ts && bun ./scripts/check-doc-policy.ts
+Documentation links are valid across 59 active Markdown files.
+Documentation policy is consistent: 15 authorities, 47 workflow settings.

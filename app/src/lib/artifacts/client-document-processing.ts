@@ -30,7 +30,9 @@ import { intents } from '$lib/intents/intents.svelte'
 import { BrowserDocumentDecoder } from './browser-document-decoder'
 import { clientReconciliation } from './client-reconciliation'
 import { holdCsvDocumentReview } from './csv-document-review'
+import { immutableDocumentRunRequest } from './document-source-request'
 import type { ArtifactProcessingLookup } from './processing'
+import { transportError } from './transport-error'
 
 interface ArtifactContent {
 	mediaType: string
@@ -40,16 +42,10 @@ interface ArtifactContent {
 const PUBLICATION_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const
 
 function publicationErrorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error)
+	return transportError(error).message
 }
-
 function isRetryablePublicationError(error: unknown): boolean {
-	const message = publicationErrorMessage(error)
-	return (
-		message.startsWith('Aven API unavailable:') ||
-		message === 'Artifact Store is unavailable.' ||
-		message === 'upload admission is temporarily exhausted'
-	)
+	return transportError(error).retryable
 }
 
 const documentModelGateway = singleton(
@@ -59,9 +55,6 @@ const documentModelGateway = singleton(
 const actors = singleton('aven.document-processing-actors', () =>
 	createDocumentActors(new BrowserDocumentDecoder(), documentModelGateway)
 )
-for (const actor of actors.all) {
-	if (!bus.get(actor.uuid)) bus.register(actor)
-}
 
 class TauriClientArtifactGateway implements ClientArtifactGateway {
 	lookup(publicationId: string): Promise<CommittedClientRun | null> {
@@ -124,8 +117,11 @@ class TauriPlanRunnerClient implements PlanRunnerClient {
 		throw new Error('document runs do not expose continuations')
 	}
 
-	cancel(_runId: string, _requestId: string): Promise<PlanRunHandle> {
-		throw new Error('document run cancellation is not exposed by this client')
+	cancel(runId: string, requestId: string): Promise<PlanRunHandle> {
+		return invoke('actor_run_control', { runId, requestId, action: 'cancel' })
+	}
+	retry(runId: string, requestId: string): Promise<PlanRunHandle> {
+		return invoke('actor_run_control', { runId, requestId, action: 'retry' })
 	}
 }
 
@@ -183,52 +179,96 @@ export async function processClientDocument(
 	reconcile = true,
 	csvConfirmationArtifactId?: string
 ): Promise<void> {
-	const request = documentRunStartRequest(
+	let request = documentRunStartRequest(
 		{ artifactId, originalName, ...(declaredMediaType && { declaredMediaType }) },
 		executionEnvironment
 	)
-	// A new runner observation sees the durable confirmation. This identifier is
-	// only an idempotency revision, never an approval flag passed to the solver.
-	if (csvConfirmationArtifactId)
-		request.idempotencyKey += `:csv-confirmation:${csvConfirmationArtifactId}`
-	const presentation = await clientDocumentRuntime.start(request)
-	if (isCsvSource({ originalName, declaredMediaType: declaredMediaType ?? '' })) {
-		if (
-			await holdCsvDocumentReview({
-				presentation,
-				publications: publicationGateway,
-				bus,
-				resume: (id, fromHuman) =>
-					processClientDocument(
-						artifactId,
-						originalName,
-						declaredMediaType,
-						executionEnvironment,
-						reconcile || fromHuman,
-						id
-					)
-			})
+	try {
+		request = await immutableDocumentRunRequest(
+			{ artifactId, originalName, declaredMediaType },
+			executionEnvironment,
+			(id) => invoke('artifact_get', { artifactId: id })
 		)
-			return
-	}
-	if (reconcile && presentation.state !== 'failed') {
-		try {
-			await clientReconciliation.start(
-				publicationGateway,
-				executionEnvironment,
-				new TauriPlanRunnerClient()
+
+		// A new runner observation sees the durable confirmation. This identifier is
+		// only an idempotency revision, never an approval flag passed to the solver.
+		if (csvConfirmationArtifactId)
+			request.idempotencyKey += `:csv-confirmation:${csvConfirmationArtifactId}`
+		const presentation = await clientDocumentRuntime.start(request)
+		if (
+			isCsvSource({ ...request.source, declaredMediaType: request.source.declaredMediaType ?? '' })
+		) {
+			if (
+				await holdCsvDocumentReview({
+					presentation,
+					publications: publicationGateway,
+					bus,
+					resume: (id, fromHuman) =>
+						processClientDocument(
+							artifactId,
+							originalName,
+							declaredMediaType,
+							executionEnvironment,
+							reconcile || fromHuman,
+							id
+						)
+				})
 			)
-		} catch (error) {
-			// Document publication already committed. Keep that success and expose
-			// reconciliation failure through the existing processing warning surface.
-			const updated = structuredClone(presentation)
-			updated.warnings.push({
-				code: 'reconciliation-failed',
-				message: publicationErrorMessage(error),
-				retryable: true
-			})
-			chatActor.core.updateArtifactProcessing(artifactId, updated)
-			intents.updateFileProcessing(artifactId, updated)
+				return
 		}
+		if (reconcile && presentation.state !== 'failed') {
+			try {
+				await clientReconciliation.start(
+					publicationGateway,
+					executionEnvironment,
+					new TauriPlanRunnerClient()
+				)
+			} catch (error) {
+				// Document publication already committed. Keep that success and expose
+				// reconciliation failure through the existing processing warning surface.
+				const updated = structuredClone(presentation)
+				updated.warnings.push({
+					code: 'reconciliation-failed',
+					message: publicationErrorMessage(error),
+					retryable: true
+				})
+				chatActor.core.updateArtifactProcessing(artifactId, updated)
+				intents.updateFileProcessing(artifactId, updated)
+			}
+		}
+	} catch (error) {
+		clientDocumentRuntime.fail(request, new Error(transportError(error).message))
+	}
+}
+
+export async function retryClientDocument(artifactId: string, originalName: string): Promise<void> {
+	const environment = clientDocumentRuntime.executionEnvironment(artifactId)
+	if (!environment) return
+	try {
+		await clientDocumentRuntime.retry(artifactId)
+		await processClientDocument(artifactId, originalName, undefined, environment)
+	} catch (error) {
+		clientDocumentRuntime.fail(
+			documentRunStartRequest({ artifactId, originalName }, environment),
+			error
+		)
+	}
+}
+export async function cancelClientDocument(artifactId: string): Promise<void> {
+	try {
+		await clientDocumentRuntime.cancel(artifactId)
+	} catch (error) {
+		const environment = clientDocumentRuntime.executionEnvironment(artifactId)
+		if (environment)
+			clientDocumentRuntime.fail(
+				documentRunStartRequest(
+					{
+						artifactId,
+						originalName: clientDocumentRuntime.status(artifactId)?.label ?? 'Document'
+					},
+					environment
+				),
+				new Error(transportError(error).message)
+			)
 	}
 }

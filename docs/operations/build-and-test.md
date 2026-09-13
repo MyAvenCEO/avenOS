@@ -192,7 +192,7 @@ fresh databases on dynamic loopback ports, and proves the public journey:
   environment remains independently accessible;
 - artifact upload and exact readback;
 - native document import on both Device and Server placement, exact source and
-  extracted bytes, and canonical stored-graph equivalence for the deterministic text
+  extracted bytes, and canonical stored-graph equivalence for the text note
   fixture;
 - synthetic invoice and statement PDF imports in opposite orders on Device and Server,
   automatic match proposals, and a physical confirmation through the existing native
@@ -297,6 +297,21 @@ uses an unauthenticated endpoint reachable from its containers; the focused wrap
 token option does not configure native-stack credentials. Live document waits allow
 60 seconds, within the native journey's 180-second total budget. CSV detection is
 deterministic and never calls the LLM, even in this mode.
+
+The long-document provider proof uses the production gateway and decoder with an
+in-memory publication store. It verifies a 160-row statement, replay in a fresh runtime,
+a two-page invoice, and a 70-page PDF larger than 25 MiB with scanned pages beyond
+page 63. Run it explicitly:
+
+```sh
+TEST_CHUNK_LLM_URL="$TEST_DOCUMENT_PROVIDER_BASE_URL" TEST_CHUNK_MODEL_ID="$TEST_DOCUMENT_PROVIDER_MODEL" bun run --cwd libs/aven-document-ingest test tests/chunking-provider.e2e.test.ts
+```
+
+This proof currently uses the `qwen-tools` profile. JSON results and model receipts go
+to `TEST_CHUNK_EVIDENCE_DIR` (default `/tmp/aven-chunk-real`). The statement has a
+20-minute budget, the invoice 10 minutes and the manual 30 minutes; requests remain bounded by the
+900-second provider timeout. The separate full-stack gate proves real-store contracts
+and customer isolation; the in-memory provider proof does not replace it.
 
 Live-provider success proves the tested inputs and adapter, not general OCR accuracy,
 provider determinism or recognition of unsupported documents. Keep corpus expected

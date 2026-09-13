@@ -231,7 +231,9 @@ class StatementModelGateway extends InvoiceModelGateway {
 						closingBalanceMinor: 3500,
 						periodStart: '2026-08-01',
 						periodEnd: '2026-08-31',
-						transactions,
+						transactions: transactions.filter((_, index) =>
+							(request.images[0]?.page ?? 1) === 1 ? index < 33 : index >= 33
+						),
 						summary: 'August account statement.'
 					},
 					evidence: []
@@ -249,7 +251,7 @@ class FlakyInvoiceModelGateway extends InvoiceModelGateway {
 		if (request.procedure === 'classify-document' && !this.#failedClassification) {
 			this.#failedClassification = true
 			this.requests.push(structuredClone(request))
-			throw new Error('transient model failure')
+			throw Object.assign(new Error('transient model failure'), { retryable: true })
 		}
 		return super.complete(request)
 	}
@@ -318,7 +320,7 @@ describe('client document actors', () => {
 			],
 			outputSlots: [
 				expect.objectContaining({
-					schema: 'ceo.aven:schema:docs:file-inspection@2',
+					schema: 'ceo.aven:schema:docs:file-inspection@3',
 					role: 'inspection',
 					cardinality: 'one'
 				})
@@ -360,7 +362,7 @@ describe('client document actors', () => {
 	})
 
 	test('fails closed when any decoder exceeds the shared page bound', async () => {
-		const pages = Array.from({ length: 64 }, (_, index) => ({
+		const pages = Array.from({ length: 10001 }, (_, index) => ({
 			page: index + 1,
 			rotation: 0 as const,
 			width: 100,
@@ -377,7 +379,7 @@ describe('client document actors', () => {
 		)
 		const response = await actors.inspect.deliver('document_inspect', { source: SOURCE })
 
-		expect(() => parseDocumentActorResult(response.record)).toThrow('maximum is 63')
+		expect(() => parseDocumentActorResult(response.record)).toThrow('maximum is 10000')
 	})
 
 	test('runs the complete deterministic DAG and binds every hop to persisted artifacts', async () => {
@@ -454,11 +456,11 @@ describe('client document actors', () => {
 		expect(second.state, second.summary ?? 'recovery').toBe('succeeded')
 		expect(
 			model.requests.filter((request) => request.procedure === 'classify-document')
-		).toHaveLength(1)
+		).toHaveLength(2)
 		expect(model.requests.filter((request) => request.procedure === 'analyze-page')).toHaveLength(2)
 		expect(
 			model.requests.filter((request) => request.procedure === 'extract-invoice')
-		).toHaveLength(1)
+		).toHaveLength(2)
 		expect(new Set(gateway.runs.map((run) => run.publicationId)).size).toBe(gateway.runs.length)
 		const third = await new DocumentProcessingRuntime(
 			createDocumentActors(decoder, model),
@@ -467,7 +469,7 @@ describe('client document actors', () => {
 		).start(SOURCE)
 		expect(third.state, third.summary ?? 'complete replay').toBe('succeeded')
 		expect(third.stages.every((stage) => stage.attemptCount === 0)).toBe(true)
-		expect(model.requests).toHaveLength(4)
+		expect(model.requests).toHaveLength(6)
 	})
 
 	test('preserves a scanned PDF but stops at needs-review while OCR is absent', async () => {
@@ -522,7 +524,7 @@ describe('client document actors', () => {
 				model.status()
 			).start(SOURCE)
 			expect(result.state).toBe('needs_review')
-			expect(base.requests.filter((r) => r.procedure === 'extract-invoice')).toHaveLength(1)
+			expect(base.requests.filter((r) => r.procedure === 'extract-invoice')).toHaveLength(2)
 			const drafts = gateway.runs.flatMap((r) => r.artifacts)
 			expect(
 				drafts.find((a) => a.typeKey === 'bookkeeping.invoice-details')?.payload.supplier
@@ -559,7 +561,14 @@ describe('client document actors', () => {
 			validationStatus: 'consistent'
 		})
 		expect(model.requests.map((request) => request.procedure).sort()).toEqual(
-			['classify-document', 'analyze-page', 'analyze-page', 'extract-invoice'].sort()
+			[
+				'classify-document',
+				'classify-document',
+				'analyze-page',
+				'analyze-page',
+				'extract-invoice',
+				'extract-invoice'
+			].sort()
 		)
 		expect(JSON.stringify(model.requests.at(-1)?.schema)).not.toContain('$ref')
 		expectStageGraph(presentation, [
@@ -568,11 +577,15 @@ describe('client document actors', () => {
 			'extract-native-page-001',
 			'extract-native-page-002',
 			'classify-document',
+			'classify-document-page-001',
+			'classify-document-page-002',
 			'analyze-page-001',
 			'analyze-page-002',
 			'assemble-document',
 			'aggregate-content',
 			'extract-invoice',
+			'extract-invoice-page-001',
+			'extract-invoice-page-002',
 			'validate-invoice',
 			'normalize-invoice-open-item'
 		])
@@ -615,11 +628,15 @@ describe('client document actors', () => {
 			'extract-native-page-001',
 			'extract-native-page-002',
 			'classify-document',
+			'classify-document-page-001',
+			'classify-document-page-002',
 			'analyze-page-001',
 			'analyze-page-002',
 			'assemble-document',
 			'aggregate-content',
 			'extract-statement',
+			'extract-statement-page-001',
+			'extract-statement-page-002',
 			'validate-statement',
 			'normalize-statement',
 			'fanout-statement-transactions-001',
@@ -675,11 +692,11 @@ describe('client document actors', () => {
 
 		expect(presentation.state, presentation.summary ?? 'document state').toBe('succeeded')
 		expect(
-			presentation.stages.find((stage) => stage.key === 'classify-document')?.attemptCount
+			presentation.stages.find((stage) => stage.key === 'classify-document-page-001')?.attemptCount
 		).toBe(2)
 		expect(
 			model.requests.filter((request) => request.procedure === 'classify-document')
-		).toHaveLength(2)
+		).toHaveLength(3)
 	})
 
 	test('does not turn a failed decoder into an assertion that OCR or content is missing', async () => {
@@ -717,6 +734,11 @@ describe('client document actors', () => {
 		expect(presentation.state, presentation.summary ?? 'document state').toBe('needs_review')
 		expect(presentation.metadata).toMatchObject({ documentKind: 'invoice' })
 		expect(
+			presentation.stages
+				.filter((stage) => stage.state === 'failed')
+				.every((stage) => stage.attemptCount === 1)
+		).toBe(true)
+		expect(
 			presentation.warnings.filter(
 				(warning) => warning.code.startsWith('analyze-page-') && warning.code.endsWith('-failed')
 			)
@@ -751,9 +773,11 @@ describe('client document actors', () => {
 
 		expect(presentation.state, presentation.summary ?? 'document state').toBe('failed')
 		expect(
-			presentation.stages.find((stage) => stage.key === 'classify-document')?.attemptCount
+			presentation.stages.find((stage) => stage.key === 'classify-document-page-001')?.attemptCount
 		).toBe(1)
-		expect(presentation.stages.find((stage) => stage.key === 'classify-document')).toMatchObject({
+		expect(
+			presentation.stages.find((stage) => stage.key === 'classify-document-page-001')
+		).toMatchObject({
 			state: 'publishing'
 		})
 		expect(
@@ -884,3 +908,18 @@ function expectStageGraph(
 			expect(positions.get(dependency)!).toBeLessThan(positions.get(stage.key)!)
 		}
 }
+
+test('cancel and close stop work waiting for model discovery without publishing', async () => {
+	const publications = new RecordingGateway()
+	const runtime = new DocumentProcessingRuntime(
+		createDocumentActors(new FixedDecoder(DOCUMENT)),
+		publications,
+		() => new Promise(() => {})
+	)
+	const run = runtime.start(SOURCE)
+	runtime.cancel(SOURCE.artifactId)
+	expect((await run).state).toBe('failed')
+	await runtime.close()
+	expect(publications.runs).toHaveLength(0)
+	await expect(runtime.start(SOURCE)).rejects.toThrow('closed')
+})

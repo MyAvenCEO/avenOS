@@ -12,7 +12,7 @@ import { AppError } from '../lib/server/errors.js'
 const uuid = z.uuid()
 const observedAt = z.iso.datetime()
 const executionEnvironment = z.enum(['local', 'server'])
-const MAX_CLIENT_RUN_BYTES = 36 * 1024 * 1024
+const MAX_CLIENT_RUN_BYTES = 128 * 1024 * 1024
 
 const json = (status: number, body: unknown) =>
 	Response.json(body, { status, headers: { 'cache-control': 'no-store' } })
@@ -96,7 +96,7 @@ export class ArtifactHandler {
 				const publicationId = uuid.parse(segments[1])
 				const length = Number(required(request, 'content-length'))
 				if (!Number.isSafeInteger(length) || length < 0 || length > MAX_ARTIFACT_FILE_BYTES)
-					throw new AppError(413, 'ARTIFACT_FILE_TOO_LARGE', 'Files may not exceed 25 MiB.')
+					throw new AppError(413, 'ARTIFACT_FILE_TOO_LARGE', 'Files may not exceed 128 MiB.')
 				if (!request.body)
 					throw new AppError(400, 'ARTIFACT_BODY_MISSING', 'The file body is required.')
 				return json(

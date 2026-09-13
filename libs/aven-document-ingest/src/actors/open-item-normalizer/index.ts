@@ -42,8 +42,7 @@ export function normalizeInvoiceOpenItem(
 	if (grossMinor === null) throw new Error('invoice gross amount is invalid')
 	const outstandingMinor = money(payment?.totalOutstandingMinor)
 	const amountPaidMinor = money(payment?.amountPaidMinor)
-	const amountDueMinor =
-		outstandingMinor !== null && outstandingMinor !== 0 ? outstandingMinor : grossMinor
+	const amountDueMinor = outstandingMinor ?? grossMinor
 	const bankingAccounts = Array.isArray(supplier.bankingAccounts) ? supplier.bankingAccounts : []
 	const supplierIbans = [
 		text(payment?.iban),

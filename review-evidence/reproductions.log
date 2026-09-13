@@ -1,0 +1,17 @@
+F-2 CONFIRMED: upload/restart use the same key with conflicting source parameters.
+F-5 CONFIRMED: rejected start leaves no presentation.
+F-12 CONFIRMED: identical retry returns failed run without executing again.
+F-13 unknown exploration result: {"artifactIds":[],"completedStepIds":[],"remainingGoals":[],"registryRevision":0,"policyDecisionIds":[],"output":{"kind":"artifact-understanding","status":"complete","stoppingReason":"saturated","subjectArtifactId":"11111111-1111-4111-8111-111111111111","facts":[{"predicate":"ceo.aven.docs.file(source)","artifactId":"11111111-1111-4111-8111-111111111111"}],"affordances":[]}}
+F-3 CONFIRMED: 1658098 -> 4824 bytes; original 3840x2160, emitted image does not decode.
+F-3 browser adapter independently emits the same truncated 4824 bytes.
+F-17 CONFIRMED in part: zero outstanding becomes 11900 due; missing currency is now rejected.
+F-9 arithmetic result: {"ok":true,"procedureKey":"client.validate-invoice","artifacts":[{"localKey":"validation","typeKey":"bookkeeping.invoice-validation","typeVersion":1,"payload":{"rulesetVersion":"invoice-core-v1","status":"insufficient-coverage","coverageBps":5000,"checks":[{"ruleId":"invoice.net-plus-tax-equals-gross","outcome":"UNKNOWN","severity":"hard","paths":["/netMinor","/taxMinor","/grossMinor"],"message":"Net plus tax agrees with gross, or requires explicit adjustment coverage."},{"ruleId":"invoice.identity-present","outcome":"PASS","severity":"hard","paths":["/supplier","/invoiceNumber"],"message":"Supplier and invoice number must both be present."}]},"output":{"role":"validation","ordinal":0}}],"evidence":[{"ordinal":0,"outputLocalKey":"validation","outputLocator":{"kind":"artifact-root"},"inputRole":"candidate","inputOrdinal":0,"inputLocator":{"kind":"artifact-root"}}]}
+F-10 CONFIRMED: missing inputs -> 502 ARTIFACT_STORE_UNAVAILABLE
+Contract probe invoice: succeeded; 10 publications; Invoice DE-2025-00001 for EUR 119.00.
+Contract probe bank-statement: succeeded; 11 publications; January account statement with one transaction.
+Contract probe page-failure: needs_review; 10 publications; Invoice DE-2025-00001 for EUR 119.00.
+Contract probe classification-failure: needs_review; 6 publications; 1 page(s) processed with native text extraction.
+Contract probe deterministic: succeeded; 6 publications; 1 page(s) processed with native text extraction.
+F-4 FIX VERIFIED: current fallback passes the real facade validator. All five contract paths pass.
+F-10 CONFIRMED: fractional provider usage causes publication failure reported as store unavailable.
+F-8 current earlier bound CONFIRMED: synthetic 3 x 7 MiB rendered images exceed the 25 MiB decoded-inspection blob limit before any model call.

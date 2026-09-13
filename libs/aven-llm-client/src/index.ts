@@ -76,7 +76,10 @@ export interface OpenAiChatCompletionRequest extends Record<string, unknown> {
 /** Minimal transport port shared by desktop, browser, and headless consumers. */
 export interface LlmGatewayClient {
 	discover(requiredCapabilities: string[]): Promise<LlmModelDescriptor[]>
-	complete(request: LlmCompletionRequest): Promise<LlmCompletionResponse>
+	complete(
+		request: LlmCompletionRequest,
+		options?: { signal?: AbortSignal }
+	): Promise<LlmCompletionResponse>
 }
 
 export function supportsCapabilities(
@@ -85,4 +88,19 @@ export function supportsCapabilities(
 ): boolean {
 	const advertised = new Set(model.capabilities)
 	return requiredCapabilities.every((capability) => advertised.has(capability))
+}
+
+/** Preserve provider metadata exactly without putting fractional numbers into Artifact JSON. */
+export function portableUsage(value: unknown): Record<string, unknown> | null {
+	const normalize = (item: unknown): unknown => {
+		if (typeof item === 'number')
+			return Number.isSafeInteger(item) ? item : Number.isFinite(item) ? String(item) : null
+		if (Array.isArray(item)) return item.map(normalize)
+		if (item && typeof item === 'object')
+			return Object.fromEntries(Object.entries(item).map(([k, v]) => [k, normalize(v)]))
+		return item ?? null
+	}
+	return value && typeof value === 'object' && !Array.isArray(value)
+		? (normalize(value) as Record<string, unknown>)
+		: null
 }

@@ -1,6 +1,7 @@
 import { Actor } from '@avenos/actors'
+import { mergeKinds, renderedDocument } from '../../chunks'
 import { type DocumentModelGateway, modelRequest } from '../../model'
-import type { DecodedDocument, ExtractedPage } from '../../shared'
+import type { DecodedDocument, DocumentDecoder, DocumentSource, ExtractedPage } from '../../shared'
 import {
 	artifact,
 	failure,
@@ -13,7 +14,10 @@ import {
 	wholeArtifact
 } from '../../shared'
 
-export function createDocumentKindClassifierActor(model: DocumentModelGateway): Actor {
+export function createDocumentKindClassifierActor(
+	model: DocumentModelGateway,
+	decoder?: DocumentDecoder
+): Actor {
 	return new Actor(
 		manifest(
 			'document-kind-classifier',
@@ -26,10 +30,35 @@ export function createDocumentKindClassifierActor(model: DocumentModelGateway): 
 		{
 			document_classify_kind: async (payload) => {
 				try {
-					const document = payload.document as unknown as DecodedDocument
+					if (Array.isArray(payload.parts))
+						return success(
+							{
+								ok: true,
+								procedureKey: 'client.merge-document-kinds',
+								artifacts: [
+									artifact(
+										'classification',
+										'core.document-classification',
+										mergeKinds(payload.parts as Record<string, unknown>[]),
+										'classification'
+									)
+								],
+								evidence: []
+							},
+							'Combined all document classifications.'
+						)
+					const document = await renderedDocument(
+						payload.document as unknown as DecodedDocument,
+						decoder,
+						payload.source as unknown as DocumentSource
+					)
 					const pages = payload.pages as unknown as ExtractedPage[]
 					const completed = await model.complete(
-						modelRequest('classify-document', document.pages.map(pageImage), joinedText(pages))
+						modelRequest(
+							'classify-document',
+							document.pages.filter((page) => page.image).map(pageImage),
+							joinedText(pages)
+						)
 					)
 					const structured = completed.structured
 					const confidence = integer(structured.confidenceBps, 'document confidence', 0, 10_000)

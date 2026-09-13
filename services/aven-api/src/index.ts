@@ -67,6 +67,7 @@ const boundary = new BoundarySignals('platform-to-facade-control', (summary) =>
 	logger.warn(summary, 'Control boundary denials observed')
 )
 Bun.serve({
+	maxRequestBodySize: 160 * 1024 * 1024,
 	port: config.PORT,
 	async fetch(request, server) {
 		const path = new URL(request.url).pathname

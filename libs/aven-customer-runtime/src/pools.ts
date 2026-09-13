@@ -27,6 +27,8 @@ export class TenantPoolProvider {
 			maxPools?: number
 			maxConnectionsPerPool?: number
 			idleMilliseconds?: number
+			onEvict?: (pool: pg.Pool) => void | Promise<void>
+			canEvict?: (pool: pg.Pool) => boolean
 		}
 	) {}
 
@@ -104,6 +106,12 @@ export class TenantPoolProvider {
 			await pool.end()
 			throw error
 		}
+		const raced = this.pools.get(key)
+		if (raced) {
+			await pool.end()
+			raced.lastUsed = now
+			return raced.pool
+		}
 		this.pools.set(key, { pool, lastUsed: now })
 		return pool
 	}
@@ -112,6 +120,7 @@ export class TenantPoolProvider {
 		for (const [key, entry] of this.pools) {
 			if (!key.startsWith(`${environmentId}\0`)) continue
 			this.pools.delete(key)
+			await this.config.onEvict?.(entry.pool)
 			await entry.pool.end()
 		}
 	}
@@ -119,23 +128,34 @@ export class TenantPoolProvider {
 	async close(): Promise<void> {
 		const entries = [...this.pools.values()]
 		this.pools.clear()
-		await Promise.all(entries.map((entry) => entry.pool.end()))
+		await Promise.all(
+			entries.map(async (entry) => {
+				await this.config.onEvict?.(entry.pool)
+				return entry.pool.end()
+			})
+		)
 	}
 
 	private async evictIdle(now: number): Promise<void> {
 		for (const [key, entry] of this.pools) {
-			if (now - entry.lastUsed < (this.config.idleMilliseconds ?? 300_000)) continue
+			if (
+				now - entry.lastUsed < (this.config.idleMilliseconds ?? 300_000) ||
+				this.config.canEvict?.(entry.pool) === false
+			)
+				continue
 			this.pools.delete(key)
+			await this.config.onEvict?.(entry.pool)
 			await entry.pool.end()
 		}
 	}
 
 	private async evictOldest(): Promise<void> {
-		const oldest = [...this.pools.entries()].sort(
-			(left, right) => left[1].lastUsed - right[1].lastUsed
-		)[0]
-		if (!oldest) return
+		const oldest = [...this.pools.entries()]
+			.filter(([, entry]) => this.config.canEvict?.(entry.pool) !== false)
+			.sort((left, right) => left[1].lastUsed - right[1].lastUsed)[0]
+		if (!oldest) throw new Error('All customer execution pools are busy; retry admission shortly.')
 		this.pools.delete(oldest[0])
+		await this.config.onEvict?.(oldest[1].pool)
 		await oldest[1].pool.end()
 	}
 }

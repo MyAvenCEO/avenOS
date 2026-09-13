@@ -1,12 +1,14 @@
 import { Actor } from '@avenos/actors'
+import { type ChunkPart, mergeFinance, renderedDocument } from '../../chunks'
 import { type DocumentModelGateway, modelRequest } from '../../model'
-import type { DecodedDocument, ExtractedPage } from '../../shared'
+import type { DecodedDocument, DocumentDecoder, DocumentSource, ExtractedPage } from '../../shared'
 import {
 	artifact,
 	extractionEvidence,
 	failure,
 	joinedText,
 	manifest,
+	materializePage,
 	object,
 	pageImage,
 	stringValue,
@@ -14,7 +16,10 @@ import {
 	textGroundedExtractionEvidence
 } from '../../shared'
 
-export function createInvoiceExtractorActor(model: DocumentModelGateway): Actor {
+export function createInvoiceExtractorActor(
+	model: DocumentModelGateway,
+	decoder?: DocumentDecoder
+): Actor {
 	return new Actor(
 		manifest(
 			'invoice-extractor',
@@ -27,14 +32,40 @@ export function createInvoiceExtractorActor(model: DocumentModelGateway): Actor 
 		{
 			document_extract_invoice: async (payload) => {
 				try {
-					const document = payload.document as unknown as DecodedDocument
-					const pages = payload.pages as unknown as ExtractedPage[]
+					if (Array.isArray(payload.parts)) {
+						const merged = mergeFinance(payload.parts as unknown as ChunkPart[], true)
+						return success(
+							{
+								ok: true,
+								procedureKey: 'client.merge-invoice-chunks',
+								artifacts: merged.artifacts,
+								evidence: merged.evidence
+							},
+							'Combined all invoice chunks.'
+						)
+					}
+					const document = await renderedDocument(
+						payload.document as unknown as DecodedDocument,
+						decoder,
+						payload.source as unknown as DocumentSource
+					)
+					const observedPages = payload.pages as unknown as ExtractedPage[]
+					const pages = document.pages.map((page) => {
+						const native = materializePage(page)
+						return native.text.trim()
+							? native
+							: (observedPages.find((observed) => observed.page === page.page) ?? native)
+					})
 					const expectedKind = stringValue(payload.expectedKind, 'expected invoice kind')
-					const documentText = joinedText(pages)
+					const documentText =
+						joinedText(pages) +
+						(typeof payload.context === 'string'
+							? `\n<surrounding_context>\n${payload.context}\n</surrounding_context>`
+							: '')
 					const completed = await model.complete(
 						modelRequest(
 							'extract-invoice',
-							document.pages.map(pageImage),
+							document.pages.filter((page) => page.image).map(pageImage),
 							documentText,
 							expectedKind
 						)

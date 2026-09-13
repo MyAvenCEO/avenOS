@@ -48,11 +48,16 @@ export function createStatementValidatorActor(): Actor {
 								: 'FAIL'
 							: 'UNKNOWN'
 					const outcomes = [balance, period, receipt]
-					const status = outcomes.includes('FAIL')
-						? 'inconsistent'
-						: outcomes.every((outcome) => outcome === 'UNKNOWN')
-							? 'incomplete'
-							: 'consistent'
+					const coverageIncomplete =
+						candidate.chunkCoverage &&
+						(candidate.chunkCoverage as { complete?: boolean }).complete !== true
+					const status = coverageIncomplete
+						? 'insufficient-coverage'
+						: outcomes.includes('FAIL')
+							? 'inconsistent'
+							: outcomes.every((outcome) => outcome === 'UNKNOWN')
+								? 'incomplete'
+								: 'consistent'
 					const validation = {
 						rulesetVersion: 'statement-core-v1',
 						status,

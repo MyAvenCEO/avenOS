@@ -120,6 +120,10 @@ export interface PlanRunContinuation {
 }
 
 export interface PlanRunRecord extends PlanRunHandle {
+	lease?: { ownerId: string; expiresAt: string }
+	attemptCount?: number
+	retryRequestId?: string
+	attemptFailures?: Array<{ message: string; endedAt: string }>
 	protocol: ProtocolId
 	requestId: string
 	idempotencyKey: string
@@ -153,6 +157,8 @@ export interface PlanRunExecutionResult {
 }
 
 export interface PlanRunExecutionContext {
+	/** Live cancellation/deadline; never persisted. */
+	signal?: AbortSignal
 	/** Persist only non-secret presentation data. This does not authorize an effect or commit a step. */
 	reportProgress?: (progress: Record<string, unknown>) => Promise<void>
 	/** Present only for this invocation. The runner never adds it to the run record. */
@@ -193,6 +199,11 @@ export type PlanRunContinuationSubmission =
 	  }
 
 export interface PlanRunner {
+	retry?(
+		runId: string,
+		requestId: string,
+		context?: PlanRunExecutionContext
+	): Promise<PlanRunHandle>
 	start(request: PlanRunStartRequest, context?: PlanRunExecutionContext): Promise<PlanRunHandle>
 	status(runId: string): Promise<PlanRunRecord | null>
 	resume(
@@ -205,6 +216,7 @@ export interface PlanRunner {
 
 /** Authenticated facade used by an app; the server stamps security context. */
 export interface PlanRunnerClient {
+	retry?(runId: string, requestId: string): Promise<PlanRunHandle>
 	start(command: PlanRunStartCommand): Promise<PlanRunHandle>
 	status(runId: string): Promise<PlanRunRecord | null>
 	resume(runId: string, submission: PlanRunContinuationSubmission): Promise<PlanRunHandle>

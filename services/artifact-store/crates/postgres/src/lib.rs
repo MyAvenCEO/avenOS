@@ -378,7 +378,7 @@ impl PostgresStore {
         let mut result = BTreeMap::new();
         for id in ids {
             if let Some(row) = sqlx::query(
-                "SELECT artifact_id, scope_id, type_key, type_version, artifact_sha256::text, blob_sha256::text, blob_length \
+                "SELECT artifact_id, scope_id, type_key, type_version, artifact_sha256::text, blob_sha256::text, blob_length, payload \
                  FROM artifact_store.artifact_contents WHERE scope_id=$1 AND artifact_id=$2",
             )
             .bind(scope_id)
@@ -1086,6 +1086,7 @@ async fn consume_upload_claims(
 
 fn existing_from_row(row: &PgRow) -> Result<ExistingArtifact, StoreError> {
     Ok(ExistingArtifact {
+        payload: serde_json::from_value(row.get("payload"))?,
         id: row.get("artifact_id"),
         scope_id: row.get("scope_id"),
         type_key: TypeKey::new(row.get::<String, _>("type_key"))

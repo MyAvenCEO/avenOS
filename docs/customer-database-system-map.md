@@ -146,10 +146,12 @@ The central movement journal binds an idempotency key to source, destination and
 expected generation. A controller serializes operations, fences source access, copies
 a database, verifies its prepared components, and atomically publishes its destination.
 
-Production Actor execution, including continuation submission, holds a shared database
-barrier and records unfinished execution in customer metadata. Handover closes new
-execution and waits for the exclusive barrier. A lost worker connection leaves its
-unfinished record; movement refuses to infer that its external effects stopped.
+Production Actor execution, including continuation submission, takes a shared database
+barrier for its short claim transaction, records unfinished execution in customer
+metadata and persists a renewable running lease. It releases the pooled connection
+before executing. Handover closes admission, crosses the exclusive claim barrier,
+and waits for live markers to clear. An expired lease with unfinished work requires
+reconciliation; movement refuses to infer that external effects stopped.
 Fencing waits for the physical provisioning lock; reconciliation rejects a lower routing
 generation. Source customer roles become `NOLOGIN` and their remaining sessions are terminated
 before the final dump. A cluster marker rejects copying across installation targets.

@@ -73,6 +73,21 @@ const RECONCILIATION_DECISION_JSON: &[u8] =
 pub fn builtin_type_definitions() -> Result<Vec<TypeDefinition>, crate::CoreError> {
     [
         CORE_FILE_JSON,
+        include_bytes!(
+            "../../../conformance/fixtures/protocol/bookkeeping.invoice-candidate.v3.json"
+        ),
+        include_bytes!("../../../conformance/fixtures/protocol/core.file-inspection.v3.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/docs.page.v2.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/docs.extracted-text.v2.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/docs.text-layout.v2.json"),
+        include_bytes!(
+            "../../../conformance/fixtures/protocol/bookkeeping.invoice-details.v3.json"
+        ),
+        include_bytes!(
+            "../../../conformance/fixtures/protocol/banking.account-statement-candidate.v3.json"
+        ),
+        include_bytes!("../../../conformance/fixtures/protocol/banking.statement.v2.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/banking.transaction.v2.json"),
         CORE_BUNDLE_JSON,
         CORE_FILE_INSPECTION_JSON,
         CORE_FILE_INSPECTION_V2_JSON,
@@ -87,8 +102,12 @@ pub fn builtin_type_definitions() -> Result<Vec<TypeDefinition>, crate::CoreErro
         BOOKKEEPING_INVOICE_VALIDATION_JSON,
         BOOKKEEPING_INVOICE_DETAILS_JSON,
         BANKING_ACCOUNT_STATEMENT_CANDIDATE_JSON,
-        include_bytes!("../../../conformance/fixtures/protocol/banking.csv-statement-detection.v1.json"),
-        include_bytes!("../../../conformance/fixtures/protocol/banking.csv-statement-confirmation.v1.json"),
+        include_bytes!(
+            "../../../conformance/fixtures/protocol/banking.csv-statement-detection.v1.json"
+        ),
+        include_bytes!(
+            "../../../conformance/fixtures/protocol/banking.csv-statement-confirmation.v1.json"
+        ),
         BANKING_STATEMENT_VALIDATION_JSON,
         BOOKKEEPING_OPEN_ITEM_JSON,
         BANKING_STATEMENT_JSON,

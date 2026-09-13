@@ -78,7 +78,7 @@ The local host adapter owns:
 - magic-byte inspection and bounded PDF/PNG/JPEG decoding;
 - native PDF text and normalized-millionth layout extraction;
 - 144-DPI PDF rendering for admitted model work;
-- the `aven-finance-vision-v5` prompts and expanded finance schemas, including
+- the `aven-finance-vision-v6` prompts and expanded finance schemas, including
   explicit unknown-versus-zero monetary values;
 - document-kind and invoice-versus-statement branching;
 - model result parsing, classification thresholds, grounded evidence filtering, and
@@ -230,12 +230,12 @@ and stable publication IDs are the durable source of truth.
 
 The client lane preserves the document-processing behavior that matters:
 
-- 25 MiB source limit and at most 63 logical pages;
-- 40-million-pixel rendered-page bound;
+- 128 MiB source limit and at most 10,000 logical pages or text chunks;
+- 40-million-pixel source image bound; PDF canvases retain up to four million pixels per page;
 - 12 MiB per model image and 40 MiB aggregate gateway image bound;
-- 2 MiB native/document text bound, 200,000-byte page OCR bound, and 512 layout spans;
+- 2 MiB text and 512 layout spans per representation artifact, with multiple artifacts per document; 200,000-byte page OCR bound;
 - page OCR/layout, content classification, and description artifacts;
-- complete-document classification with a 6,500-basis-point acceptance threshold;
+- per-chunk classification with a 6,500-basis-point acceptance threshold and deterministic document-level agreement;
 - invoice-family, bank-statement, and payment-receipt routing;
 - grounded invoice candidate/details and statement candidate artifacts;
 - target-relative JSON-pointer evidence tied to exact page regions; and
@@ -321,5 +321,5 @@ and are not read by either document host.
 | `app/src/lib/artifacts/browser-document-decoder.ts` | Bounded PDF/image inspection, text extraction, rendering |
 | `app/src/lib/artifacts/client-document-processing.ts` | Desktop composition root and Tauri publication adapter |
 | `services/aven-api` | Authenticated facade and fixed downstream allowlist |
-| `services/actor-runner` | Authenticated remote run boundary; not yet used by this adapter |
+| `services/actor-runner` | Authenticated remote run boundary used for Server placement |
 | `services/artifact-store` | Artifact Store implementation and conformance contracts |

@@ -3,7 +3,8 @@ import {
 	type LlmCompletionRequest,
 	type LlmContentPart,
 	type LlmGatewayClient,
-	type LlmModelDescriptor
+	type LlmModelDescriptor,
+	portableUsage
 } from '@avenos/llm-client'
 import {
 	DOCUMENT_MODEL_OUTPUT_NAMES,
@@ -26,14 +27,17 @@ interface ModelSelection {
 
 /**
  * Capability-selected adapter from the document actor contract to the generic
- * authenticated LLM gateway. Selection is explicit and stable after the first
- * successful catalog lookup: a configured preference must match exactly;
+ * authenticated LLM gateway. Selection is explicit and cached for 60 seconds: a configured preference must match exactly;
  * otherwise the first operator-ordered compatible model is used.
  */
 export class LlmDocumentModelGateway implements DocumentModelGateway {
 	readonly #preferredModelId?: string
 	readonly #client: DocumentLlmClient
 	#selection?: Promise<ModelSelection>
+	#selectedAt = 0
+	invalidate(): void {
+		this.#selection = undefined
+	}
 
 	constructor(client: DocumentLlmClient, preferredModelId?: string) {
 		this.#preferredModelId = preferredModelId
@@ -56,7 +60,10 @@ export class LlmDocumentModelGateway implements DocumentModelGateway {
 		}
 	}
 
-	async complete(request: DocumentModelRequest): Promise<DocumentModelResponse> {
+	async complete(
+		request: DocumentModelRequest,
+		options?: { signal?: AbortSignal }
+	): Promise<DocumentModelResponse> {
 		const { selected } = await this.#select()
 		if (!selected) {
 			throw new Error(
@@ -65,7 +72,7 @@ export class LlmDocumentModelGateway implements DocumentModelGateway {
 					: 'No model supports vision and structured output.'
 			)
 		}
-		const completed = await this.#client.complete(documentLlmRequest(selected.id, request))
+		const completed = await this.#client.complete(documentLlmRequest(selected.id, request), options)
 		if (completed.output.format !== 'json') {
 			throw new Error('Document model returned text instead of structured output.')
 		}
@@ -79,7 +86,7 @@ export class LlmDocumentModelGateway implements DocumentModelGateway {
 				capabilities: completed.receipt.capabilities,
 				providerReportedModel: completed.receipt.providerReportedModel,
 				profile: completed.receipt.profile,
-				usage: completed.receipt.usage,
+				usage: portableUsage(completed.receipt.usage),
 				finishReason: completed.receipt.finishReason,
 				requestKey: completed.receipt.requestKey,
 				promptDigest: completed.receipt.inputDigest,
@@ -89,7 +96,8 @@ export class LlmDocumentModelGateway implements DocumentModelGateway {
 	}
 
 	#select(): Promise<ModelSelection> {
-		if (!this.#selection) {
+		if (!this.#selection || Date.now() - this.#selectedAt > 60_000) {
+			this.#selectedAt = Date.now()
 			const pending = this.#client
 				.discover([...REQUIRED_CAPABILITIES])
 				.then((alternatives) => ({
@@ -120,12 +128,15 @@ export function documentLlmRequest(
 			type: 'text',
 			text: `${request.prompt}${trustedKind}\n\n<document_text>\n${request.documentText}\n</document_text>`
 		},
-		...request.images.map((image) => ({
-			type: 'image' as const,
-			mediaType: image.mediaType,
-			base64: image.base64,
-			detail: 'high' as const
-		}))
+		...request.images.flatMap((image) => [
+			{ type: 'text' as const, text: `Original source page ${image.page}:` },
+			{
+				type: 'image' as const,
+				mediaType: image.mediaType,
+				base64: image.base64,
+				detail: 'high' as const
+			}
+		])
 	]
 	return {
 		modelId,

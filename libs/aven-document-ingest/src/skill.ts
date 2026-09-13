@@ -5,6 +5,7 @@ import type {
 	PublishedClientArtifact
 } from '@avenos/artifact-store'
 import type { DocumentActors } from './actors/registry'
+import { chunkContext, DOCUMENT_PAGE_BATCH } from './chunks'
 import { isCsvSource } from './csv'
 import type { CsvConfirmation } from './csv-confirmation'
 import { extractedPageFrom, pageClassificationFrom } from './results'
@@ -34,6 +35,8 @@ interface DocumentFactValue extends Partial<DocumentStepOutcome> {
 	page?: DecodedPage
 	members?: string[]
 	offset?: number
+	batch?: string
+	total?: number
 }
 
 export interface DocumentStepDefinition {
@@ -60,8 +63,7 @@ const input = (artifactId: string, role: string, ordinal = 0): ClientRunInput =>
 	ordinal
 })
 const value = (fact: SolverFact | undefined): DocumentFactValue => {
-	if (!fact || !fact.value || typeof fact.value !== 'object')
-		throw new Error('missing document fact value')
+	if (!fact?.value || typeof fact.value !== 'object') throw new Error('missing document fact value')
 	return fact.value as DocumentFactValue
 }
 const outcome = (fact: SolverFact | undefined): DocumentStepOutcome => {
@@ -110,6 +112,8 @@ export function createDocumentSkillOperations(options: {
 }): DocumentSkillOperation[] {
 	const { source, actors, modelPageLimit } = options
 	const F = documentAtom(source.artifactId)
+	const pageAtom = (page: number) => documentAtom(`${source.artifactId}_page_${page}`)
+	const batchAtom = (offset: number) => documentAtom(`${source.artifactId}_batch_${offset}`)
 	const sourceInput = input(source.artifactId, 'source')
 	const csv = isCsvSource(source)
 	const definitions: DocumentSkillOperation[] = []
@@ -127,7 +131,7 @@ export function createDocumentSkillOperations(options: {
 			// A source input must be part of the solver binding, not an invisible
 			// closure dependency. Appending preserves declared collection indexes.
 			requires:
-				definition.id === 'docs.inspect.v2'
+				definition.id === 'docs.inspect.v4'
 					? definition.requires
 					: [...definition.requires, predicate('docs.file', 'F')]
 		})
@@ -163,7 +167,7 @@ export function createDocumentSkillOperations(options: {
 			produces: [predicate('bookkeeping.statement', 'F', 'B', 'I')],
 			prepare: (invocation) => {
 				const d = artifact(outcome(invocation.inputs[0]), 'banking.csv-statement-detection')
-				const c = invocation.inputs[1]!.value as CsvConfirmation
+				const c = invocation.inputs[1]?.value as CsvConfirmation
 				return {
 					key: 'admit-csv-statement',
 					method: 'document_admit_csv_statement',
@@ -194,13 +198,16 @@ export function createDocumentSkillOperations(options: {
 		})
 	}
 	add({
-		id: 'docs.inspect.v2',
+		id: 'docs.inspect.v4',
 		method: 'document_inspect',
 		mode: 'observe',
 		requires: [predicate('docs.file', 'F')],
 		produces: [
 			predicate('docs.inspection', 'F', 'I', 'Status'),
-			predicate('docs.readable', 'F', 'I', 'Vision')
+			predicate('docs.readable', 'F', 'I', 'Vision'),
+			predicate('docs.pages', 'F', 'C', 'Vision'),
+			predicate('docs.batches', 'F', 'BC'),
+			predicate('docs.page_batch', 'F', 'I', 'B', 'Vision')
 		],
 		prepare: () => ({
 			key: 'inspect',
@@ -216,35 +223,54 @@ export function createDocumentSkillOperations(options: {
 			const entries: Array<[string, unknown]> = [
 				[predicate('docs.inspection', F, I, document.outcome), observation]
 			]
-			if (document.outcome === 'ok')
-				entries.push([
-					predicate(
-						'docs.readable',
-						F,
-						I,
-						actors.analyzePage &&
-							actors.classifyDocument &&
-							modelPageLimit >= document.pages.length &&
-							document.pages.length > 0 &&
-							document.pages.every((page) => page.image)
-							? 'enabled'
-							: 'disabled'
-					),
-					observation
-				])
+			if (document.outcome === 'ok') {
+				const vision =
+					actors.analyzePage &&
+					actors.classifyDocument &&
+					modelPageLimit > 0 &&
+					document.pages.every((page) => page.deferred || page.image || page.runs.length)
+						? 'enabled'
+						: 'disabled'
+				const batches = []
+				for (let offset = 0; offset < document.pages.length; offset += DOCUMENT_PAGE_BATCH) {
+					const batch = batchAtom(offset)
+					batches.push(batch)
+					const pages = document.pages.slice(offset, offset + DOCUMENT_PAGE_BATCH)
+					entries.push([
+						predicate('docs.page_batch', F, I, batch, vision),
+						{
+							...observation,
+							batch,
+							offset,
+							total: document.pages.length,
+							members: pages.map((page) => pageAtom(page.page)),
+							document: { ...document, pages }
+						}
+					])
+				}
+				entries.push(
+					[predicate('docs.readable', F, I, vision), observation],
+					[
+						predicate('docs.pages', F, I, vision),
+						{
+							...observation,
+							total: document.pages.length,
+							members: document.pages.map((page) => pageAtom(page.page))
+						}
+					],
+					[predicate('docs.batches', F, I), { ...observation, members: batches }]
+				)
+			}
 			return facts(invocation, entries)
 		}
 	})
 	add({
-		id: 'docs.decompose.v2',
+		id: 'docs.decompose.v3',
 		method: 'document_decompose',
-		requires: [predicate('docs.readable', 'F', 'I', 'Vision')],
-		produces: [
-			predicate('docs.pages', 'F', 'C', 'Vision'),
-			predicate('docs.page', 'F', 'P', 'Vision')
-		],
+		requires: [predicate('docs.page_batch', 'F', 'I', 'B', 'Vision')],
+		produces: [predicate('docs.page', 'F', 'P', 'Vision')],
 		prepare: (invocation) => ({
-			key: 'decompose-pages',
+			key: `decompose-pages${value(invocation.inputs[0]).offset ? `-${value(invocation.inputs[0]).offset}` : ''}`,
 			method: 'document_decompose',
 			payload: { document: value(invocation.inputs[0]).document },
 			inputs: [
@@ -259,24 +285,22 @@ export function createDocumentSkillOperations(options: {
 			const document = value(invocation.inputs[0]).document!
 			const pages = result.artifacts.filter((item) => item.typeKey === 'docs.page')
 			const vision = invocation.bindings.Vision!
-			return facts(invocation, [
-				[
-					predicate('docs.pages', F, documentAtom(invocation.id), vision),
-					{ ...result, members: pages.map((page) => documentAtom(page.artifactId)) }
-				],
-				...pages.map((item): [string, unknown] => [
-					predicate('docs.page', F, documentAtom(item.artifactId), vision),
+			return facts(
+				invocation,
+				pages.map((item): [string, unknown] => [
+					predicate('docs.page', F, pageAtom(Number(item.payload.sourcePage)), vision),
 					{
 						...result,
 						artifacts: [item],
+						total: value(invocation.inputs[0]).total,
 						page: document.pages.find((page) => page.page === item.payload.sourcePage)
 					}
 				])
-			])
+			)
 		}
 	})
 	add({
-		id: 'docs.native.v2',
+		id: 'docs.native.v3',
 		method: 'document_extract_native_text',
 		requires: [predicate('docs.page', 'F', 'P', 'Vision')],
 		produces: [predicate('docs.native', 'F', 'P', 'N', 'Vision')],
@@ -360,7 +384,7 @@ export function createDocumentSkillOperations(options: {
 	}
 	if (actors.analyzePage)
 		add({
-			id: 'docs.analyze.v2',
+			id: 'docs.analyze.v3',
 			method: 'document_analyze_page',
 			mode: 'observe',
 			requires: [
@@ -409,38 +433,83 @@ export function createDocumentSkillOperations(options: {
 					[predicate('docs.analysis_failed', F, invocation.bindings.P!, invocation.bindings.N!), {}]
 				])
 		})
-	const nativeGather = {
-		name: 'native',
-		collection: 1,
-		member: 'P',
-		predicate: predicate('docs.native', 'F', 'P', 'N', 'enabled')
-	}
-	if (actors.classifyDocument && !csv)
+	if (actors.classifyDocument && !csv) {
 		add({
-			id: 'docs.classify-kind.v2',
+			id: 'docs.classify-chunk.v1',
 			method: 'document_classify_kind',
 			mode: 'observe',
 			requires: [
-				predicate('docs.readable', 'F', 'I', 'enabled'),
-				predicate('docs.pages', 'F', 'C', 'enabled')
+				predicate('docs.page', 'F', 'P', 'enabled'),
+				predicate('docs.native', 'F', 'P', 'N', 'enabled')
 			],
-			gathers: [nativeGather],
-			produces: [predicate('docs.kind', 'F', 'K', 'Family')],
+			produces: [
+				predicate('docs.kind_part', 'F', 'P', 'K'),
+				predicate('docs.kind', 'F', 'K', 'Family')
+			],
 			prepare: (invocation) => {
-				const native = gathered(invocation, 'native')
+				const page = pageOf(invocation.inputs[0]),
+					native = outcome(invocation.inputs[1])
 				return {
-					key: 'classify-document',
+					key:
+						value(invocation.inputs[0]).total === 1
+							? 'classify-document'
+							: `classify-document-page-${suffix(page)}`,
 					method: 'document_classify_kind',
 					payload: {
-						document: value(invocation.inputs[0]).document,
-						pages: native.map((item, index) =>
-							extractedPageFrom(item.result, pageOf(invocation.gathers.native?.[index]).page)
-						)
+						document: { outcome: 'ok', pages: [page] },
+						pages: [extractedPageFrom(native.result, page.page)]
 					},
-					inputs: [sourceInput, ...artifactsAsInputs(native.flatMap((item) => item.artifacts))],
+					inputs: [sourceInput, ...artifactsAsInputs(native.artifacts)],
 					maximumAttempts: 3
 				}
 			},
+			project: (result, invocation) =>
+				facts(invocation, [
+					[
+						value(invocation.inputs[0]).total === 1
+							? predicate(
+									'docs.kind',
+									F,
+									documentAtom(invocation.id),
+									String(artifact(result, 'core.document-classification').payload.family)
+								)
+							: predicate('docs.kind_part', F, invocation.bindings.P!, documentAtom(invocation.id)),
+						result
+					]
+				])
+		})
+		add({
+			id: 'docs.merge-kind.v1',
+			method: 'document_classify_kind',
+			requires: [predicate('docs.pages', 'F', 'C', 'enabled')],
+			gathers: [
+				{
+					name: 'parts',
+					collection: 0,
+					member: 'P',
+					predicate: predicate('docs.kind_part', 'F', 'P', 'K')
+				}
+			],
+			produces: [predicate('docs.kind', 'F', 'K', 'Family')],
+			prepare: (invocation) => ({
+				key: 'classify-document',
+				method: 'document_classify_kind',
+				payload: {
+					parts: gathered(invocation, 'parts').map(
+						(part) => artifact(part, 'core.document-classification').payload
+					)
+				},
+				inputs: [
+					sourceInput,
+					...gathered(invocation, 'parts').map((part, ordinal) =>
+						input(
+							artifact(part, 'core.document-classification').artifactId,
+							'document-classification',
+							ordinal
+						)
+					)
+				]
+			}),
 			project: (result, invocation) =>
 				facts(invocation, [
 					[
@@ -454,11 +523,12 @@ export function createDocumentSkillOperations(options: {
 					]
 				])
 		})
+	}
 	add({
-		id: 'docs.assemble.v2',
+		id: 'docs.assemble.v3',
 		method: 'document_assemble',
 		cost: 3,
-		requires: [predicate('docs.pages', 'F', 'C', 'Vision')],
+		requires: [predicate('docs.page_batch', 'F', 'I', 'B', 'Vision')],
 		gathers: [
 			{
 				name: 'representations',
@@ -467,11 +537,11 @@ export function createDocumentSkillOperations(options: {
 				predicate: predicate('docs.representation', 'F', 'P', 'R')
 			}
 		],
-		produces: [predicate('docs.document_representation', 'F', 'R')],
+		produces: [predicate('docs.document_representation', 'F', 'B', 'R')],
 		prepare: (invocation) => {
 			const representations = gathered(invocation, 'representations')
 			return {
-				key: 'assemble-document',
+				key: `assemble-document${value(invocation.inputs[0]).offset ? `-${value(invocation.inputs[0]).offset}` : ''}`,
 				method: 'document_assemble',
 				payload: {
 					pages: representations.map((item, index) =>
@@ -492,17 +562,28 @@ export function createDocumentSkillOperations(options: {
 		},
 		project: (result, invocation) =>
 			facts(invocation, [
-				[predicate('docs.document_representation', F, documentAtom(invocation.id)), result]
+				[
+					predicate(
+						'docs.document_representation',
+						F,
+						invocation.bindings.B!,
+						documentAtom(invocation.id)
+					),
+					result
+				]
 			])
 	})
 	add({
-		id: 'docs.aggregate.v2',
+		id: 'docs.aggregate.v3',
 		method: 'document_aggregate_content',
-		requires: [
-			predicate('docs.pages', 'F', 'C', 'Vision'),
-			predicate('docs.document_representation', 'F', 'R')
-		],
+		requires: [predicate('docs.pages', 'F', 'C', 'Vision'), predicate('docs.batches', 'F', 'BC')],
 		gathers: [
+			{
+				name: 'assembled',
+				collection: 1,
+				member: 'B',
+				predicate: predicate('docs.document_representation', 'F', 'B', 'R')
+			},
 			{
 				name: 'classifications',
 				collection: 0,
@@ -533,7 +614,7 @@ export function createDocumentSkillOperations(options: {
 							index
 						)
 					),
-					...artifactsAsInputs(outcome(invocation.inputs[1]).artifacts)
+					...artifactsAsInputs(gathered(invocation, 'assembled').flatMap((item) => item.artifacts))
 				]
 			}
 		},
@@ -548,13 +629,13 @@ export function createDocumentSkillOperations(options: {
 		const validationType = invoice
 			? 'bookkeeping.invoice-validation'
 			: 'banking.statement-validation'
-		if (!csv && (invoice ? actors.extractInvoice : actors.extractStatement))
+		if (!csv && (invoice ? actors.extractInvoice : actors.extractStatement)) {
 			add({
-				id: `finance.extract-${family}.v3`,
+				id: `finance.extract-${family}-chunk.v1`,
 				method: `document_extract_${family}`,
 				mode: 'observe',
 				requires: [
-					predicate('docs.readable', 'F', 'Inspection', 'enabled'),
+					predicate('docs.page', 'F', 'P', 'enabled'),
 					predicate('docs.pages', 'F', 'C', 'enabled'),
 					predicate('docs.kind', 'F', 'K', `${family}-family`)
 				],
@@ -562,8 +643,107 @@ export function createDocumentSkillOperations(options: {
 					{
 						name: 'representations',
 						collection: 1,
+						member: 'Q',
+						predicate: predicate('docs.representation', 'F', 'Q', 'R')
+					}
+				],
+				produces: [
+					predicate(`bookkeeping.${family}_part`, 'F', 'P', 'I'),
+					predicate(`bookkeeping.${family}`, 'F', 'B', 'I'),
+					...(invoice ? [predicate('bookkeeping.invoice_details', 'F', 'B', 'D')] : [])
+				],
+				prepare: (invocation) => {
+					const representations = gathered(invocation, 'representations')
+					const page = pageOf(invocation.inputs[0])
+					const pages = representations.map((item, index) =>
+						extractedPageFrom(item.result, pageOf(invocation.gathers.representations?.[index]).page)
+					)
+					const owned = pages.find((item) => item.page === page.page)!
+					const classification = artifact(
+						outcome(invocation.inputs[2]),
+						'core.document-classification'
+					)
+					const selected = representations.filter(
+						(_, index) =>
+							pages[index]?.page === page.page || index === 0 || index === pages.length - 1
+					)
+					return {
+						key:
+							pages.length === 1 ? `extract-${family}` : `extract-${family}-page-${suffix(page)}`,
+						method: `document_extract_${family}`,
+						payload: {
+							document: { outcome: 'ok', pages: [page] },
+							pages: [owned],
+							expectedKind: classification.payload.resolvedKind,
+							context: chunkContext(pages, page.page)
+						},
+						inputs: [
+							sourceInput,
+							input(classification.artifactId, 'document-classification'),
+							...artifactsAsInputs(
+								selected.flatMap((item) =>
+									item.artifacts.filter((item) =>
+										['docs.extracted-text', 'docs.text-layout'].includes(item.typeKey)
+									)
+								)
+							)
+						],
+						maximumAttempts: 3
+					}
+				},
+				project: (result, invocation) => {
+					const B = documentAtom(invocation.id)
+					return facts(
+						invocation,
+						value(invocation.inputs[0]).total === 1
+							? [
+									[
+										predicate(
+											`bookkeeping.${family}`,
+											F,
+											B,
+											documentAtom(artifact(result, candidateType).artifactId)
+										),
+										result
+									],
+									...(invoice
+										? [
+												[
+													predicate(
+														'bookkeeping.invoice_details',
+														F,
+														B,
+														documentAtom(artifact(result, 'bookkeeping.invoice-details').artifactId)
+													),
+													result
+												] as [string, unknown]
+											]
+										: [])
+								]
+							: [
+									[
+										predicate(
+											`bookkeeping.${family}_part`,
+											F,
+											invocation.bindings.P!,
+											documentAtom(artifact(result, candidateType).artifactId)
+										),
+										result
+									]
+								]
+					)
+				}
+			})
+			add({
+				id: `finance.merge-${family}.v1`,
+				method: `document_extract_${family}`,
+				requires: [predicate('docs.pages', 'F', 'C', 'enabled')],
+				gathers: [
+					{
+						name: 'parts',
+						collection: 0,
 						member: 'P',
-						predicate: predicate('docs.representation', 'F', 'P', 'R')
+						predicate: predicate(`bookkeeping.${family}_part`, 'F', 'P', 'I')
 					}
 				],
 				produces: [
@@ -571,45 +751,41 @@ export function createDocumentSkillOperations(options: {
 					...(invoice ? [predicate('bookkeeping.invoice_details', 'F', 'B', 'D')] : [])
 				],
 				prepare: (invocation) => {
-					const representations = gathered(invocation, 'representations')
-					const classification = artifact(
-						outcome(invocation.inputs[2]),
-						'core.document-classification'
-					)
+					const parts = gathered(invocation, 'parts')
 					return {
 						key: `extract-${family}`,
 						method: `document_extract_${family}`,
 						payload: {
-							document: value(invocation.inputs[0]).document,
-							pages: representations.map((item, index) =>
-								extractedPageFrom(
-									item.result,
-									pageOf(invocation.gathers.representations?.[index]).page
-								)
-							),
-							expectedKind: classification.payload.resolvedKind
+							parts: parts.map((part) => ({
+								candidate: artifact(part, candidateType).payload,
+								...(invoice && { details: artifact(part, 'bookkeeping.invoice-details').payload })
+							}))
 						},
 						inputs: [
 							sourceInput,
-							input(classification.artifactId, 'document-classification'),
-							...artifactsAsInputs(
-								representations
-									.flatMap((item) => item.artifacts)
-									.filter((item) =>
-										['docs.extracted-text', 'docs.text-layout'].includes(item.typeKey)
-									)
-							)
-						],
-						maximumAttempts: 3
+							...parts.flatMap((part, ordinal) => [
+								input(artifact(part, candidateType).artifactId, 'candidate', ordinal),
+								...(invoice
+									? [
+											input(
+												artifact(part, 'bookkeeping.invoice-details').artifactId,
+												'details',
+												ordinal
+											)
+										]
+									: [])
+							])
+						]
 					}
 				},
-				project: (result, invocation) =>
-					facts(invocation, [
+				project: (result, invocation) => {
+					const B = documentAtom(invocation.id)
+					return facts(invocation, [
 						[
 							predicate(
 								`bookkeeping.${family}`,
 								F,
-								documentAtom(invocation.id),
+								B,
 								documentAtom(artifact(result, candidateType).artifactId)
 							),
 							result
@@ -620,7 +796,7 @@ export function createDocumentSkillOperations(options: {
 										predicate(
 											'bookkeeping.invoice_details',
 											F,
-											documentAtom(invocation.id),
+											B,
 											documentAtom(artifact(result, 'bookkeeping.invoice-details').artifactId)
 										),
 										result
@@ -628,9 +804,11 @@ export function createDocumentSkillOperations(options: {
 								]
 							: [])
 					])
+				}
 			})
+		}
 		add({
-			id: `finance.validate-${family}.v2`,
+			id: `finance.validate-${family}.v3`,
 			method: `document_validate_${family}`,
 			requires: [predicate(`bookkeeping.${family}`, 'F', 'B', 'I')],
 			produces: [predicate(`bookkeeping.${family}_validation`, 'F', 'I', 'V')],
@@ -658,7 +836,7 @@ export function createDocumentSkillOperations(options: {
 		})
 	}
 	add({
-		id: 'finance.normalize-invoice.v2',
+		id: 'finance.normalize-invoice.v3',
 		method: 'document_normalize_open_item',
 		requires: [
 			predicate('bookkeeping.invoice', 'F', 'B', 'I'),
@@ -699,7 +877,7 @@ export function createDocumentSkillOperations(options: {
 			])
 	})
 	add({
-		id: 'finance.normalize-statement.v2',
+		id: 'finance.normalize-statement.v3',
 		method: 'document_normalize_statement',
 		requires: [
 			predicate('bookkeeping.statement', 'F', 'B', 'I'),

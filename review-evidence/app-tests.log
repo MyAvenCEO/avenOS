@@ -1,0 +1,34 @@
+bun test v1.3.13 (bf2e2cec)
+
+app/tests/document-llm-gateway.test.ts:
+(pass) document LLM gateway adapter > selects one explicit model while reporting every compatible alternative [2.00ms]
+(pass) document LLM gateway adapter > does not substitute another model when an explicit preference is absent
+(pass) document LLM gateway adapter > retries catalog discovery after a transient failure [1.00ms]
+
+app/tests/document-actors.test.ts:
+(pass) client document actors > advertise invocable method-level contracts
+(pass) client document actors > native text actor emits UTF-8 byte ranges and a blob [1.00ms]
+(pass) client document actors > fails closed when any decoder exceeds the shared page bound [1.00ms]
+(pass) client document actors > runs the complete deterministic DAG and binds every hop to persisted artifacts [17.00ms]
+(pass) client document actors > derives stable publication identities so a fresh runtime replays after a crash [21.00ms]
+(pass) client document actors > reloads the committed prefix after a lost acknowledgement without repeating decoding or model calls [46.00ms]
+(pass) client document actors > preserves a scanned PDF but stops at needs-review while OCR is absent [5.00ms]
+(pass) client document actors > preserves a blank supplier without extraction retries or inventing an open item [13.00ms]
+(pass) client document actors > runs the vision, finance extraction, and validation lane client-side [15.00ms]
+(pass) client document actors > runs statement extraction through canonicalization and bounded transaction fan-out [141.00ms]
+(pass) client document actors > retries model-backed stages with visible attempt accounting [519.99ms]
+(pass) client document actors > does not turn a failed decoder into an assertion that OCR or content is missing [2.00ms]
+(pass) client document actors > tracks a failed page actor while independent actors continue [3034.94ms]
+(pass) client document actors > stops on an uncertain classification publication without treating it as a negative observation [7.00ms]
+(pass) client document actors > allows a failed presentation to be started again [9.00ms]
+(pass) client document actors > ports the server payment-receipt validation rules exactly
+(pass) client document actors > routes a whole document run to its chosen host and freezes that placement [1.00ms]
+
+app/tests/browser-document-decoder.test.ts:
+(pass) BrowserDocumentDecoder > decodes a UTF-8 text document as one exact native-text page [1.00ms]
+(pass) BrowserDocumentDecoder > rejects malformed UTF-8 even when the filename is text-like
+
+ 22 pass
+ 0 fail
+ 243 expect() calls
+Ran 22 tests across 3 files. [3.91s]

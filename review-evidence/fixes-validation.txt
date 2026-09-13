@@ -1,0 +1,30 @@
+Document ingest and chunking validation, 2026-09-13
+Base: origin/main 56286de3; branch codex/verify-document-ingest-review
+
+PASS: Real qwen3.8-flash-next through production LlmGatewayService / qwen-tools.
+  statement-160: 4 pages, 160 exact ordered unique IDs, amounts -100 minor,
+  opening 20000 / closing 4000, consistent validation, succeeded; 12 calls.
+  Fresh runtime replay repeated zero model calls and no decoding.
+  manual-70: 26 MiB PDF, all 70 markers found, scanned pages 67-70 included,
+  zero failed chunks; 140 calls. needs_review is the generic non-financial kind.
+  invoice-six-items: 2 pages, 6 line items, net/gross 600 minor, zero tax,
+  consistent validation, succeeded; 6 calls.
+  First two cases: 651 seconds. Invoice: 35 seconds.
+  Raw results and provider receipts: review-evidence/real-model/*.json.
+  Publication gateway for these three tests is in memory.
+
+PASS: Document unit/regression tests 107; app tests 183; API tests 38.
+PASS: Document/API/app/customer-platform type checks; docs links/policy.
+PASS: Artifact Store Rust workspace 15 tests.
+PASS: Deployment validation.
+PASS: Real PostgreSQL/store conformance 14 tests, including busy/idle pool
+  protection (separate unit suite), no-progress timeout renewal (SQL suite),
+  70-page chunk persistence, 160-row merge/fanout through both publication
+  adapters, and fresh runtime replay without new decoding/model calls.
+
+Final application/recovery gate and merge checks are recorded in PR #254:
+https://github.com/MyAvenCEO/avenOS/pull/254
+Both native journeys passed locally; the PR records the completed recovery result.
+Repository-wide lint has pre-existing failures outside this change; the original
+2809812c archive also failed. Changed-file checks are recorded separately.
+Historical defect probes in this directory are not regression test commands.

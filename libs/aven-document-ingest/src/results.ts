@@ -2,7 +2,10 @@ import type { DocumentActorResult, ExtractedPage, PageClassification } from './s
 
 export function parseDocumentActorResult(record: string): DocumentActorResult {
 	const parsed = JSON.parse(record) as DocumentActorResult | { ok: false; error: string }
-	if (!parsed.ok) throw new Error(parsed.error)
+	if (!parsed.ok)
+		throw Object.assign(new Error(parsed.error), {
+			retryable: (parsed as { retryable?: boolean }).retryable === true
+		})
 	return parsed
 }
 

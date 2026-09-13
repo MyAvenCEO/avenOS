@@ -25,10 +25,10 @@ use tokio::sync::{RwLock, Semaphore};
 use url::Url;
 use uuid::Uuid;
 
-const DEFAULT_MAX_UPLOAD_BYTES: usize = 25 * 1024 * 1024;
+const DEFAULT_MAX_UPLOAD_BYTES: usize = 128 * 1024 * 1024;
 const DEFAULT_MAX_CONCURRENT_UPLOADS: usize = 2;
 const DEFAULT_MAX_LIVE_CLAIMS_PER_SCOPE: i64 = 32;
-const DEFAULT_MAX_STAGED_BYTES_PER_SCOPE: i64 = 100 * 1024 * 1024;
+const DEFAULT_MAX_STAGED_BYTES_PER_SCOPE: i64 = 512 * 1024 * 1024;
 const DEFAULT_MAX_LOGICAL_BYTES_PER_SCOPE: i64 = 1024 * 1024 * 1024;
 pub const TENANT_DATABASE_HEADER: &str = "x-aven-artifact-database";
 const TENANT_ENVIRONMENT_HEADER: &str = "x-aven-environment";
@@ -1026,6 +1026,11 @@ impl ApiError {
             CoreError::Schema { .. } => Self::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 ErrorCode::SchemaValidationFailed,
+                error.to_string(),
+            ),
+            CoreError::InvalidEvidence(_) => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                ErrorCode::InvalidEvidence,
                 error.to_string(),
             ),
             CoreError::ArtifactUnavailable(_) => Self::new(

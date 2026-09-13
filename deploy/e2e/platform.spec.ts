@@ -501,7 +501,10 @@ async function tauriReconciliation(
 		while (Date.now() < deadline) {
 			const items = await readType(typeKey)
 			if (items.length === count) return items
-			const sources = await readType('core.file')
+			// Generic document review is independent of the financial fixture under test.
+			const sources = (await readType('core.file')).filter((item) =>
+				['e2e-invoice.pdf', 'e2e-statement.pdf'].includes(String(item.payload.originalName))
+			)
 			const state = await session.execute<{
 				presentations: Array<{
 					state: string

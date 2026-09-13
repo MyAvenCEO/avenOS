@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { ACTOR_RUN_PROTOCOL, type PlanRunRecord, resourceId } from '@avenos/actors'
 import pg from 'pg'
-import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest'
 import { executeAlreadySatisfied } from '../src/execution.js'
 import { SqlPlanRunner } from '../src/sql-runner.js'
 import {
@@ -16,8 +16,17 @@ const databaseUrl = process.env.TEST_ACTOR_RUNNER_DATABASE_URL
 const describeWithPostgres = databaseUrl ? describe : describe.skip
 const schema = `actor_runner_e2e_${randomUUID().replaceAll('-', '')}`
 let admin: pg.Pool
+const runners: SqlPlanRunner[] = []
+function tracked(...args: ConstructorParameters<typeof SqlPlanRunner>): SqlPlanRunner {
+	const runner = new SqlPlanRunner(...args)
+	runners.push(runner)
+	return runner
+}
 
 describeWithPostgres('SQL runner persistence', () => {
+	afterEach(async () => {
+		await Promise.all(runners.splice(0).map((runner) => runner.close()))
+	})
 	beforeAll(async () => {
 		admin = new pg.Pool({ connectionString: databaseUrl, max: 1 })
 		await admin.query(`CREATE SCHEMA ${schema}`)
@@ -57,8 +66,8 @@ describeWithPostgres('SQL runner persistence', () => {
 		const reported = new Promise<void>((resolve) => {
 			observed = resolve
 		})
-		const runner = new SqlPlanRunner(pool, pool, async (_request, context) => {
-			await context!.reportProgress!({ phase: 'waiting-for-model', attempt: 1 })
+		const runner = tracked(pool, pool, async (_request, context) => {
+			await context?.reportProgress?.({ phase: 'waiting-for-model', attempt: 1 })
 			observed()
 			await pending
 			return { remainingGoals: [] }
@@ -70,18 +79,19 @@ describeWithPostgres('SQL runner persistence', () => {
 			await reported
 			const progress = await runner.status(handle.runId)
 			expect(progress).toMatchObject({
-				state: 'accepted',
-				revision: 2,
+				state: 'running',
+				revision: 3,
 				checkpoints: [],
 				progress: { phase: 'waiting-for-model', attempt: 1 }
 			})
 			release()
 			expect(await terminalRecord(runner, handle.runId)).toMatchObject({
 				state: 'succeeded',
-				revision: 3
+				revision: 4
 			})
 		} finally {
 			release()
+			await Promise.all(runners.splice(0).map((runner) => runner.close()))
 			await pool.end()
 		}
 	}, 5_000)
@@ -144,13 +154,13 @@ describeWithPostgres('SQL runner persistence', () => {
 			options: `-c search_path=${schema},pg_catalog`
 		})
 		try {
-			const runner = new SqlPlanRunner(secondProcess, secondProcess, executeAlreadySatisfied)
+			const runner = tracked(secondProcess, secondProcess, executeAlreadySatisfied)
 			expect((await runner.status(runId))?.state).toBe('accepted')
 			expect(await runner.recoverAcceptedRuns()).toBe(1)
 			expect(await runner.status(runId)).toMatchObject({
 				runId,
 				state: 'succeeded',
-				revision: 2,
+				revision: 3,
 				checkpoints: [
 					expect.objectContaining({
 						ordinal: 0,
@@ -160,6 +170,7 @@ describeWithPostgres('SQL runner persistence', () => {
 			})
 			expect(await runner.recoverAcceptedRuns()).toBe(0)
 		} finally {
+			await Promise.all(runners.splice(0).map((runner) => runner.close()))
 			await secondProcess.end()
 		}
 	})
@@ -205,8 +216,8 @@ describeWithPostgres('SQL runner persistence', () => {
 					record
 				]
 			)
-			const first = new SqlPlanRunner(pool, pool, executor)
-			const second = new SqlPlanRunner(pool, pool, executor)
+			const first = tracked(pool, pool, executor)
+			const second = tracked(pool, pool, executor)
 			const recoveries = Promise.all([first.recoverAcceptedRuns(), second.recoverAcceptedRuns()])
 			const deadline = Date.now() + 2_000
 			while (executions === 0 && Date.now() < deadline) {
@@ -219,11 +230,12 @@ describeWithPostgres('SQL runner persistence', () => {
 			expect((await recoveries).sort()).toEqual([0, 1])
 			expect(await first.status(runId)).toMatchObject({
 				state: 'succeeded',
-				revision: 2,
+				revision: 3,
 				checkpoints: [expect.objectContaining({ ordinal: 0 })]
 			})
 		} finally {
 			releaseExecution()
+			await Promise.all(runners.splice(0).map((runner) => runner.close()))
 			await pool.end()
 		}
 	})
@@ -241,7 +253,7 @@ describeWithPostgres('SQL runner persistence', () => {
 		const base = deterministicRunRequest('local', subjectId, tenantId)
 		try {
 			const localExecution = await local.execute(base)
-			const runner = new SqlPlanRunner(pool, pool, server.execute)
+			const runner = tracked(pool, pool, server.execute)
 			const started = await runner.start({
 				...base,
 				executionEnvironment: 'server',
@@ -269,6 +281,143 @@ describeWithPostgres('SQL runner persistence', () => {
 			expect(server.spawned()).toBe(1)
 			expect(server.released()).toBe(1)
 		} finally {
+			await Promise.all(runners.splice(0).map((runner) => runner.close()))
+			await pool.end()
+		}
+	})
+
+	test('two pending executions leave a two-connection pool available for admission, status, cancellation and retry', async () => {
+		const pool = new pg.Pool({
+			connectionString: databaseUrl,
+			max: 2,
+			connectionTimeoutMillis: 500,
+			options: `-c search_path=${schema},pg_catalog`
+		})
+		let calls = 0
+		const runner = tracked(
+			pool,
+			pool,
+			async (_request, context) => {
+				calls++
+				if (calls <= 2)
+					await new Promise<void>((_, reject) =>
+						context?.signal?.addEventListener('abort', () => reject(context?.signal?.reason), {
+							once: true
+						})
+					)
+				return { remainingGoals: [] }
+			},
+			false,
+			300
+		)
+		try {
+			const first = await runner.start(
+				deterministicRunRequest('server', randomUUID(), randomUUID())
+			)
+			const second = await runner.start(
+				deterministicRunRequest('server', randomUUID(), randomUUID())
+			)
+			await recordInState(runner, first.runId, 'running')
+			await recordInState(runner, second.runId, 'running')
+			const third = await runner.start(
+				deterministicRunRequest('server', randomUUID(), randomUUID())
+			)
+			expect((await runner.status(third.runId))?.state).toBe('accepted')
+			expect(pool.idleCount).toBeGreaterThan(0)
+			await runner.cancel(first.runId, randomUUID())
+			expect((await terminalRecord(runner, first.runId)).state).toBe('cancelled')
+			expect((await terminalRecord(runner, second.runId)).state).toBe('failed')
+			await runner.recoverAcceptedRuns()
+			expect((await terminalRecord(runner, third.runId)).state).toBe('succeeded')
+			const retryId = randomUUID()
+			await runner.retry(second.runId, retryId)
+			const retried = await terminalRecord(runner, second.runId)
+			expect(retried).toMatchObject({
+				state: 'succeeded',
+				attemptCount: 2,
+				attemptFailures: [
+					expect.objectContaining({
+						message: 'Actor execution made no progress before its deadline.'
+					})
+				]
+			})
+			expect((await runner.retry(second.runId, retryId)).state).toBe('succeeded')
+			expect(calls).toBe(4)
+		} finally {
+			await runner.close()
+			await pool.end()
+		}
+	}, 5000)
+
+	test('persisted chunk progress renews the deadline of a long execution', async () => {
+		const pool = new pg.Pool({
+			connectionString: databaseUrl,
+			max: 2,
+			options: `-c search_path=${schema},pg_catalog`
+		})
+		const runner = tracked(
+			pool,
+			pool,
+			async (_request, context) => {
+				for (let chunk = 1; chunk <= 5; chunk++) {
+					await new Promise((resolve) => setTimeout(resolve, 80))
+					await context?.reportProgress?.({ completedChunks: chunk })
+				}
+				return { remainingGoals: [] }
+			},
+			false,
+			250
+		)
+		try {
+			const handle = await runner.start(
+				deterministicRunRequest('server', randomUUID(), randomUUID())
+			)
+			expect((await terminalRecord(runner, handle.runId)).state).toBe('succeeded')
+		} finally {
+			await runner.close()
+			await pool.end()
+		}
+	})
+
+	test('expired execution leases fail closed and cannot be retried', async () => {
+		const pool = new pg.Pool({
+			connectionString: databaseUrl,
+			max: 2,
+			options: `-c search_path=${schema},pg_catalog`
+		})
+		let executions = 0
+		const runner = tracked(pool, pool, async () => {
+			executions++
+			return { remainingGoals: [] }
+		})
+		try {
+			const request = deterministicRunRequest('server', randomUUID(), randomUUID())
+			const runId = randomUUID(),
+				now = new Date().toISOString()
+			const record = {
+				...request,
+				runId,
+				state: 'running',
+				revision: 2,
+				createdAt: now,
+				updatedAt: now,
+				checkpoints: [],
+				continuations: [],
+				lease: { ownerId: randomUUID(), expiresAt: '2000-01-01T00:00:00Z' }
+			}
+			await pool.query(
+				`INSERT INTO runs(id,subject_id,idempotency_key,material_hash,state,revision,record) VALUES($1,$2,$3,'expired','running',2,$4)`,
+				[runId, request.security.principal.subjectId, request.idempotencyKey, record]
+			)
+			await runner.recoverAcceptedRuns()
+			expect(await runner.status(runId)).toMatchObject({
+				state: 'failed',
+				failure: { code: 'EXECUTION_UNCERTAIN', retryable: false }
+			})
+			await expect(runner.retry(runId, randomUUID())).rejects.toThrow('reconciliation')
+			expect(executions).toBe(0)
+		} finally {
+			await runner.close()
 			await pool.end()
 		}
 	})
@@ -280,9 +429,10 @@ describeWithPostgres('SQL runner persistence', () => {
 			options: `-c search_path=${schema},pg_catalog`
 		})
 		const request = secretContinuationRunRequest(randomUUID(), randomUUID())
-		const firstRunner = new SqlPlanRunner(firstPool, firstPool, deterministicSecretExecutor)
+		const firstRunner = tracked(firstPool, firstPool, deterministicSecretExecutor)
 		const started = await firstRunner.start(request)
 		await recordInState(firstRunner, started.runId, 'waiting_for_input')
+		await Promise.all(runners.splice(0).map((runner) => runner.close()))
 		await firstPool.end()
 
 		const replacementPool = new pg.Pool({
@@ -291,11 +441,7 @@ describeWithPostgres('SQL runner persistence', () => {
 			options: `-c search_path=${schema},pg_catalog`
 		})
 		try {
-			const replacement = new SqlPlanRunner(
-				replacementPool,
-				replacementPool,
-				deterministicSecretExecutor
-			)
+			const replacement = tracked(replacementPool, replacementPool, deterministicSecretExecutor)
 			await replacement.resume(started.runId, {
 				requestId: randomUUID(),
 				continuationId: SECRET_CONTINUATION_ID,
@@ -313,7 +459,7 @@ describeWithPostgres('SQL runner persistence', () => {
 				kind: 'secret',
 				value: 'correct horse battery staple'
 			})
-			const record = await replacement.status(started.runId)
+			const record = await terminalRecord(replacement, started.runId)
 			expect(record).toMatchObject({
 				state: 'succeeded',
 				continuations: [{ continuationId: SECRET_CONTINUATION_ID, state: 'resolved' }],
@@ -331,6 +477,7 @@ describeWithPostgres('SQL runner persistence', () => {
 			).rows[0]?.record
 			expect(JSON.stringify(stored)).not.toContain('correct horse battery staple')
 		} finally {
+			await Promise.all(runners.splice(0).map((runner) => runner.close()))
 			await replacementPool.end()
 		}
 	})

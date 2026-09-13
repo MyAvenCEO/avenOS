@@ -1,0 +1,9 @@
+$ vitest run
+
+ RUN  v4.1.11 /home/daniel/Documents/ChatGPT/avenOS/document-ingest-review/services/actor-runner
+
+
+ Test Files  7 passed | 3 skipped (10)
+      Tests  27 passed | 8 skipped (35)
+   Start at  04:38:33
+   Duration  7.00s (transform 1.51s, setup 0ms, import 2.61s, tests 6.57s, environment 1ms)

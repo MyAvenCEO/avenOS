@@ -16,7 +16,7 @@ describe('file processing flow', () => {
 					key: 'analyze-page-001',
 					state: 'running',
 					dependsOn: ['extract-native-page-001'],
-					procedureKey: 'model.analyze-page'
+					procedureKey: 'client.analyze-page-model'
 				},
 				{
 					key: 'classify-document',
@@ -72,4 +72,16 @@ describe('file processing flow', () => {
 			'decompose-pages->extract-native-page-001'
 		])
 	})
+})
+
+test('completed model stages keep their model type', () => {
+	const graph = processingFlowGraph([
+		{
+			key: 'extract-invoice',
+			state: 'succeeded',
+			procedureKey: 'client.extract-invoice-model',
+			attemptCount: 2
+		}
+	])
+	expect(graph.nodes[0]?.node.type).toBe('llm:process')
 })

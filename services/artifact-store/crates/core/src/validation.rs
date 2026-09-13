@@ -43,6 +43,8 @@ pub enum CoreError {
     },
     #[error("publication is invalid: {0}")]
     InvalidPublication(String),
+    #[error("evidence is invalid: {0}")]
+    InvalidEvidence(String),
     #[error("exact type {0}@{1} is unavailable")]
     TypeUnavailable(TypeKey, u32),
     #[error("input/reference artifact {0} is unavailable")]
