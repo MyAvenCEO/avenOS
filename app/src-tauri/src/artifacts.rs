@@ -639,13 +639,14 @@ pub async fn artifact_upload(
     observed_at: String,
     execution_environment: String,
     path: PathBuf,
+    expected_imap_scope: Option<String>,
     app: tauri::AppHandle,
     state: tauri::State<'_, AuthState>,
 ) -> Result<UploadedArtifact, String> {
     if execution_environment != "local" && execution_environment != "server" {
         return Err("Execution environment must be local or server.".to_string());
     }
-    let token = session_token(&state)?;
+    let token = crate::imap::session_for_scope(&state, expected_imap_scope.as_deref())?;
     tauri::async_runtime::spawn_blocking(move || {
         let first = upload(
             app.clone(),
@@ -1007,9 +1008,10 @@ pub async fn intent_append_contribution(
 #[tauri::command]
 pub async fn intent_create(
     intent: serde_json::Value,
+    expected_imap_scope: Option<String>,
     state: tauri::State<'_, AuthState>,
 ) -> Result<serde_json::Value, String> {
-    let token = session_token(&state)?;
+    let token = crate::imap::session_for_scope(&state, expected_imap_scope.as_deref())?;
     let body =
         serde_json::to_string(&intent).map_err(|error| format!("Invalid intent: {error}"))?;
     tauri::async_runtime::spawn_blocking(move || {

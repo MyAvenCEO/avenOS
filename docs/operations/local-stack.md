@@ -137,6 +137,10 @@ tokens, and selects the provisioned customer environment.
 You can then import a document, inspect artifacts, chat through the local facade, and
 exercise Intent and Actor features without deployed credentials.
 
+To test email PDF import inside the client, open **Settings → Email**. The desktop
+prototype requires Python 3.11 or newer; see the [IMAP testing guide](imap-pdf-prototype.md#use-the-tauri-client)
+for mailbox setup, sample emails, local retention, and importing into the document flow.
+
 ## Add another passkey
 
 Open `http://localhost:13100/dashboard`, authenticate, and use the passkey management

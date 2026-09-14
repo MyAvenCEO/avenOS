@@ -22,6 +22,16 @@ The adapter depends on narrow authenticated avenCEO service contracts:
 The former feed-driven Artifact Processor has been removed, so no second processor
 competes for those sources in the current implementation.
 
+The desktop IMAP prototype in **Settings → Email** also calls `ingestFile()` for
+selected PDF attachments and autonomous whole-folder imports. Whole-folder jobs
+order messages by IMAP received date and run one PDF pipeline at a time while the
+desktop app remains open, independently of settings navigation. It binds stable publication IDs to the signed-in account,
+source occurrence, and chosen execution placement, and retains email context in the
+Intent. The PDFs use the same `client-actor-ingest` source kind and execution adapter
+as dropped files. Raw emails remain in a local cache; immutable email artifacts and
+attachment references in Artifact Store are not implemented. See the
+[IMAP testing guide](operations/imap-pdf-prototype.md#use-the-tauri-client).
+
 The host-neutral protocol and remote-server cutover are in
 [Actor execution protocol and document-ingest cutover](actor-runtime-formal-spec.md).
 

@@ -17,6 +17,7 @@ between the direction of the product and properties the current system proves.
 | Prepare a Linux or macOS workstation | [Workstation setup](workstation-setup.md) |
 | Build the code or choose the right test level | [Build and test](build-and-test.md) |
 | Run all services and the Rust client locally | [Local full stack](local-stack.md) |
+| Test PDF attachment import from an IMAP mailbox | [IMAP connector prototype](imap-pdf-prototype.md) |
 | Bootstrap storage, recovery secrets, and GitHub | [Initial provisioning](https://github.com/MyAvenCEO/avenOS-maintenance-tools/blob/main/docs/operations/initial-provisioning.md) |
 | Create or update identity, `next`, or production | [Deployment](deployment.md) |
 | Understand service startup order and readiness | [Startup and readiness](startup-and-readiness.md) |

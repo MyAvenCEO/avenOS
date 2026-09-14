@@ -349,9 +349,19 @@ export class Chat {
 		return this.#abort?.signal
 	}
 
-	beginArtifactUpload(uploadId: string, publicationId: string, originalName: string): void {
-		this.failure = null
-		this.turns.push({
+	beginArtifactUpload(
+		uploadId: string,
+		publicationId: string,
+		originalName: string,
+		targetSession = this.session
+	): void {
+		if (targetSession === this.session) this.failure = null
+		const target =
+			targetSession === this.session
+				? { turns: this.turns, wire: this.#wire }
+				: (this.#sessions.get(targetSession) ?? this.#fresh())
+		if (targetSession !== this.session) this.#sessions.set(targetSession, target)
+		target.turns.push({
 			id: id(),
 			role: 'user',
 			content: '',
@@ -364,8 +374,8 @@ export class Chat {
 				progress: 0
 			}
 		})
-		const attachment = this.turns.at(-1)?.attachment
-		if (attachment) this.#uploads.set(uploadId, { attachment, session: this.session })
+		const attachment = target.turns.at(-1)?.attachment
+		if (attachment) this.#uploads.set(uploadId, { attachment, session: targetSession })
 
 		this.#sink.onTurn?.()
 	}
