@@ -26,6 +26,7 @@ try {
 	await page.evaluate((fixture) => {
 		window.isTauri = true
 		window.emailCalls = []
+		window.emailHoldProcessing = true
 		const intents = new Map()
 		window.__TAURI_INTERNALS__ = {
 			invoke: async (command, args) => {
@@ -104,8 +105,13 @@ try {
 					return {
 						payload: { originalName: 'sample-invoice.pdf', declaredMediaType: 'application/pdf' }
 					}
-				if (command === 'actor_run_start')
+				if (command === 'actor_run_start') {
+					if (window.emailHoldProcessing)
+						await new Promise((resolve) => {
+							window.emailReleaseProcessing = resolve
+						})
 					throw new Error('Synthetic test stops at document admission.')
+				}
 				if (command === 'artifact_store_list') return { artifacts: [] }
 				if (command === 'intent_list') return []
 				return null
@@ -118,7 +124,8 @@ try {
 	await page.getByLabel('Password or app password').fill('synthetic-password')
 	await page.getByRole('button', { name: 'Connect and list folders' }).click()
 	await page.getByText('Connected. 2 folders available.').waitFor()
-	await page.getByLabel('Folder').selectOption('Invoices')
+	await page.getByLabel('Folder', { exact: true }).selectOption('Invoices')
+	await page.getByText('Date range and preview', { exact: true }).click()
 	await page.getByRole('button', { name: 'Find PDF attachments' }).click()
 	await page.getByText('2 PDF attachments found.').waitFor()
 	assert.equal(await page.getByLabel('Password or app password').inputValue(), '')
@@ -174,6 +181,17 @@ try {
 		).size,
 		4
 	)
+	// The first ingestion is still blocked, but every mailbox upload has committed.
+	assert.equal(allCalls.filter((call) => call.command === 'actor_run_start').length, 1)
+	await page.getByText(/Document processing continues separately/).waitFor()
+	await page.evaluate(() => {
+		window.emailHoldProcessing = false
+		window.emailReleaseProcessing()
+	})
+	await page.waitForFunction(
+		() => window.emailCalls.filter((call) => call.command === 'actor_run_start').length === 4
+	)
+
 	assert.equal(
 		await page.evaluate(async () => {
 			const { chatActor } = await import('/src/lib/actors/chat.actor.svelte.ts')
@@ -188,9 +206,12 @@ try {
 		'background uploads must leave the selected conversation unchanged'
 	)
 	assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
-	await page.screenshot({ path: '/tmp/aven-email-settings.png', fullPage: true })
+	await page.screenshot({
+		path: process.env.AVEN_EMAIL_UI_SCREENSHOT || '/tmp/aven-email-settings.png',
+		fullPage: true
+	})
 	console.log(
-		'Email UI passed: folder selection, credential clearing, PDF selection, native upload scope, document admission and autonomous chronological import after leaving settings.'
+		'Email UI passed: folder selection, credential clearing, PDF selection, native upload scope, document admission and autonomous chronological import after leaving settings, and uploads continuing while ingestion is blocked.'
 	)
 } finally {
 	await browser.close()

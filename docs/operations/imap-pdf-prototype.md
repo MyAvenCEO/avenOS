@@ -18,29 +18,43 @@ sandbox. It does not bundle Python.
 
 1. Enter the IMAP hostname, port, login, and password or app password.
 2. Choose **Connect and list folders**, then select a folder. Leave the received-date
-   fields empty to import the entire folder, or set an inclusive start and exclusive end.
+   fields under **Date range and preview** empty to import the entire folder, or set
+   an inclusive start and exclusive end.
 3. Choose **This device** or **Server** processing, then **Import whole folder · oldest first**.
    The job snapshots every matching message present at the start and indexes the server's
    `INTERNALDATE`, ascending, with UID as a tie-breaker. Sender Date headers do not affect
    order. Each PDF gets a separate Intent, ordinary file upload, and document ingestion.
-4. Leave Settings and keep using the app. Return to **Settings → Email** for progress,
+4. Leave Settings and keep using the app. Return to **Settings → Email** for the
+   progress card, which shows messages ordered during preparation, then messages read,
+   PDFs uploaded, uploads to retry, and mailbox issues. It provides
    **Pause import**, **Resume import**, **Stop import**, and individual upload errors.
    **Retry failed PDFs** retries only failed uploads with their original publication IDs.
    **Open workspace** shows Intents and document-processing results.
 
-The job processes one PDF pipeline at a time. Keep the desktop app open: the job survives
-navigation but not an app restart or frontend reload. Closing the app stops acquisition;
+Mailbox acquisition and Artifact Store uploads run independently of document processing.
+An upload commits its Intent and file, enqueues ingestion, and immediately advances to
+the next PDF or message. A separate queue executes one document pipeline at a time, so
+slow or failed ingestion does not hold up downloads and uploads. The progress card shows
+queued and active document work separately from upload progress. **Stop import** stops
+further acquisition and upload; already uploaded documents continue processing.
+
+Keep the desktop app open until both queues finish: the queues survive navigation but
+not an app restart or frontend reload. Closing the app stops acquisition;
 restart the import with credentials to scan again and replay committed publications.
 There is no unattended service or automatic restart recovery. Messages arriving after
 snapshot creation belong to a later import. Each folder is a separate import; this does
 not recursively import all folders in an account.
 
-For a smaller preview, set **Preview message limit** (1–100, default 20), then choose
-**Find PDF attachments**, select PDFs, and **Import selected PDFs**. That limit applies
-only to the preview, which finds the highest matching UIDs; it does not cap the
-whole-folder import. **Try sample emails** finds two synthetic emails containing
-identical PDF bytes without making a mailbox connection. Importing the samples uploads
-them to the signed-in workspace and starts ordinary document processing.
+For a smaller preview, open **Date range and preview** and set **Preview message limit**
+(1–100, default 20), then choose **Find PDF attachments**. This preview finds the highest
+matching UIDs; its limit does not cap the whole-folder import. Select PDFs and choose
+**Import selected PDFs**. **Select all** and **Clear selection** help with larger previews.
+Expand the import issues section for individual failures; each failed upload keeps its
+original error under **Technical details**.
+
+**Try sample emails** finds two synthetic emails containing identical PDF bytes without
+making a mailbox connection. Importing the samples uploads them to the signed-in
+workspace and starts ordinary document processing.
 
 The form clears its password when starting an import, after a preview scan, and when
 leaving the Email section. An active or paused mailbox job retains a separate credential
@@ -51,8 +65,7 @@ existing XOAUTH2 access token. Python runs in isolated mode. Each native operati
 after five minutes; **Resume import** retries the current operation. Date indexing uses
 200-message pages; acquisition reads one message per operation. Only one native scan
 runs at a time. Interrupted connections retry the current operation three times with
-increasing delays,
-then pause the job. Authentication, mailbox-access, and other failures show a specific
+increasing delays, then pause the job. Authentication, mailbox-access, and other failures show a specific
 error and pause immediately. Message extraction or upload failures are listed and remaining messages continue. Source-read failures require another
 mailbox import; **Retry failed PDFs** applies to PDFs that reached the upload step.
 
@@ -85,7 +98,7 @@ PDF bytes or model inputs stay exclusively on the device.
 The desktop-specific checks are:
 
 ```sh
-bun test app/tests/email-import.test.ts app/tests/email-job.test.ts app/tests/email-upload-boundary.test.ts
+bun test app/tests/email-import.test.ts app/tests/email-job.test.ts app/tests/email-upload-boundary.test.ts app/tests/document-import-queue.test.ts
 bun run check
 bun run --cwd app build
 cargo test --locked --manifest-path app/src-tauri/Cargo.toml --lib imap::tests
@@ -93,7 +106,8 @@ cargo test --locked --manifest-path app/src-tauri/Cargo.toml --lib imap::tests
 
 The Rust test invokes the embedded Python bridge with synthetic mail. The TypeScript
 tests check stable publication identity and separation by account, source occurrence,
-and execution placement. The HTTP-boundary regression feeds the connector’s
+and execution placement. The queue regression holds the first document open while
+later uploads commit, then verifies ordered processing and failure isolation. The HTTP-boundary regression feeds the connector’s
 samples through the real artifact request validator for both placements, with storage
 substituted. Job tests check 150-message pagination, ordered uploads, pause/resume,
 failed-file retry, cancellation, and account changes. The [complete platform gate](build-and-test.md#complete-pre-deployment-gate)

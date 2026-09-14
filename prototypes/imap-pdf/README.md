@@ -6,6 +6,8 @@ local files. The Tauri client's Settings → Email screen embeds this connector 
 a native command and sends selected PDFs or a whole folder through the app's existing
 document flow. Whole-folder jobs snapshot received-date order and acquire mail in pages;
 the client module owns the upload queue independently of the settings component.
+Committed PDFs enter a separate document-processing queue, so ingestion does not
+block acquisition or publication.
 The standalone CLI does not publish to Artifact Store or start document Actors.
 
 The [testing guide](../../docs/operations/imap-pdf-prototype.md) owns setup,

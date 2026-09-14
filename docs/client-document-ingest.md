@@ -24,8 +24,9 @@ competes for those sources in the current implementation.
 
 The desktop IMAP prototype in **Settings → Email** also calls `ingestFile()` for
 selected PDF attachments and autonomous whole-folder imports. Whole-folder jobs
-order messages by IMAP received date and run one PDF pipeline at a time while the
-desktop app remains open, independently of settings navigation. It binds stable publication IDs to the signed-in account,
+order messages by IMAP received date. Downloads and Artifact Store uploads advance
+independently of a separate document-processing queue, which runs one PDF pipeline
+at a time while the desktop app remains open. Both queues survive settings navigation. It binds stable publication IDs to the signed-in account,
 source occurrence, and chosen execution placement, and retains email context in the
 Intent. The PDFs use the same `client-actor-ingest` source kind and execution adapter
 as dropped files. Raw emails remain in a local cache; immutable email artifacts and

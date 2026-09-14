@@ -30,6 +30,11 @@ export interface EmailResult {
 }
 
 export interface EmailJobState {
+	phase: 'idle' | 'indexing' | 'importing' | 'finished' | 'stopped'
+	indexed: number
+	selectedTotal: number
+	label: string
+	placement: ExecutionEnvironment
 	running: boolean
 	paused: boolean
 	status: string
@@ -42,6 +47,11 @@ export interface EmailJobState {
 }
 
 export const initialEmailJobState = (): EmailJobState => ({
+	phase: 'idle',
+	indexed: 0,
+	selectedTotal: 0,
+	label: '',
+	placement: 'local',
 	running: false,
 	paused: false,
 	status: '',
@@ -82,6 +92,8 @@ export class EmailImportJob {
 		if (this.state.running || this.state.paused) return
 		this.reset(environment)
 		this.request = { ...request, operation: 'start' }
+		this.state.phase = 'indexing'
+		this.state.label = `${request.mailbox} · ${request.user}`
 		await this.run()
 	}
 
@@ -95,6 +107,9 @@ export class EmailImportJob {
 		this.scope = result.scope
 		this.pending = result.attachments.filter((attachment) => selected.includes(attachment.id))
 		this.done = true
+		this.state.phase = 'importing'
+		this.state.label = 'Selected PDFs'
+		this.state.selectedTotal = this.pending.length
 		await this.run()
 	}
 
@@ -105,6 +120,7 @@ export class EmailImportJob {
 	private reset(environment: ExecutionEnvironment) {
 		Object.assign(this.state, initialEmailJobState())
 		this.environment = environment
+		this.state.placement = environment
 		this.request = null
 		this.scope = ''
 		this.pending = []
@@ -119,6 +135,7 @@ export class EmailImportJob {
 
 	cancel() {
 		this.stop = true
+		this.state.phase = 'stopped'
 		this.state.paused = false
 		this.request = null // Drop credentials immediately; an in-flight IPC call may still finish.
 		this.pending = []
@@ -137,6 +154,7 @@ export class EmailImportJob {
 	async retryFailed(): Promise<void> {
 		if (this.state.running || this.state.paused) return
 		this.pending = this.state.failed.map((entry) => entry.attachment)
+		this.state.phase = 'importing'
 		this.state.failed = []
 		this.done = true
 		this.stop = false
@@ -163,7 +181,7 @@ export class EmailImportJob {
 			while (!this.stop && !this.state.paused) {
 				const attachment = this.pending[0]
 				if (attachment) {
-					this.state.status = `Uploading and processing ${attachment.name}…`
+					this.state.status = `Uploading ${attachment.name}…`
 					try {
 						const context = await emailImportContext(this.scope, attachment, this.environment)
 						if (this.stop || this.state.paused) break
@@ -191,7 +209,9 @@ export class EmailImportJob {
 				this.state.status =
 					this.request.operation === 'start'
 						? 'Finding all messages in the selected folder…'
-						: `Reading mailbox: ${this.state.scanned} of ${this.state.total} messages…`
+						: this.state.phase === 'indexing'
+							? `Ordering messages by received date: ${this.state.indexed} of ${this.state.total}…`
+							: `Reading mailbox: ${this.state.scanned} of ${this.state.total} messages…`
 				const response = await this.scanWithRetry({ ...this.request })
 				if (this.stop || !response) break
 				if (this.scope && response.scope !== this.scope)
@@ -209,8 +229,11 @@ export class EmailImportJob {
 				this.pending = response.attachments
 				this.done = response.done ?? false
 				if (response.phase === 'indexing') {
+					this.state.phase = 'indexing'
+					this.state.indexed = response.indexed ?? 0
 					this.state.status = `Ordering messages by received date: ${response.indexed} of ${response.total}…`
 				} else {
+					this.state.phase = 'importing'
 					this.state.scanned = response.cursor ?? 0
 				}
 			}
@@ -218,6 +241,7 @@ export class EmailImportJob {
 			else if (this.state.paused) this.state.status = 'Import paused. Resume to continue.'
 			else {
 				this.request = null
+				this.state.phase = 'finished'
 				this.state.status = `Import finished. ${this.state.imported.length} PDFs uploaded; ${this.state.failed.length} uploads failed. Follow processing in the workspace.`
 			}
 		} catch (cause) {

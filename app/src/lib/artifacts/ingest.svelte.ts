@@ -13,6 +13,7 @@ import {
 	clientDocumentSourceExecutionEnvironment,
 	processClientDocument
 } from './client-document-processing'
+import { emailDocumentQueue } from './document-import-queue.svelte'
 import type { FileImportContext } from './email-import'
 import { type ArtifactProcessingLookup, isTerminalProcessing } from './processing'
 import { transportError } from './transport-error'
@@ -292,15 +293,28 @@ export async function ingestFile(
 		await refreshIntent(receipt.intentId)
 		uploadInFlight = false
 		ownsUpload = false
-		const processing = processClientDocument(
-			receipt.artifactId,
-			receipt.originalName,
-			receipt.mediaType,
-			executionEnvironment
-		)
-		void watchArtifactProcessing(receipt.artifactId, receipt.intentId)
-		// Bound the autonomous job to one document pipeline at a time.
-		if (context?.background) await processing
+		const startProcessing = async () => {
+			// A queued document remains bound to the account that uploaded it.
+			if (
+				context?.background &&
+				(await invoke<string>('imap_account_scope')) !== context.imapScope
+			) {
+				throw new Error(
+					'Sign into the original Aven account to resume this document from the workspace.'
+				)
+			}
+			const processing = processClientDocument(
+				receipt.artifactId,
+				receipt.originalName,
+				receipt.mediaType,
+				executionEnvironment
+			)
+			void watchArtifactProcessing(receipt.artifactId, receipt.intentId)
+			await processing
+		}
+		if (context?.background) emailDocumentQueue.enqueue(receipt.artifactId, startProcessing)
+		else void startProcessing()
+
 		return receipt
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error)
