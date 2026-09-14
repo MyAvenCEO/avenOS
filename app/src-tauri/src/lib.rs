@@ -12,6 +12,7 @@ mod artifacts;
 mod asr;
 mod assets;
 mod auth;
+mod imap;
 mod service_token;
 mod tts;
 mod voice;
@@ -173,6 +174,8 @@ pub fn run() {
 		.manage(auth::AuthState::default())
 		.manage(artifacts::LlmStreamState::default())
 		.invoke_handler(tauri::generate_handler![
+			imap::imap_account_scope,
+			imap::imap_scan,
 			artifacts::actor_run_start,
 			artifacts::actor_run_status,
 			artifacts::actor_run_control,

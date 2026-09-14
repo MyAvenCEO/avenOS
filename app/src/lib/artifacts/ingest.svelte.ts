@@ -13,6 +13,7 @@ import {
 	clientDocumentSourceExecutionEnvironment,
 	processClientDocument
 } from './client-document-processing'
+import type { FileImportContext } from './email-import'
 import { type ArtifactProcessingLookup, isTerminalProcessing } from './processing'
 import { transportError } from './transport-error'
 
@@ -236,15 +237,20 @@ export async function watchArtifactProcessing(
  * leaves a watcher running until the skill flow reaches a terminal state.
  *
  * Returns the receipt so a caller can follow the artifact it just created;
- * failures are reported through the chat and the intent, not thrown, because
- * every caller wants exactly that and none of them want a second error path.
+ * failures are reported through the chat and the intent. Background importers can
+ * also request a thrown error to retain a per-file retry queue.
  */
 export async function ingestFile(
 	path: string,
-	executionEnvironment: ExecutionEnvironment = documentExecutionPreference.environment
+	executionEnvironment: ExecutionEnvironment = documentExecutionPreference.environment,
+	context?: FileImportContext
 ): Promise<UploadedArtifactReceipt | null> {
-	shell.tab = 'intents'
-	shell.detail = true
+	if (!context?.background) {
+		shell.tab = 'intents'
+		shell.detail = true
+	}
+	// A mailbox job waits for the shared upload slot instead of losing a file.
+	while (context?.background && uploadInFlight) await wait(100)
 
 	if (uploadInFlight) {
 		chat.failure = 'Wait for the current file upload to finish.'
@@ -252,25 +258,28 @@ export async function ingestFile(
 	}
 
 	const uploadId = crypto.randomUUID()
-	const publicationId = crypto.randomUUID()
-	const intentId = crypto.randomUUID()
-	const observedAt = new Date().toISOString()
+	const publicationId = context?.publicationId ?? crypto.randomUUID()
+	const intentId = context?.intentId ?? crypto.randomUUID()
+	const observedAt = context?.observedAt ?? new Date().toISOString()
 	const name = basename(path)
-	intents.beginFileIntent(intentId, name)
-	chat.beginArtifactUpload(uploadId, publicationId, name)
+	intents.beginFileIntent(intentId, name, !context?.background)
+	chat.beginArtifactUpload(uploadId, publicationId, name, intentId)
 	uploadInFlight = true
+	let ownsUpload = true
 	try {
 		await invoke('intent_create', {
+			expectedImapScope: context?.imapScope ?? null,
 			intent: {
 				id: intentId,
 				title: name,
 				intentType: 'file',
-				sourceLabel: 'Upload · File',
+				sourceLabel: context?.sourceLabel ?? 'Upload · File',
 				deadline: null,
-				routingSummary: `File upload: ${name}`
+				routingSummary: context?.routingSummary ?? `File upload: ${name}`
 			}
 		})
 		const receipt = await invoke<UploadedArtifactReceipt>('artifact_upload', {
+			expectedImapScope: context?.imapScope ?? null,
 			uploadId,
 			publicationId,
 			intentId,
@@ -281,23 +290,28 @@ export async function ingestFile(
 		chat.commitArtifactUpload(uploadId, receipt)
 		intents.attachFileSource(receipt.intentId, receipt.artifactId, receipt.originalName)
 		await refreshIntent(receipt.intentId)
-		void processClientDocument(
+		uploadInFlight = false
+		ownsUpload = false
+		const processing = processClientDocument(
 			receipt.artifactId,
 			receipt.originalName,
 			receipt.mediaType,
 			executionEnvironment
 		)
 		void watchArtifactProcessing(receipt.artifactId, receipt.intentId)
+		// Bound the autonomous job to one document pipeline at a time.
+		if (context?.background) await processing
 		return receipt
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error)
 		chat.failArtifactUpload(uploadId, message)
 		intents.failFileIntent(intentId, message)
 		await wait(1_000)
-		void loadPersistentIntents()
+		void loadPersistentIntents().catch(() => {})
+		if (context?.throwOnError) throw new Error(message)
 		return null
 	} finally {
-		uploadInFlight = false
+		if (ownsUpload) uploadInFlight = false
 	}
 }
 

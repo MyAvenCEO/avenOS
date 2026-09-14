@@ -663,6 +663,12 @@ pub(crate) fn session_token(state: &tauri::State<'_, AuthState>) -> Result<Strin
 		.ok_or_else(|| "No session is signed in.".to_string())
 }
 
+pub(crate) fn session_identity(state: &tauri::State<'_, AuthState>) -> Result<(String, String), String> {
+	state.0.lock().map_err(|_| "Authentication state is unavailable.".to_string())?
+		.session.as_ref().map(|session| (session.token.clone(), session.user.id.clone()))
+		.ok_or_else(|| "No session is signed in.".to_string())
+}
+
 /// Exchange the long-lived, revocable Better Auth session for a short-lived,
 /// audience-bound JWT before crossing the identity boundary. Product services
 /// never receive the session credential and can verify the JWT from public JWKS.

@@ -830,7 +830,7 @@ class IntentsActor extends Actor {
 	items = $state<MockIntent[]>(INTENTS)
 	selectedId = $state(INTENTS[0].id)
 
-	beginFileIntent(id: string, title: string): void {
+	beginFileIntent(id: string, title: string, focus = true): void {
 		const intent: MockIntent = {
 			id,
 			type: 'file',
@@ -855,9 +855,12 @@ class IntentsActor extends Actor {
 				}
 			]
 		}
+		this.items = this.items.filter((item) => item.id !== id)
 		this.items.unshift(intent)
-		this.selectedId = id
-		chatActor.core.use(id)
+		if (focus) {
+			this.selectedId = id
+			chatActor.core.use(id)
+		}
 	}
 
 	failFileIntent(id: string, message: string): void {
