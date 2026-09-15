@@ -1123,17 +1123,20 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 	}
 	const llmModels = await fetch(`${api}/api/llm/models`, { headers: authorizedHeaders })
 	expect(llmModels.status).toBe(200)
+	const maxParallelism = Number(process.env.E2E_LLM_MAX_PARALLELISM || '5')
 	expect(await llmModels.json()).toEqual({
 		models: [
 			{
 				id: 'deepseek/deepseek-v4-flash-0731',
 				label: 'E2E Chat',
-				capabilities: ['streaming', 'text-generation', 'tool-calling']
+				capabilities: ['streaming', 'text-generation', 'tool-calling'],
+				maxParallelism
 			},
 			{
 				id: 'e2e/document',
 				label: 'E2E Documents',
-				capabilities: ['structured-output', 'text-generation', 'vision']
+				capabilities: ['structured-output', 'text-generation', 'vision'],
+				maxParallelism
 			}
 		]
 	})
