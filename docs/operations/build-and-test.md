@@ -48,6 +48,11 @@ and production Artifact Store. It proves the synthetic source → nested documen
 Skill → subscribed brief path, provenance, duplicate delivery, restart and draft
 conflicts. It does not contact a mailbox or call a model.
 
+Persistence test files run sequentially because they share one Artifact Store
+with its production two-upload admission limit. Tests still exercise concurrent
+claims, dispatch, and execution within each file; fixture setup from unrelated
+files must not compete for those same slots.
+
 For the Studio browser interaction check, start an isolated worktree preview and
 run the test in a second terminal:
 
