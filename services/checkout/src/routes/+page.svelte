@@ -98,7 +98,7 @@ function continueToCheckout() {
 	<!-- No check button: the answer arrives while you type. Enter goes straight
 	     on when the name is free, so the keyboard path still works. -->
 	<form
-		class="stack"
+		class="stack name-search-form"
 		onsubmit={(event) => {
 			event.preventDefault()
 			continueToCheckout()
@@ -132,12 +132,36 @@ function continueToCheckout() {
 				<span class="field-error" aria-live="polite">{error}</span>
 			{:else if result?.available}
 				<span class="field-hint" aria-live="polite">
-					<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.25 4.25L19 7" /></svg>
+					<svg
+						viewBox="0 0 24 24"
+						width="1em"
+						height="1em"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="m5 12.5 4.25 4.25L19 7" />
+					</svg>
 					{result.name}.aven.ceo ist frei
 				</span>
 			{:else if result}
 				<span class="field-error" aria-live="polite">
-					<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+					<svg
+						viewBox="0 0 24 24"
+						width="1em"
+						height="1em"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M18 6 6 18M6 6l12 12" />
+					</svg>
 					{result.name}.aven.ceo ist schon vergeben
 				</span>
 			{:else}
@@ -153,3 +177,10 @@ function continueToCheckout() {
 		{/if}
 	</form>
 </section>
+
+<style>
+.name-search-form {
+	inline-size: 100%;
+	text-align: start;
+}
+</style>

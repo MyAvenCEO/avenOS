@@ -146,9 +146,9 @@ onMount(() => {
 			<strong class="flow-card-code-value">{data.name}.aven.ceo</strong>
 		</div>
 
-		<div class="payment-frame payment-frame--height-tall">
+		<div class="payment-frame {fakeParams ? 'payment-frame--mock' : 'payment-frame--height-tall'}">
 			{#if fakeParams}
-				<div class="payment-frame-stage stack stack-center">
+				<div class="payment-frame-stage stack payment-frame-mock-stage">
 					<h2 class="text text--title">{data.name}</h2>
 					{#if paymentError}
 						<div class="flow-card-alert">{paymentError}</div>
@@ -197,3 +197,12 @@ onMount(() => {
 		</div>
 	</div>
 </section>
+
+<style>
+.payment-frame--mock .payment-frame-mock-stage {
+	align-content: center;
+	justify-items: stretch;
+	min-block-size: 20rem;
+	padding: var(--space-comfortable);
+}
+</style>
