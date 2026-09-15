@@ -172,9 +172,26 @@ async function settle(count: number) {
 				artifactId: invocation.artifactId
 			})
 			const before = await store.highWater()
-			await call('sample', capture)
+			const replayed = await call('sample', capture)
+			expect(replayed.artifacts).toEqual(incoming.artifacts)
 			await Promise.all([call('sync'), call('sync')])
-			expect((await store.highWater()).sequence).toBe(before.sequence)
+			// The persistence suites share one Store scope and publish concurrently.
+			// Prove this subject produced nothing new, not that the entire feed stood still.
+			const after = await store.highWater()
+			expect(after.epoch).toBe(before.epoch)
+			let cursor = before.sequence
+			while (cursor < after.sequence) {
+				const page = await store.feed(before.epoch, cursor, 64)
+				expect(page.items.length).toBeGreaterThan(0)
+				for (const item of page.items) {
+					if (item.scopeSequence > after.sequence) break
+					const publication = studioObject(
+						await store.client.publication(scope!, item.publicationId)
+					)
+					expect(publication.run?.initiator?.id).not.toBe(`user:${security.principal.subjectId}`)
+				}
+				cursor = page.items.at(-1).scopeSequence
+			}
 			expect((await call('state')).runs).toHaveLength(2)
 			const connection = state.connections.find((c: any) => c.id === sourceConnectionId)
 			const paused = await call('control', {
