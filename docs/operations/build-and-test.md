@@ -468,6 +468,9 @@ Platform, deployment verification, Actor, Voice, and Android jobs cache compiler
 download state keyed by their lockfiles, toolchain, operating system, target, and profile.
 Caches only accelerate the normal locked build: no compiled release artifact replaces a
 build or verification step, and a cache miss runs the same assertions.
+Android jobs install `platform-tools` during SDK setup, then install Android 36, build
+tools 36.0.0, and the pinned NDK separately. The setup action's default `tools` package
+is no longer available from the Android SDK repository.
 
 ## Failure handling
 
