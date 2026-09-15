@@ -201,13 +201,18 @@ export function createFacadeHandler(
 						code: 'AUTHORIZATION_DENIED',
 						message: 'The authenticated principal cannot use this route.'
 					})
-				const action = ['GET', 'HEAD'].includes(request.method)
-					? targetConfig.readAction
-					: request.method === 'DELETE' && targetConfig.deleteAction
-						? targetConfig.deleteAction
-						: (customerMatch[3] ?? '').endsWith('/merge') && targetConfig.mergeAction
-							? targetConfig.mergeAction
-							: targetConfig.writeAction
+				const studioQuery =
+					request.method === 'POST' &&
+					customerMatch[2] === 'actor-runs' &&
+					customerMatch[3] === '/studio/query'
+				const action =
+					['GET', 'HEAD'].includes(request.method) || studioQuery
+						? targetConfig.readAction
+						: request.method === 'DELETE' && targetConfig.deleteAction
+							? targetConfig.deleteAction
+							: (customerMatch[3] ?? '').endsWith('/merge') && targetConfig.mergeAction
+								? targetConfig.mergeAction
+								: targetConfig.writeAction
 				const grant = await customers.grant({
 					claims,
 					environmentId: customerMatch[1],

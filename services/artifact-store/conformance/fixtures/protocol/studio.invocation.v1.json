@@ -1,0 +1,61 @@
+{
+  "typeKey": "studio.invocation",
+  "version": 1,
+  "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "activationId",
+      "callPath",
+      "skillArtifactId",
+      "parentInvocationId",
+      "inputs",
+      "parameters"
+    ],
+    "properties": {
+      "activationId": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+      },
+      "callPath": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "skillArtifactId": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+      },
+      "parentInvocationId": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "maxLength": 64
+      },
+      "inputs": {
+        "type": "object",
+        "maxProperties": 16,
+        "additionalProperties": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "parameters": {
+        "type": "object",
+        "maxProperties": 16,
+        "additionalProperties": {
+          "type": [
+            "string",
+            "integer",
+            "boolean"
+          ]
+        }
+      }
+    }
+  },
+  "blobPolicy": "forbidden",
+  "referenceRules": []
+}

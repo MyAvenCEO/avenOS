@@ -73,6 +73,14 @@ const RECONCILIATION_DECISION_JSON: &[u8] =
 pub fn builtin_type_definitions() -> Result<Vec<TypeDefinition>, crate::CoreError> {
     [
         CORE_FILE_JSON,
+        include_bytes!("../../../conformance/fixtures/protocol/studio.skill.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.activation.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.invocation.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.source.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.subscription.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.email.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.understanding.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.brief.v1.json"),
         include_bytes!(
             "../../../conformance/fixtures/protocol/bookkeeping.invoice-candidate.v3.json"
         ),

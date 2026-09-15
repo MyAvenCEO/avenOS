@@ -10,6 +10,7 @@ import chatMachineSource from './chat-machine.pl?raw'
 import { LlmActor } from './llm.actor'
 import { RegistryActor } from './registry.actor'
 import { singleton } from './singleton'
+import { StudioActor } from './studio.actor'
 import { summarizeRecord } from './summarize'
 import { todoActor } from './todo.svelte'
 import { chatStyle, chatView } from './views/chat/view'
@@ -219,6 +220,8 @@ bus.register(llmActor)
 bus.extractJson = extractJsonObject
 
 bus.register(todoActor)
+export const studioActor = singleton('aven.studio', () => new StudioActor())
+bus.register(studioActor)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))
 bus.register(registryActor)
 export const chatActor = singleton('aven.chat', () => new ChatActor())

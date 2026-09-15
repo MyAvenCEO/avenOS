@@ -60,6 +60,9 @@ const wait = (milliseconds: number): Promise<void> =>
 	new Promise((resolve) => setTimeout(resolve, milliseconds))
 
 export interface DocumentProcessingRuntimeOptions {
+	/** Bound by the trusted Studio coordinator, distinct from a source-based import retry. */
+	invocationId?: string
+	provenanceInputs?: import('@avenos/artifact-store').ClientRunInput[]
 	executionEnvironment?: ExecutionEnvironment
 	/** Physical host which owns the actors for this run. */
 	runtimeHost?: 'desktop' | 'actor-runner'
@@ -105,6 +108,8 @@ export class DocumentProcessingRuntime {
 		this.#modelEnabled = Boolean(actors.analyzePage && actors.classifyDocument)
 		this.#modelStatus = modelStatus
 		this.#options = {
+			invocationId: options.invocationId ?? '',
+			provenanceInputs: options.provenanceInputs ?? [],
 			executionEnvironment: options.executionEnvironment ?? 'local',
 			runtimeHost: options.runtimeHost ?? 'desktop',
 			procedureVersion: options.procedureVersion ?? 'client-v1'
@@ -167,7 +172,9 @@ export class DocumentProcessingRuntime {
 
 	async #run(source: DocumentSource): Promise<ArtifactProcessingPresentation> {
 		const presentation: ArtifactProcessingPresentation = {
-			caseId: await solverIdentity(`${source.artifactId}:document-skill-v2`),
+			caseId:
+				this.#options.invocationId ||
+				(await solverIdentity(`${source.artifactId}:document-skill-v2`)),
 			state: 'active',
 			projectionVersion: 'actor-document-v1',
 			preferredType: 'file',
@@ -606,7 +613,7 @@ export class DocumentProcessingRuntime {
 			publicationId: definition.publicationId,
 			procedureKey: result.procedureKey,
 			procedureVersion: this.#options.procedureVersion,
-			inputs: definition.inputs,
+			inputs: [...definition.inputs, ...this.#options.provenanceInputs],
 			parameters: {
 				...(definition.parameters ?? {}),
 				...(result.modelReceipt && { modelReceipt: result.modelReceipt })
