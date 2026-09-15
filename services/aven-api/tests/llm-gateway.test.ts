@@ -72,6 +72,7 @@ describe('generic authenticated LLM gateway', () => {
 			{
 				id: 'vision-fast',
 				label: 'Vision Fast',
+				maxParallelism: 5,
 				capabilities: [
 					'streaming',
 					'structured-output',
@@ -83,6 +84,7 @@ describe('generic authenticated LLM gateway', () => {
 			{
 				id: 'vision-accurate',
 				label: 'Vision Accurate',
+				maxParallelism: 5,
 				capabilities: [
 					'reasoning',
 					'streaming',
@@ -93,6 +95,61 @@ describe('generic authenticated LLM gateway', () => {
 				]
 			}
 		])
+	})
+
+	test('shares the configured model limit across desktop and runner completion routes', async () => {
+		let active = 0
+		let peak = 0
+		const gateway = LlmGatewayService.fromConfig(
+			{ ...config(), LLM_GATEWAY_MAX_PARALLELISM: 2 },
+			async () => {
+				active++
+				peak = Math.max(peak, active)
+				await new Promise((resolve) => setTimeout(resolve, 12))
+				active--
+				return new Response(JSON.stringify({ choices: [{ message: { content: 'Ready.' } }] }))
+			}
+		)
+		if (!gateway) throw new Error('Expected an enabled gateway')
+		const results = await Promise.all([
+			gateway.complete(request()),
+			gateway.complete(request({ modelId: 'vision-accurate' })),
+			gateway.complete(request()),
+			gateway.openAiChatCompletion({
+				model: 'vision-fast',
+				messages: [{ role: 'user', content: 'Ready?' }]
+			})
+		])
+		expect(peak).toBe(2)
+		expect(active).toBe(0)
+		expect(results).toHaveLength(4)
+		expect(gateway.models()[0]?.maxParallelism).toBe(2)
+	})
+
+	test('streaming occupies a shared slot until the client cancels it', async () => {
+		let calls = 0
+		const gateway = LlmGatewayService.fromConfig(
+			{ ...config(), LLM_GATEWAY_MAX_PARALLELISM: 1 },
+			async (_input, init) => {
+				calls++
+				const body = JSON.parse(String(init?.body)) as { stream?: boolean }
+				return body.stream
+					? new Response(new ReadableStream<Uint8Array>({ start() {} }))
+					: new Response(JSON.stringify({ choices: [{ message: { content: 'Ready.' } }] }))
+			}
+		)
+		if (!gateway) throw new Error('Expected an enabled gateway')
+		const streamed = await gateway.openAiChatCompletion({
+			model: 'vision-fast',
+			messages: [{ role: 'user', content: 'Stream?' }],
+			stream: true
+		})
+		const second = gateway.complete(request())
+		await Promise.resolve()
+		expect(calls).toBe(1)
+		await streamed.body?.cancel()
+		await second
+		expect(calls).toBe(2)
 	})
 
 	test('uses the explicit model id and returns its public identity in the receipt', async () => {

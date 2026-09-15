@@ -108,7 +108,14 @@ const handler = createActorRunnerHandler(
 				],
 				createActorPlanExecutor(createServerActorExecutionHost())
 			)
-			const runner = new SqlPlanRunner(api, worker, execute, true)
+			const runner = new SqlPlanRunner(
+				api,
+				worker,
+				execute,
+				true,
+				15 * 60_000,
+				config.ACTOR_RUNNER_MAX_PARALLELISM
+			)
 			const entry = { runner, api, worker }
 			runners.set(api, entry)
 			runners.set(worker, entry)

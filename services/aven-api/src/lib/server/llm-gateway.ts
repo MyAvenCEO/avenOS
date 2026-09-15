@@ -3,6 +3,7 @@ import { portableUsage } from '@avenos/llm-client'
 import { z } from 'zod'
 import type { ServerConfig } from './config.js'
 import { AppError } from './errors.js'
+import { LlmPermits } from './llm-permits.js'
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -200,6 +201,7 @@ export interface LlmModelDescriptor {
 	id: string
 	label: string
 	capabilities: string[]
+	maxParallelism: number
 }
 
 export interface LlmGatewayReceipt {
@@ -433,29 +435,42 @@ function responseFormatType(value: unknown): string | null {
 		: null
 }
 
-function boundedStream(body: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+function boundedStream(
+	body: ReadableStream<Uint8Array>,
+	onDone: () => void
+): ReadableStream<Uint8Array> {
 	const reader = body.getReader()
 	let length = 0
+	let finished = false
+	const finish = () => {
+		if (finished) return
+		finished = true
+		onDone()
+	}
 	return new ReadableStream<Uint8Array>({
 		async pull(controller) {
 			try {
 				const { done, value } = await reader.read()
 				if (done) {
+					finish()
 					controller.close()
 					return
 				}
 				length += value.length
 				if (length > MAX_STREAM_BYTES) {
 					await reader.cancel()
+					finish()
 					controller.error(new Error('LLM stream exceeded its byte limit.'))
 					return
 				}
 				controller.enqueue(value)
 			} catch (error) {
+				finish()
 				controller.error(error)
 			}
 		},
 		cancel(reason) {
+			finish()
 			return reader.cancel(reason)
 		}
 	})
@@ -480,6 +495,7 @@ export class LlmGatewayService {
 	readonly #models: ResolvedModel[]
 	readonly #modelsById: Map<string, ResolvedModel>
 	readonly #fetch: Fetch
+	readonly #permits: LlmPermits
 
 	private constructor(config: ServerConfig, fetch: Fetch) {
 		const catalog = parseConfigurationJson(
@@ -501,7 +517,8 @@ export class LlmGatewayService {
 				descriptor: {
 					id: model.id,
 					label: model.label,
-					capabilities: [...model.capabilities].sort()
+					capabilities: [...model.capabilities].sort(),
+					maxParallelism: config.LLM_GATEWAY_MAX_PARALLELISM
 				},
 				configuration: model,
 				endpoint: resolveEndpoint(model.baseUrl, config.LLM_GATEWAY_ALLOW_INSECURE_HTTP),
@@ -511,6 +528,7 @@ export class LlmGatewayService {
 		})
 		this.#modelsById = new Map(this.#models.map((model) => [model.descriptor.id, model]))
 		this.#fetch = fetch
+		this.#permits = new LlmPermits(config.LLM_GATEWAY_MAX_PARALLELISM)
 	}
 
 	static fromConfig(
@@ -529,7 +547,7 @@ export class LlmGatewayService {
 			.map((model) => structuredClone(model.descriptor))
 	}
 
-	async openAiChatCompletion(input: unknown): Promise<Response> {
+	async openAiChatCompletion(input: unknown, signal?: AbortSignal): Promise<Response> {
 		const request = openAiChatCompletionSchema.parse(input)
 		const model = this.#modelsById.get(request.model)
 		if (!model) throw new AppError(404, 'LLM_MODEL_NOT_FOUND', 'The selected model does not exist.')
@@ -578,60 +596,71 @@ export class LlmGatewayService {
 			'idempotency-key': requestKey
 		}
 		if (model.credential) headers.authorization = `Bearer ${model.credential}`
-
-		let upstream: Response
+		const release = await this.#permits.acquire(signal)
+		let streamed = false
 		try {
-			upstream = await this.#fetch(model.endpoint, {
-				method: 'POST',
-				headers,
-				body: requestBody,
-				redirect: 'error',
-				signal: AbortSignal.timeout(model.timeoutSeconds * 1000)
-			})
-		} catch {
-			throw new AppError(503, 'LLM_UNAVAILABLE', 'The selected model is unavailable.')
-		}
-		if (!upstream.ok) {
-			throw new AppError(
-				upstream.status === 429 ? 429 : 502,
-				'LLM_UPSTREAM_ERROR',
-				`The selected model returned HTTP ${upstream.status}.`
-			)
-		}
-		const responseHeaders = new Headers({
-			'x-aven-model-id': model.descriptor.id,
-			'x-aven-model-label': encodeURIComponent(model.descriptor.label),
-			'x-aven-model-capabilities': model.descriptor.capabilities.join(','),
-			'x-aven-request-key': requestKey
-		})
-		const providerRequestId = upstream.headers.get('x-request-id')
-		if (providerRequestId) responseHeaders.set('x-aven-provider-request-id', providerRequestId)
-
-		if (request.stream === true) {
-			if (!upstream.body) {
-				throw new AppError(502, 'LLM_INVALID_RESPONSE', 'Model stream was empty.')
+			let upstream: Response
+			try {
+				upstream = await this.#fetch(model.endpoint, {
+					method: 'POST',
+					headers,
+					body: requestBody,
+					redirect: 'error',
+					signal: signal
+						? AbortSignal.any([signal, AbortSignal.timeout(model.timeoutSeconds * 1000)])
+						: AbortSignal.timeout(model.timeoutSeconds * 1000)
+				})
+			} catch {
+				throw new AppError(503, 'LLM_UNAVAILABLE', 'The selected model is unavailable.')
 			}
-			responseHeaders.set('content-type', 'text/event-stream')
-			responseHeaders.set('cache-control', 'no-cache')
-			responseHeaders.set('connection', 'keep-alive')
-			return new Response(boundedStream(upstream.body), { headers: responseHeaders })
-		}
+			if (!upstream.ok) {
+				throw new AppError(
+					upstream.status === 429 ? 429 : 502,
+					'LLM_UPSTREAM_ERROR',
+					`The selected model returned HTTP ${upstream.status}.`
+				)
+			}
+			const responseHeaders = new Headers({
+				'x-aven-model-id': model.descriptor.id,
+				'x-aven-model-label': encodeURIComponent(model.descriptor.label),
+				'x-aven-model-capabilities': model.descriptor.capabilities.join(','),
+				'x-aven-request-key': requestKey
+			})
+			const providerRequestId = upstream.headers.get('x-request-id')
+			if (providerRequestId) responseHeaders.set('x-aven-provider-request-id', providerRequestId)
 
-		const raw = await boundedJson(upstream)
-		const providerReportedModel = typeof raw.model === 'string' ? raw.model : null
-		raw.model = model.descriptor.id
-		raw.aven = {
-			modelId: model.descriptor.id,
-			modelLabel: model.descriptor.label,
-			capabilities: [...model.descriptor.capabilities],
-			providerReportedModel,
-			requestKey
+			if (request.stream === true) {
+				if (!upstream.body) {
+					throw new AppError(502, 'LLM_INVALID_RESPONSE', 'Model stream was empty.')
+				}
+				responseHeaders.set('content-type', 'text/event-stream')
+				responseHeaders.set('cache-control', 'no-cache')
+				responseHeaders.set('connection', 'keep-alive')
+				const response = new Response(boundedStream(upstream.body, release), {
+					headers: responseHeaders
+				})
+				streamed = true
+				return response
+			}
+
+			const raw = await boundedJson(upstream)
+			const providerReportedModel = typeof raw.model === 'string' ? raw.model : null
+			raw.model = model.descriptor.id
+			raw.aven = {
+				modelId: model.descriptor.id,
+				modelLabel: model.descriptor.label,
+				capabilities: [...model.descriptor.capabilities],
+				providerReportedModel,
+				requestKey
+			}
+			responseHeaders.set('content-type', 'application/json')
+			return new Response(JSON.stringify(raw), { headers: responseHeaders })
+		} finally {
+			if (!streamed) release()
 		}
-		responseHeaders.set('content-type', 'application/json')
-		return new Response(JSON.stringify(raw), { headers: responseHeaders })
 	}
 
-	async complete(input: unknown): Promise<LlmGatewayResponse> {
+	async complete(input: unknown, signal?: AbortSignal): Promise<LlmGatewayResponse> {
 		const request = llmCompletionRequestSchema.parse(input)
 		const model = this.#modelsById.get(request.modelId)
 		if (!model) throw new AppError(404, 'LLM_MODEL_NOT_FOUND', 'The selected model does not exist.')
@@ -761,60 +790,66 @@ export class LlmGatewayService {
 			'idempotency-key': requestKey
 		}
 		if (model.credential) headers.authorization = `Bearer ${model.credential}`
-
-		let response: Response
+		const release = await this.#permits.acquire(signal)
 		try {
-			response = await this.#fetch(model.endpoint, {
-				method: 'POST',
-				headers,
-				body: requestBody,
-				redirect: 'error',
-				signal: AbortSignal.timeout(model.timeoutSeconds * 1000)
-			})
-		} catch {
-			throw new AppError(503, 'LLM_UNAVAILABLE', 'The selected model is unavailable.')
-		}
-		if (!response.ok) {
-			throw new AppError(
-				response.status === 429 ? 429 : 502,
-				'LLM_UPSTREAM_ERROR',
-				`The selected model returned HTTP ${response.status}.`
-			)
-		}
-		const raw = await boundedJson(response)
-		const message = responseMessage(raw)
-		const receipt: LlmGatewayReceipt = {
-			modelId: model.descriptor.id,
-			modelLabel: model.descriptor.label,
-			capabilities: [...model.descriptor.capabilities],
-			providerRequestId: typeof raw.id === 'string' ? raw.id : null,
-			httpRequestId: response.headers.get('x-request-id'),
-			providerReportedModel:
-				typeof raw.model === 'string' ? raw.model : model.configuration.upstreamModel,
-			profile: model.configuration.profile,
-			usage: portableUsage(raw.usage),
-			finishReason: finishReason(raw),
-			requestKey,
-			inputDigest: sha256(
-				JSON.stringify({
-					instructions: request.instructions ?? null,
-					messages: request.messages,
-					output: request.output
+			let response: Response
+			try {
+				response = await this.#fetch(model.endpoint, {
+					method: 'POST',
+					headers,
+					body: requestBody,
+					redirect: 'error',
+					signal: signal
+						? AbortSignal.any([signal, AbortSignal.timeout(model.timeoutSeconds * 1000)])
+						: AbortSignal.timeout(model.timeoutSeconds * 1000)
 				})
-			),
-			implementationDigest: sha256(
-				`${model.descriptor.id}:${model.configuration.profile}:${model.configuration.upstreamModel}:${model.endpoint}`
-			)
-		}
-		if (request.output.format === 'json') {
-			return {
-				output: {
-					format: 'json',
-					value: structuredContent(model.configuration.profile, message, request.output.name)
-				},
-				receipt
+			} catch {
+				throw new AppError(503, 'LLM_UNAVAILABLE', 'The selected model is unavailable.')
 			}
+			if (!response.ok) {
+				throw new AppError(
+					response.status === 429 ? 429 : 502,
+					'LLM_UPSTREAM_ERROR',
+					`The selected model returned HTTP ${response.status}.`
+				)
+			}
+			const raw = await boundedJson(response)
+			const message = responseMessage(raw)
+			const receipt: LlmGatewayReceipt = {
+				modelId: model.descriptor.id,
+				modelLabel: model.descriptor.label,
+				capabilities: [...model.descriptor.capabilities],
+				providerRequestId: typeof raw.id === 'string' ? raw.id : null,
+				httpRequestId: response.headers.get('x-request-id'),
+				providerReportedModel:
+					typeof raw.model === 'string' ? raw.model : model.configuration.upstreamModel,
+				profile: model.configuration.profile,
+				usage: portableUsage(raw.usage),
+				finishReason: finishReason(raw),
+				requestKey,
+				inputDigest: sha256(
+					JSON.stringify({
+						instructions: request.instructions ?? null,
+						messages: request.messages,
+						output: request.output
+					})
+				),
+				implementationDigest: sha256(
+					`${model.descriptor.id}:${model.configuration.profile}:${model.configuration.upstreamModel}:${model.endpoint}`
+				)
+			}
+			if (request.output.format === 'json') {
+				return {
+					output: {
+						format: 'json',
+						value: structuredContent(model.configuration.profile, message, request.output.name)
+					},
+					receipt
+				}
+			}
+			return { output: { format: 'text', text: textContent(message) }, receipt }
+		} finally {
+			release()
 		}
-		return { output: { format: 'text', text: textContent(message) }, receipt }
 	}
 }

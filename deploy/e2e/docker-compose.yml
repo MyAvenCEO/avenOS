@@ -195,6 +195,7 @@ services:
       ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
       ARTIFACT_STORE_BEARER_TOKEN: artifact-store-service-token-for-e2e-0001
       LLM_GATEWAY_ENABLED: "true"
+      LLM_GATEWAY_MAX_PARALLELISM: ${E2E_LLM_MAX_PARALLELISM:-5}
       LLM_GATEWAY_MODELS_JSON: ${E2E_LLM_MODELS_JSON:-[]}
       LLM_GATEWAY_CREDENTIALS_JSON: '{}'
       LLM_GATEWAY_ALLOW_INSECURE_HTTP: "true"
@@ -415,6 +416,7 @@ services:
       ARTIFACT_STORE_BEARER_TOKEN: actor-runner-artifact-token-for-e2e-01
       LLM_GATEWAY_BASE_URL: http://api:13000/internal/v1/llm
       LLM_GATEWAY_BEARER_TOKEN: actor-runner-llm-gateway-token-e2e-01
+      ACTOR_RUNNER_MAX_PARALLELISM: ${E2E_LLM_MAX_PARALLELISM:-5}
     networks: [platform-private, public-test]
 
   mailpit:

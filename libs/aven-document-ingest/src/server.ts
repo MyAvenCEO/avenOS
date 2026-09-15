@@ -134,7 +134,9 @@ export function createDocumentSkillExecutor(
 					}
 				}
 			: undefined
-		const actors = createDocumentActors(dependencies.decoder ?? new ServerDocumentDecoder(), model)
+		const decoder = dependencies.decoder ?? new ServerDocumentDecoder()
+		const createActors = () => createDocumentActors(decoder, model)
+		const actors = createActors()
 		const runtime = new DocumentProcessingRuntime(
 			actors,
 			gateway,
@@ -143,7 +145,8 @@ export function createDocumentSkillExecutor(
 				executionEnvironment: 'server',
 				runtimeHost: 'actor-runner',
 				procedureVersion: 'server-v1'
-			}
+			},
+			createActors
 		)
 		// Serialize status writes without turning progress into a solver fact or a
 		// successful publication. Flush before returning the authoritative result.

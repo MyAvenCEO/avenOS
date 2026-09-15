@@ -114,8 +114,11 @@ derived artifact with the runner's dedicated store identity. It discovers a
 vision-and-structured-output model through the API facade's service-authenticated
 internal LLM contract and uses the same model adapter and actor graph as the desktop.
 `LLM_GATEWAY_BASE_URL` and `LLM_GATEWAY_BEARER_TOKEN` configure that private edge; the
-bearer is distinct from the runner's ingress and Artifact Store identities. Uninstalled
-exploration skills fail at dispatch. Other exact-goal commands fall through to the
+bearer is distinct from the runner's ingress and Artifact Store identities.
+`ACTOR_RUNNER_MAX_PARALLELISM` bounds concurrent customer runs (1–32, default 5).
+The document runtime uses the gateway catalog's advertised model parallelism for
+independent page actors, while the API gateway limits aggregate model requests.
+Uninstalled exploration skills fail at dispatch. Other exact-goal commands fall through to the
 portable generic executor. That fallback has an empty registry and
 fail-closed authorization, factory, and Artifact Store ports, so an unknown skill
 cannot accidentally execute.

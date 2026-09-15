@@ -82,6 +82,17 @@ LOCAL_LLM_VISION=true \
 bun run local:up
 ```
 
+Set the model's request capacity with `LLM_GATEWAY_MAX_PARALLELISM` (1–32, default
+5) when starting the stack. This limit is shared by chat, desktop document imports,
+and Actor Runner requests through the API process. The catalog advertises it to both
+document hosts, and the local Compose stack uses it to bound concurrent Actor Runner
+runs. For a provider with five simultaneous requests:
+
+```sh
+LLM_GATEWAY_MAX_PARALLELISM=5 LOCAL_LLM_VISION=true \
+LOCAL_LLM_MODEL='replace-with-the-exact-model-id' bun run local:up
+```
+
 For a model server running on the same machine, omit `LOCAL_LLM_BASE_URL` to use
 `http://host.docker.internal:1234/v1`. The local Compose override maps that name on
 Linux and macOS.

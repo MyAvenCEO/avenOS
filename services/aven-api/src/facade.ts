@@ -129,7 +129,7 @@ export function createFacadeHandler(
 				})
 			try {
 				return await requestMemory.json(request, MAX_STRUCTURED_COMPLETION_BYTES, async (body) =>
-					json(200, await llmGateway.complete(body))
+					json(200, await llmGateway.complete(body, request.signal))
 				)
 			} catch (error) {
 				if (error instanceof BodyLimitError) return bodyLimitResponse(error)
@@ -165,13 +165,16 @@ export function createFacadeHandler(
 				if (!llmGateway)
 					throw new AppError(503, 'LLM_GATEWAY_UNAVAILABLE', 'The LLM gateway is not configured.')
 				return await requestMemory.json(request, MAX_STRUCTURED_COMPLETION_BYTES, async (body) =>
-					json(200, await llmGateway.complete(body))
+					json(200, await llmGateway.complete(body, request.signal))
 				)
 			}
 			if (url.pathname === '/api/llm/v1/chat/completions' && request.method === 'POST') {
 				if (!llmGateway)
 					throw new AppError(503, 'LLM_GATEWAY_UNAVAILABLE', 'The LLM gateway is not configured.')
-				return llmGateway.openAiChatCompletion(await readBoundedJson(request, 2 * 1024 * 1024))
+				return llmGateway.openAiChatCompletion(
+					await readBoundedJson(request, 2 * 1024 * 1024),
+					request.signal
+				)
 			}
 			if (url.pathname === '/api/environments' && request.method === 'GET')
 				return customers

@@ -17,7 +17,8 @@ export const actorRunnerConfigSchema = z.object({
 	ARTIFACT_STORE_BEARER_TOKEN: z.string().min(32),
 	LLM_GATEWAY_BASE_URL: z.url(),
 	LLM_GATEWAY_BEARER_TOKEN: z.string().min(32),
-	DOCUMENT_MODEL_ID: z.string().min(1).optional()
+	DOCUMENT_MODEL_ID: z.string().min(1).optional(),
+	ACTOR_RUNNER_MAX_PARALLELISM: z.coerce.number().int().min(1).max(32).default(5)
 })
 
 export type ActorRunnerConfig = z.infer<typeof actorRunnerConfigSchema>
