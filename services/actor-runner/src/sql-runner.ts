@@ -67,7 +67,8 @@ export class SqlPlanRunner implements PlanRunner {
 		private readonly worker: pg.Pool,
 		private readonly executor: PlanRunExecutor,
 		private readonly customerExecutionBarrier = false,
-		private readonly executionTimeoutMs = 15 * 60_000
+		private readonly executionTimeoutMs = 15 * 60_000,
+		private readonly maxParallelism = 5
 	) {
 		this.#timer = setInterval(() => {
 			if (!this.#closed) void this.recoverAcceptedRuns().catch((error) => this.log(error))
@@ -274,7 +275,7 @@ export class SqlPlanRunner implements PlanRunner {
 		} else {
 			if (submission.kind !== continuation.kind)
 				throw new PlanRunConflict('continuation kind mismatch')
-			if (this.#closed || this.#active.size >= 2 || this.#active.has(runId))
+			if (this.#closed || this.#active.size >= this.maxParallelism || this.#active.has(runId))
 				throw new PlanRunConflict(
 					'Execution is busy; submit the continuation again when capacity is available.'
 				)
@@ -311,7 +312,8 @@ export class SqlPlanRunner implements PlanRunner {
 		context?: PlanRunExecutionContext,
 		submission?: PlanRunContinuationSubmission
 	): Promise<boolean> {
-		if (this.#closed || this.#active.has(runId) || this.#active.size >= 2) return false
+		if (this.#closed || this.#active.has(runId) || this.#active.size >= this.maxParallelism)
+			return false
 		const controller = new AbortController()
 		this.#active.set(runId, controller)
 		let record: PlanRunRecord | undefined

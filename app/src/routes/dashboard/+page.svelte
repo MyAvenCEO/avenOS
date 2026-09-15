@@ -567,8 +567,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 			<IntentsPlaceholder />
 		</div>
 	{:else if shell.tab === 'skills'}
-		<!-- The skills platform: a skill is a collection of composable
-		     workflows; the canvas draws them n8n-style, every wire derived. -->
+		<!-- The shared Skill Studio: explore artifacts, compose programs and inspect runs. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
 			<SkillsPlatform />
 		</div>

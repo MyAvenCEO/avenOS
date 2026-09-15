@@ -74,6 +74,11 @@ export interface DocumentArtifactStoreRoute {
 }
 
 export interface DocumentSkillExecutorDependencies {
+	/** Trusted host binding; never populated from caller-supplied parameters. */
+	provenanceFor?(request: PlanRunStartRequest): {
+		invocationId: string
+		inputs: import('@avenos/artifact-store').ClientRunInput[]
+	}
 	artifactsFor(
 		request: PlanRunStartRequest
 	): DocumentArtifactStoreRoute | Promise<DocumentArtifactStoreRoute>
@@ -134,16 +139,26 @@ export function createDocumentSkillExecutor(
 					}
 				}
 			: undefined
-		const actors = createDocumentActors(dependencies.decoder ?? new ServerDocumentDecoder(), model)
+		const decoder = dependencies.decoder ?? new ServerDocumentDecoder()
+		const createActors = () => createDocumentActors(decoder, model)
+		const actors = createActors()
+		const provenance = dependencies.provenanceFor?.(request)
 		const runtime = new DocumentProcessingRuntime(
 			actors,
 			gateway,
 			model ? () => model.status() : undefined,
 			{
+				...(provenance
+					? {
+							invocationId: provenance.invocationId,
+							provenanceInputs: provenance.inputs
+						}
+					: {}),
 				executionEnvironment: 'server',
 				runtimeHost: 'actor-runner',
 				procedureVersion: 'server-v1'
-			}
+			},
+			createActors
 		)
 		// Serialize status writes without turning progress into a solver fact or a
 		// successful publication. Flush before returning the authoritative result.

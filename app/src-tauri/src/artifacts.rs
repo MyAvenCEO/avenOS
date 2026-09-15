@@ -349,6 +349,58 @@ fn intent_json(
 }
 
 #[tauri::command]
+pub async fn studio_request(
+    command: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let operation = command
+        .get("operation")
+        .and_then(|v| v.as_str())
+        .ok_or("A Studio operation is required.")?;
+    let read_only = matches!(
+        operation,
+        "state" | "inspect" | "explore" | "preview" | "compare"
+    );
+    if !read_only
+        && !matches!(
+            operation,
+            "draft"
+                | "publish"
+                | "start"
+                | "sample"
+                | "connect"
+                | "control"
+                | "sync"
+                | "run-control"
+        )
+    {
+        return Err("Unknown Studio operation.".into());
+    }
+    let path = if read_only {
+        "/api/actor-runs/studio/query"
+    } else {
+        "/api/actor-runs/studio/command"
+    };
+    let body = serde_json::to_string(&command).map_err(|e| e.to_string())?;
+    if body.len() > 256 * 1024 {
+        return Err("The Studio request is too large.".into());
+    }
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        customer_json(
+            token,
+            ACTOR_RUN_COMPONENT,
+            "actor-runs",
+            "POST",
+            path.into(),
+            Some(body),
+        )
+    })
+    .await
+    .map_err(|e| format!("Studio request failed: {e}"))?
+}
+
+#[tauri::command]
 pub async fn actor_run_start(
     command: serde_json::Value,
     state: tauri::State<'_, AuthState>,

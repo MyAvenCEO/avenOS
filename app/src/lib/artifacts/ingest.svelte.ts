@@ -9,6 +9,7 @@ import {
 } from '$lib/intents/persistent-artifact-projection'
 import { shell } from '$lib/intents/talk.svelte'
 import {
+	clientDocumentParallelism,
 	clientDocumentProcessingStatus,
 	clientDocumentSourceExecutionEnvironment,
 	processClientDocument
@@ -312,8 +313,10 @@ export async function ingestFile(
 			void watchArtifactProcessing(receipt.artifactId, receipt.intentId)
 			await processing
 		}
-		if (context?.background) emailDocumentQueue.enqueue(receipt.artifactId, startProcessing)
-		else void startProcessing()
+		if (context?.background) {
+			emailDocumentQueue.setMaxParallelism(await clientDocumentParallelism().catch(() => 1))
+			emailDocumentQueue.enqueue(receipt.artifactId, startProcessing)
+		} else void startProcessing()
 
 		return receipt
 	} catch (error) {

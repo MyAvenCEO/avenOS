@@ -10,6 +10,8 @@ export interface LlmModelDescriptor {
 	id: string
 	label: string
 	capabilities: string[]
+	/** Shared gateway capacity for requests using this catalog. */
+	maxParallelism?: number
 }
 
 export type LlmContentPart =

@@ -60,10 +60,19 @@ const wait = (milliseconds: number): Promise<void> =>
 	new Promise((resolve) => setTimeout(resolve, milliseconds))
 
 export interface DocumentProcessingRuntimeOptions {
+	/** Bound by the trusted Studio coordinator, distinct from a source-based import retry. */
+	invocationId?: string
+	provenanceInputs?: import('@avenos/artifact-store').ClientRunInput[]
 	executionEnvironment?: ExecutionEnvironment
 	/** Physical host which owns the actors for this run. */
 	runtimeHost?: 'desktop' | 'actor-runner'
 	procedureVersion?: 'client-v1' | 'server-v1'
+}
+
+interface ActorLane {
+	bus: MessageBus
+	actors: DocumentActors
+	active: number
 }
 
 /**
@@ -73,7 +82,9 @@ export interface DocumentProcessingRuntimeOptions {
  */
 export class DocumentProcessingRuntime {
 	readonly #actors: DocumentActors
-	readonly #bus: MessageBus
+	readonly #lanes: ActorLane[] = []
+	readonly #actorFactory?: () => DocumentActors
+	#nextLane = 0
 	readonly #gateway: ClientArtifactGateway
 	readonly #modelEnabled: boolean
 	readonly #modelStatus?: () => Promise<DocumentModelStatus>
@@ -87,19 +98,40 @@ export class DocumentProcessingRuntime {
 		actors: DocumentActors,
 		gateway: ClientArtifactGateway,
 		modelStatus?: () => Promise<DocumentModelStatus>,
-		options: DocumentProcessingRuntimeOptions = {}
+		options: DocumentProcessingRuntimeOptions = {},
+		actorFactory?: () => DocumentActors
 	) {
 		this.#actors = actors
-		this.#bus = new MessageBus()
-		for (const actor of actors.all) this.#bus.register(actor)
+		this.#actorFactory = actorFactory
+		this.#addLane(actors)
 		this.#gateway = gateway
 		this.#modelEnabled = Boolean(actors.analyzePage && actors.classifyDocument)
 		this.#modelStatus = modelStatus
 		this.#options = {
+			invocationId: options.invocationId ?? '',
+			provenanceInputs: options.provenanceInputs ?? [],
 			executionEnvironment: options.executionEnvironment ?? 'local',
 			runtimeHost: options.runtimeHost ?? 'desktop',
 			procedureVersion: options.procedureVersion ?? 'client-v1'
 		}
+	}
+
+	#addLane(actors: DocumentActors): void {
+		const bus = new MessageBus()
+		for (const actor of actors.all) bus.register(actor)
+		this.#lanes.push({ bus, actors, active: 0 })
+	}
+
+	#selectLane(): ActorLane {
+		const start = this.#nextLane++ % this.#lanes.length
+		let selected = this.#lanes[start]
+		if (!selected) throw new Error('Document actor lane is unavailable.')
+		for (let offset = 1; offset < this.#lanes.length; offset += 1) {
+			const lane = this.#lanes[(start + offset) % this.#lanes.length]
+			if (!lane) throw new Error('Document actor lane is unavailable.')
+			if (lane.active < selected.active) selected = lane
+		}
+		return selected
 	}
 
 	status(artifactId: string): ArtifactProcessingPresentation | undefined {
@@ -114,7 +146,7 @@ export class DocumentProcessingRuntime {
 		this.#closed = true
 		for (const id of this.#controllers.keys()) this.cancel(id)
 		await Promise.allSettled(this.#running.values())
-		for (const actor of this.#actors.all) actor.dispose()
+		for (const lane of this.#lanes) for (const actor of lane.actors.all) actor.dispose()
 	}
 	start(source: DocumentSource): Promise<ArtifactProcessingPresentation> {
 		if (this.#closed) return Promise.reject(new Error('Document runtime is closed.'))
@@ -140,7 +172,9 @@ export class DocumentProcessingRuntime {
 
 	async #run(source: DocumentSource): Promise<ArtifactProcessingPresentation> {
 		const presentation: ArtifactProcessingPresentation = {
-			caseId: await solverIdentity(`${source.artifactId}:document-skill-v2`),
+			caseId:
+				this.#options.invocationId ||
+				(await solverIdentity(`${source.artifactId}:document-skill-v2`)),
 			state: 'active',
 			projectionVersion: 'actor-document-v1',
 			preferredType: 'file',
@@ -184,8 +218,12 @@ export class DocumentProcessingRuntime {
 				modelPageLimit
 			})
 			const results = new Map<string, DocumentStepOutcome>()
+			const parallelism = model.available ? Math.min(32, Math.max(1, model.maxParallelism ?? 1)) : 1
+			while (this.#actorFactory && this.#lanes.length < parallelism)
+				this.#addLane(this.#actorFactory())
 			const run = await executeObservedProgram({
 				maxInvocations: 100_000,
+				maxParallelism: this.#actorFactory ? parallelism : 1,
 				runId:
 					presentation.caseId +
 					':' +
@@ -532,14 +570,21 @@ export class DocumentProcessingRuntime {
 			this.#changed(source.artifactId, presentation)
 			try {
 				signal.throwIfAborted()
-				const delivery = this.#bus.send({
+				const lane = this.#selectLane()
+				lane.active += 1
+				const delivery = lane.bus.send({
 					id: definition.publicationId,
 					from: 'document-runtime',
 					to: definition.actor,
 					method: definition.method,
 					payload: { ...definition.payload, source }
 				})
-				const response = await abortable(delivery, signal)
+				const response = await abortable(
+					delivery.finally(() => {
+						lane.active -= 1
+					}),
+					signal
+				)
 				signal.throwIfAborted()
 				result = parseDocumentActorResult(response.record)
 				break
@@ -568,7 +613,7 @@ export class DocumentProcessingRuntime {
 			publicationId: definition.publicationId,
 			procedureKey: result.procedureKey,
 			procedureVersion: this.#options.procedureVersion,
-			inputs: definition.inputs,
+			inputs: [...definition.inputs, ...this.#options.provenanceInputs],
 			parameters: {
 				...(definition.parameters ?? {}),
 				...(result.modelReceipt && { modelReceipt: result.modelReceipt })

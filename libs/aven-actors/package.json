@@ -16,6 +16,7 @@
 		"./registry": "./src/registry.ts",
 		"./run": "./src/run.ts",
 		"./sandbox": "./src/sandbox.ts",
+		"./studio": "./src/studio/index.ts",
 		"./abort": "./src/abort.ts"
 	},
 	"scripts": {

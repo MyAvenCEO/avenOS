@@ -45,10 +45,10 @@ export const customerComponentCatalog = [
 		componentRef: 'os.aven:component:actors:run-repository@1',
 		contractVersion: 1,
 		schema: 'aven_actor_runs',
-		targetSchemaVersion: 1,
-		migrationSetDigest: 'db8feebbeb4514adcf0c0b2a04601b712ea8e00b436d6fbfc67a17958193732c',
+		targetSchemaVersion: 2,
+		migrationSetDigest: 'b530598772310c113ad47cf732fbbb2ceb93e72c128e42f5abf53819f3840b45',
 		minimumRuntimeSchemaVersion: 1,
-		maximumRuntimeSchemaVersion: 1,
+		maximumRuntimeSchemaVersion: 2,
 		ownerRoleSuffix: 'act_owner',
 		functionRoles: [
 			{

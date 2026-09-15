@@ -1,6 +1,8 @@
 <script lang="ts">
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
+import { shell } from '$lib/intents/talk.svelte'
+import { studio } from '$lib/skills/studio.svelte'
 import ArtifactCard from './ArtifactCard.svelte'
 import ArtifactContentViewer from './ArtifactContentViewer.svelte'
 import ArtifactSemanticViewer from './ArtifactSemanticViewer.svelte'
@@ -434,6 +436,15 @@ onMount(() => {
 			class="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface-raised lg:w-1/2"
 		>
 			<header class="flex items-center gap-2 border-border border-b px-3 py-2">
+				{#if selectedId || rootId}
+					<button
+						type="button"
+						class="rounded-full border border-border px-3 py-1 text-xs"
+						onclick={() => { studio.requestedArtifactId = selectedId ?? rootId; shell.tab = 'skills' }}
+					>
+						Explore possibilities ↗
+					</button>
+				{/if}
 				<div class="flex rounded-full border border-border p-0.5 text-xs">
 					<button
 						type="button"

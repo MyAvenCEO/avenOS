@@ -47,6 +47,7 @@ export class LlmDocumentModelGateway implements DocumentModelGateway {
 	async status(): Promise<{
 		available: boolean
 		maxPages: number
+		maxParallelism: number
 		modelId?: string
 		modelLabel?: string
 		alternatives: Array<{ id: string; label: string }>
@@ -55,6 +56,7 @@ export class LlmDocumentModelGateway implements DocumentModelGateway {
 		return {
 			available: selected !== null,
 			maxPages: MAX_MODEL_PAGES,
+			maxParallelism: selected?.maxParallelism ?? 1,
 			...(selected && { modelId: selected.id, modelLabel: selected.label }),
 			alternatives: alternatives.map(({ id, label }) => ({ id, label }))
 		}

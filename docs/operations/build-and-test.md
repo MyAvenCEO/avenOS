@@ -41,6 +41,32 @@ Run the application unit tests separately:
 (cd app && bun test)
 ```
 
+Skill Studio's compiler and service tests run in the customer-platform suite.
+Its `studio.persistence.e2e.test.ts` is included in the Actor Runner persistence
+stage of the full-stack gate and requires both its disposable PostgreSQL database
+and production Artifact Store. It proves the synthetic source → nested document
+Skill → subscribed brief path, provenance, duplicate delivery, restart and draft
+conflicts. It does not contact a mailbox or call a model.
+
+Persistence test files run sequentially because they share one Artifact Store
+with its production two-upload admission limit. Tests still exercise concurrent
+claims, dispatch, and execution within each file; fixture setup from unrelated
+files must not compete for those same slots.
+
+For the Studio browser interaction check, start an isolated worktree preview and
+run the test in a second terminal:
+
+```sh
+(cd app && bunx vite --host 127.0.0.1 --port 1449 --strictPort)
+bun app/tests/studio-ui.mjs
+```
+
+`AVEN_STUDIO_UI_URL` overrides the preview origin. If the workstation has exhausted
+its file-watch limit, prefix the preview command with `CHOKIDAR_USEPOLLING=true`.
+The browser test uses the real component and compiler, simulates only native IPC,
+and writes desktop/mobile screenshots under `/tmp/aven-studio-*.png`; it is not a
+replacement for the database-backed proof.
+
 Format and lint changed files before committing:
 
 ```sh

@@ -177,6 +177,7 @@ pub fn run() {
 			imap::imap_account_scope,
 			imap::imap_scan,
 			artifacts::actor_run_start,
+			artifacts::studio_request,
 			artifacts::actor_run_status,
 			artifacts::actor_run_control,
 			artifacts::artifact_upload,

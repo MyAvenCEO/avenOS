@@ -82,13 +82,27 @@ cust_<environment-id>
 ├── aven_platform      reconciliation metadata
 ├── artifact_store     artifacts, blobs, evidence, and production runs
 ├── aven_intents       intents and contribution history, including chat
-└── aven_actor_runs    durable Actor run state
+└── aven_actor_runs    durable Actor runs, Studio drafts, connections, deliveries
 ```
 
 `PUBLIC` access is revoked. Database and schema owners are `NOLOGIN`. Each executable
 function receives a customer-qualified login that can connect to exactly one customer
 database and access only its component schema. Artifact, Intent, and Actor roles cannot
 read each other's tables or create arbitrary objects.
+
+Actor component schema version 2 adds Skill Studio's revision-checked draft heads,
+subscription cursors and durable delivery intents. The Actor API role receives
+`SELECT`, `INSERT`, and `UPDATE` on these three tables; the worker role remains
+limited to the run table. Published Skills, synthetic Source definitions, captures,
+activation/invocation receipts and results remain in the Artifact Store, accessed
+through its scoped API. Studio does not read Artifact tables directly.
+
+Studio query and command requests use the existing customer `actor-runs` route.
+The exact `POST /studio/query` suffix requires `actor-runs:read` and rejects
+mutating operations; `POST /studio/command` requires `actor-runs:write`.
+Subscription dispatch currently requires a live authorized user request, not a
+persisted user token or unattended worker identity. See
+[Skill Studio](skill-studio.md#implemented-first-slice) for current limits.
 
 ## Provisioning and reconciliation
 

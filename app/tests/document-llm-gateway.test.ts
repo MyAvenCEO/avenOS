@@ -55,6 +55,7 @@ describe('document LLM gateway adapter', () => {
 		expect(await gateway.status()).toEqual({
 			available: true,
 			maxPages: 63,
+			maxParallelism: 1,
 			modelId: 'vision/primary',
 			modelLabel: 'Primary vision model',
 			alternatives: [

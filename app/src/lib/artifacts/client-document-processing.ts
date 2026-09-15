@@ -52,9 +52,14 @@ const documentModelGateway = singleton(
 	'aven.document-model-gateway',
 	() => new LlmDocumentModelGateway()
 )
-const actors = singleton('aven.document-processing-actors', () =>
-	createDocumentActors(new BrowserDocumentDecoder(), documentModelGateway)
-)
+const decoder = singleton('aven.document-decoder', () => new BrowserDocumentDecoder())
+const createActors = () => createDocumentActors(decoder, documentModelGateway)
+const actors = singleton('aven.document-processing-actors', createActors)
+
+export async function clientDocumentParallelism(): Promise<number> {
+	const status = await documentModelGateway.status()
+	return status.available ? Math.min(32, Math.max(1, status.maxParallelism ?? 1)) : 1
+}
 
 class TauriClientArtifactGateway implements ClientArtifactGateway {
 	lookup(publicationId: string): Promise<CommittedClientRun | null> {
@@ -99,10 +104,13 @@ const documentSources = singleton(
 const localDocumentRuntime = singleton(
 	'aven.local-document-runtime',
 	() =>
-		new DocumentProcessingRuntime(actors, publicationGateway, () => documentModelGateway.status(), {
-			executionEnvironment: 'local',
-			runtimeHost: 'desktop'
-		})
+		new DocumentProcessingRuntime(
+			actors,
+			publicationGateway,
+			() => documentModelGateway.status(),
+			{ executionEnvironment: 'local', runtimeHost: 'desktop' },
+			createActors
+		)
 )
 class TauriPlanRunnerClient implements PlanRunnerClient {
 	start(command: PlanRunStartCommand): Promise<PlanRunHandle> {
