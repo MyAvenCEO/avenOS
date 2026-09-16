@@ -65,6 +65,53 @@ export class ArtifactHandler {
 	): Promise<Response> {
 		try {
 			const segments = suffix.replace(/^\//, '').replace(/\/$/, '').split('/').filter(Boolean)
+			if (segments[0] === 'library' && segments.length === 1 && request.method === 'GET') {
+				const query = z
+					.object({
+						collection: z.enum([
+							'documents',
+							'invoices',
+							'statements',
+							'transactions',
+							'line-items'
+						]),
+						category: z
+							.enum([
+								'all',
+								'email',
+								'invoice',
+								'credit-note',
+								'receipt',
+								'statement',
+								'voucher',
+								'contract',
+								'contract-summary',
+								'transport-ticket',
+								'booking-confirmation',
+								'delivery-notification',
+								'other',
+								'unknown'
+							])
+							.optional(),
+						search: z.string().max(512).optional(),
+						sourceId: uuid.optional(),
+						sort: z.string().min(1).max(64).optional(),
+						direction: z.enum(['asc', 'desc']).optional(),
+						after: z.string().max(4096).optional(),
+						limit: z.coerce.number().int().min(1).max(100).optional()
+					})
+					.strict()
+					.parse(Object.fromEntries(new URL(request.url).searchParams))
+				return json(
+					200,
+					await this.service.library(
+						tenant.databaseName,
+						tenant.environmentId,
+						query,
+						tenant.routingGeneration
+					)
+				)
+			}
 			if (segments[0] === 'query' && segments.length === 1 && request.method === 'GET') {
 				const query = z
 					.object({

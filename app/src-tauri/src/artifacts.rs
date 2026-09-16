@@ -1193,9 +1193,64 @@ pub async fn artifact_store_list(
     .map_err(|error| format!("Artifact list task failed: {error}"))?
 }
 
+fn library_query_path(query: &serde_json::Value) -> Result<String, String> {
+    let values = query.as_object().ok_or("The library query is invalid.")?;
+    let mut endpoint = tauri::Url::parse("http://localhost/api/artifacts/library")
+        .map_err(|error| format!("Invalid library path: {error}"))?;
+    {
+        let mut parameters = endpoint.query_pairs_mut();
+        for (key, value) in values {
+            if value.is_null() {
+                continue;
+            }
+            if ![
+                "collection", "category", "search", "sourceId", "sort", "direction", "after", "limit",
+            ]
+            .contains(&key.as_str())
+            {
+                return Err("The library query field is invalid.".into());
+            }
+            let text = value.as_str().map_or_else(|| value.to_string(), str::to_owned);
+            if text.len() > 4096 {
+                return Err("The library query is too long.".into());
+            }
+            parameters.append_pair(key, &text);
+        }
+    }
+    Ok(format!(
+        "/api/artifacts/library?{}",
+        endpoint.query().unwrap_or("")
+    ))
+}
+
+#[tauri::command]
+pub async fn artifact_library(
+    query: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let path = library_query_path(&query)?;
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || artifact_json(token, "GET", path, None))
+        .await
+        .map_err(|error| format!("Library query task failed: {error}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn library_query_encodes_search_and_rejects_routing_fields() {
+        let path = library_query_path(&serde_json::json!({
+            "collection": "documents", "search": "a&scopeId=other + Ü", "limit": 50
+        }))
+        .unwrap();
+        let endpoint = tauri::Url::parse(&format!("http://localhost{path}")).unwrap();
+        let pairs: std::collections::HashMap<_, _> = endpoint.query_pairs().collect();
+        assert_eq!(pairs.get("search").unwrap(), "a&scopeId=other + Ü");
+        assert_eq!(pairs.len(), 3);
+        assert!(library_query_path(&serde_json::json!({"scopeId": "other"})).is_err());
+    }
 
     #[test]
     fn upload_retry_uses_structured_transport_classification() {

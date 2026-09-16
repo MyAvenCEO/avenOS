@@ -19,6 +19,9 @@ use uuid::Uuid;
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
+mod library;
+pub use library::LibraryQuery;
+
 #[derive(Debug, Error)]
 pub enum StoreError {
     #[error("database operation failed: {0}")]
@@ -49,6 +52,8 @@ pub enum StoreError {
     InputUnavailable,
     #[error("immutable store invariant failed: {0}")]
     Integrity(String),
+    #[error("{0}")]
+    InvalidLibraryQuery(String),
 }
 
 #[derive(Clone)]

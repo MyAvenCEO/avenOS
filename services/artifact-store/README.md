@@ -43,6 +43,10 @@ commands and the complete native/customer-database E2E gate; the
 
 ## Evidence bounds
 
+The [artifact library](../../docs/artifact-library.md) uses scoped, publication-bound
+read projections and schema version 4 indexes. Its document and financial rows do not
+rewrite stored artifacts or create supplier/entity records.
+
 Publication validates evidence against the exact input and output artifacts. Byte
 ranges must fit the primary blob; JSON pointers must use RFC 6901 escapes and resolve
 to an existing payload value. Invalid locators return `422 INVALID_EVIDENCE`. Page

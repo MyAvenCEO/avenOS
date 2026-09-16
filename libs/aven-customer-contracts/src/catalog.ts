@@ -5,10 +5,10 @@ export const customerComponentCatalog = [
 		componentRef: 'ceo.aven:component:data:artifacts@1',
 		contractVersion: 1,
 		schema: 'artifact_store',
-		targetSchemaVersion: 3,
-		migrationSetDigest: 'd0f56d78fac8732d7340caf4079d7d63616e4a1599c56cddbe821326569cf72f',
+		targetSchemaVersion: 4,
+		migrationSetDigest: '6de72cc9378f7e98733f02d8cd449db490c3df19002419b4226013903bc78119',
 		minimumRuntimeSchemaVersion: 1,
-		maximumRuntimeSchemaVersion: 3,
+		maximumRuntimeSchemaVersion: 4,
 		ownerRoleSuffix: 'art_owner',
 		functionRoles: [
 			{

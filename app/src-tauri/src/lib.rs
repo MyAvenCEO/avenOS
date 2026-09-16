@@ -201,6 +201,7 @@ pub fn run() {
 			artifacts::artifact_get,
 			artifacts::artifact_evidence_get,
 			artifacts::artifact_store_list,
+			artifacts::artifact_library,
 			auth::auth_status,
 			 auth::auth_names,
 			auth::hosting_list,
