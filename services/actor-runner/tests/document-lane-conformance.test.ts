@@ -651,7 +651,9 @@ async function modelParityRun(model: () => GoldenInvoiceModel) {
 // Independent page jobs publish in completion order. Compare their full results
 // as a multiset while preserving payloads, duplicates, and all within-run ordinals.
 function canonicalParallelResults<T>(values: T[]): T[] {
-	return [...values].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
+	return [...values].sort((left, right) =>
+		JSON.stringify(left).localeCompare(JSON.stringify(right))
+	)
 }
 
 function canonicalPresentation(presentation: ArtifactProcessingPresentation) {
