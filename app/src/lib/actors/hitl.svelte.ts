@@ -33,6 +33,19 @@ export function rejectHeld(id: string): void {
 	void bus.rejectHeld(id).catch((error) => reviewFailed(id, error))
 }
 
+/** Prevent review callbacks from crossing a native customer-environment transition. */
+export function suspendHeldForEnvironmentSwitch(): boolean {
+	return bus.suspendHeldActions()
+}
+
+export function resumeHeldAfterEnvironmentSwitch(): void {
+	bus.resumeHeldActions()
+}
+
+export function discardHeldForEnvironmentSwitch(): void {
+	bus.discardHeldActions()
+}
+
 function reviewFailed(id: string, error: unknown): void {
 	const message = error instanceof Error ? error.message : String(error)
 	hitlQueue.items = hitlQueue.items.map((held) =>

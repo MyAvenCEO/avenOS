@@ -1,17 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import {
 	ACTOR_RUN_PROTOCOL,
-	StudioCatalog,
-	presentSkillArtifact,
-	parseStudioSkillV2,
-	StudioSkillV2Error,
-	validateStudioSkillCapabilities,
 	type ActorAuthorizer,
 	type ActorRegistrySnapshot,
 	type CapabilityId,
 	type PlanRunExecutionContext,
 	type PlanRunner,
-	type PlanRunSecurityContext
+	type PlanRunSecurityContext,
+	parseStudioSkillV2,
+	presentSkillArtifact,
+	StudioCatalog,
+	StudioSkillV2Error,
+	validateStudioSkillCapabilities
 } from '@avenos/actors'
 import {
 	compileStudio,

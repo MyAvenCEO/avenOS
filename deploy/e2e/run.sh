@@ -165,6 +165,7 @@ bun run --cwd "$root/services/actor-runner" test:e2e:persistence
 
 (
   cd "$root/services/checkout"
+  ./node_modules/.bin/svelte-kit sync
   TEST_ADMIN_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \
     ./node_modules/.bin/vitest run
 )

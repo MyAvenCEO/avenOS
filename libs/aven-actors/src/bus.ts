@@ -304,8 +304,27 @@ export class MessageBus {
 	/** Held messages: the queue behind the one HITL bar. */
 	#held = new Map<string, { confirm: () => Promise<HandlerResult>; reject?: () => Promise<void> }>()
 	#resolving = new Set<string>()
+	#heldSuspended = false
 	onHold?: (held: HeldMessage) => void
 	onHeldResolved?: (id: string) => void
+
+	/** Freeze the physical review gate before changing customer context. */
+	suspendHeldActions(): boolean {
+		if (this.#resolving.size > 0) return false
+		this.#heldSuspended = true
+		return true
+	}
+
+	resumeHeldActions(): void {
+		this.#heldSuspended = false
+	}
+
+	/** Drop callbacks captured under the previous customer without executing them. */
+	discardHeldActions(): void {
+		if (this.#resolving.size > 0) throw new Error('review is being saved')
+		for (const id of this.#held.keys()) this.onHeldResolved?.(id)
+		this.#held.clear()
+	}
 
 	/** Bind an application review to the existing human gate, without exposing a confirm tool. */
 	holdAction(
@@ -319,7 +338,7 @@ export class MessageBus {
 	}
 
 	async confirmHeld(id: string): Promise<HandlerResult> {
-		if (this.#resolving.has(id))
+		if (this.#heldSuspended || this.#resolving.has(id))
 			return {
 				record: JSON.stringify({ ok: false, error: 'review is being saved' }),
 				wire: 'review is being saved'
@@ -341,7 +360,7 @@ export class MessageBus {
 	}
 
 	async rejectHeld(id: string): Promise<void> {
-		if (this.#resolving.has(id)) return
+		if (this.#heldSuspended || this.#resolving.has(id)) return
 		this.#resolving.add(id)
 		try {
 			await this.#held.get(id)?.reject?.()

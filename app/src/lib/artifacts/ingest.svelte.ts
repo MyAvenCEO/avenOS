@@ -1,6 +1,7 @@
 import type { ExecutionEnvironment } from '@avenos/actors'
 import { invoke } from '@tauri-apps/api/core'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
+import { discardHeldForEnvironmentSwitch } from '$lib/actors/hitl.svelte'
 import { anonymousSpeakerFromPayload } from '$lib/chat/anonymous-speaker'
 import { intents, type PersistentIntentDetail } from '$lib/intents/intents.svelte'
 import {
@@ -15,6 +16,7 @@ import {
 	clientDocumentSourceExecutionEnvironment,
 	processClientDocument
 } from './client-document-processing'
+import { clientReconciliation } from './client-reconciliation'
 import { emailDocumentQueue } from './document-import-queue.svelte'
 import type { FileImportContext } from './email-import'
 import { type ArtifactProcessingLookup, isTerminalProcessing } from './processing'
@@ -63,6 +65,8 @@ export function resetCustomerWorkspace(): void {
 	workspaceEpoch++
 	processingWatchers.clear()
 	emailDocumentQueue.discardPending()
+	discardHeldForEnvironmentSwitch()
+	clientReconciliation.resetForEnvironment()
 	resetStudioForEnvironment()
 	chat.resetForEnvironment()
 	intents.resetForEnvironment()

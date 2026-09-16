@@ -713,27 +713,15 @@ async function tauriReconciliation(
 
 async function tauriEnvironmentSwitchAcceptance(
 	page: import('@playwright/test').Page,
-	first: { id: string; name: string; priorSources: string[] },
-	second: { id: string; name: string },
+	first: { id: string; priorSources: string[] },
+	second: { id: string },
 	authorizedHeaders: Record<string, string>
 ): Promise<void> {
 	const session = await TauriSession.launch(tauriApplication, tauriDriver)
-	async function waitForSelectedName(name: string): Promise<void> {
-		const deadline = Date.now() + 30_000
-		let lastLabel = ''
-		let lastError = ''
-		while (Date.now() < deadline) {
-			try {
-				const label = await session.text(await session.find('[data-testid="environment-current"]'))
-				lastLabel = label
-				if (label.includes(`${name}.aven.ceo`)) return
-			} catch (cause) {
-				lastError = String(cause)
-			}
-			await new Promise((resolve) => setTimeout(resolve, 200))
-		}
-		throw new Error(
-			`Tauri did not select ${name}.aven.ceo in the same session; label=${JSON.stringify(lastLabel)}; error=${lastError}; url=${await session.url()}; body=${await session.bodyText()}`
+	async function waitForSelectedEnvironment(id: string): Promise<void> {
+		await session.findEventually(
+			`[data-testid="environment-choice-${id}"][aria-current="page"]`,
+			30_000
 		)
 	}
 	async function studioScope(): Promise<string> {
@@ -765,16 +753,15 @@ async function tauriEnvironmentSwitchAcceptance(
 		await page.goto(`${identityBrowser}/device?user_code=${code[1]}${code[2]}`)
 		await expect(page.getByRole('button', { name: 'Authorize' })).toBeVisible()
 		await page.getByRole('button', { name: 'Authorize' }).click()
-		await session.waitForBodyText('Wähle deine Umgebung')
 		await session.click(
 			await session.findEventually(`[data-testid="environment-choice-${first.id}"]`)
 		)
-		await waitForSelectedName(first.name)
+		await waitForSelectedEnvironment(first.id)
 		expect(await studioScope()).toBe(first.id)
 		await session.click(
 			await session.findEventually(`[data-testid="environment-choice-${second.id}"]`)
 		)
-		await waitForSelectedName(second.name)
+		await waitForSelectedEnvironment(second.id)
 		expect(await studioScope()).toBe(second.id)
 
 		const dashboard = new URL(await session.url())
@@ -796,7 +783,7 @@ async function tauriEnvironmentSwitchAcceptance(
 		await session.click(
 			await session.findEventually(`[data-testid="environment-choice-${first.id}"]`)
 		)
-		await waitForSelectedName(first.name)
+		await waitForSelectedEnvironment(first.id)
 		expect(await studioScope()).toBe(first.id)
 		const firstBase = `${api}/api/environments/${first.id}/artifacts`
 		const firstBrowse = (await json(await fetch(firstBase, { headers: authorizedHeaders }))) as {
@@ -1325,10 +1312,9 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 		secondPage,
 		{
 			id: environment.id,
-			name,
 			priorSources: [tauri.sourceArtifactId, tauri.serverSourceArtifactId]
 		},
-		{ id: secondEnvironment.id, name: secondName },
+		{ id: secondEnvironment.id },
 		authorizedHeaders
 	)
 

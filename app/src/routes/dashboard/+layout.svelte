@@ -1,12 +1,17 @@
 <script lang="ts">
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { onMount } from 'svelte'
 import type { Snippet } from 'svelte'
+import { onMount } from 'svelte'
+import {
+	resumeHeldAfterEnvironmentSwitch,
+	suspendHeldForEnvironmentSwitch
+} from '$lib/actors/hitl.svelte'
 import { SPARKS, todoActor } from '$lib/actors/todo.svelte'
 import { clientDocumentRunsBusy } from '$lib/artifacts/client-document-processing'
-import { ingestBusy, resetCustomerWorkspace } from '$lib/artifacts/ingest.svelte'
+import { clientReconciliation } from '$lib/artifacts/client-reconciliation'
 import { emailDocumentProcessing } from '$lib/artifacts/document-import-queue.svelte'
 import { emailJob } from '$lib/artifacts/email-job.svelte'
+import { ingestBusy, resetCustomerWorkspace } from '$lib/artifacts/ingest.svelte'
 import { shell } from '$lib/intents/talk.svelte'
 import {
 	currentSurface,
@@ -44,24 +49,54 @@ let environmentSelection = $state<EnvironmentSelection | null>(null)
 let environmentFailure = $state<string | null>(null)
 let environmentBusy = $state(false)
 let switching = $state(false)
-const selectedEnvironment = $derived(
-	environmentSelection?.environments.find((entry) => entry.id === environmentSelection?.selectedEnvironmentId)
+const customerReady = $derived(
+	(!isTauri() ||
+		environmentSelection?.environments.some(
+			(entry) => entry.id === environmentSelection?.selectedEnvironmentId
+		)) &&
+		!switching
 )
-const customerReady = $derived((!isTauri() || Boolean(selectedEnvironment)) && !switching)
 
 function environmentAvailable(entry: EnvironmentChoice): boolean {
-	return entry.role === 'owner' && entry.desiredState === 'ready' &&
-		entry.observedState === 'ready' && entry.components.every((component) => component.observedState === 'ready')
+	return (
+		entry.role === 'owner' &&
+		entry.desiredState === 'ready' &&
+		entry.observedState === 'ready' &&
+		entry.components.every((component) => component.observedState === 'ready')
+	)
+}
+
+function customerWriteBusy(): boolean {
+	return ingestBusy() || clientDocumentRunsBusy() || emailDocumentProcessing.active > 0
+}
+
+function beginEnvironmentTransition(): boolean {
+	if (customerWriteBusy() || !suspendHeldForEnvironmentSwitch()) {
+		environmentFailure = 'Warte, bis die aktuelle Kundenaktion abgeschlossen ist.'
+		return false
+	}
+	if (!clientReconciliation.suspendForEnvironmentSwitch()) {
+		resumeHeldAfterEnvironmentSwitch()
+		environmentFailure = 'Warte, bis die aktuelle Kundenaktion abgeschlossen ist.'
+		return false
+	}
+	return true
+}
+
+function finishEnvironmentTransition(): void {
+	clientReconciliation.resumeAfterEnvironmentSwitch()
+	resumeHeldAfterEnvironmentSwitch()
 }
 
 async function refreshEnvironments() {
 	if (!isTauri()) return
+	if (!beginEnvironmentTransition()) return
 	environmentBusy = true
 	environmentFailure = null
 	try {
 		const previous = environmentSelection?.selectedEnvironmentId
 		const next = await invoke<EnvironmentSelection>('auth_environments')
-		if (previous && previous !== next.selectedEnvironmentId) {
+		if (previous !== next.selectedEnvironmentId) {
 			emailJob.resetForEnvironment()
 			resetCustomerWorkspace()
 		}
@@ -69,36 +104,36 @@ async function refreshEnvironments() {
 	} catch (cause) {
 		environmentFailure = String(cause)
 	} finally {
+		finishEnvironmentTransition()
 		environmentBusy = false
 	}
 }
 
 async function selectEnvironment(id: string) {
 	if (id === environmentSelection?.selectedEnvironmentId) return
-	if (ingestBusy() || clientDocumentRunsBusy() || emailDocumentProcessing.active > 0) {
-		environmentFailure = 'Warte, bis der aktuelle Dokumentlauf abgeschlossen ist.'
-		return
-	}
-	const replacingEnvironment = Boolean(environmentSelection?.selectedEnvironmentId)
+	if (!beginEnvironmentTransition()) return
 	environmentBusy = true
 	switching = true
 	environmentFailure = null
 	try {
-		const next = await invoke<EnvironmentSelection>('auth_environment_select', { environmentId: id })
-		if (replacingEnvironment) {
-			emailJob.resetForEnvironment()
-			resetCustomerWorkspace()
-		}
+		const next = await invoke<EnvironmentSelection>('auth_environment_select', {
+			environmentId: id
+		})
+		emailJob.resetForEnvironment()
+		resetCustomerWorkspace()
 		environmentSelection = next
 	} catch (cause) {
 		environmentFailure = String(cause)
 	} finally {
+		finishEnvironmentTransition()
 		environmentBusy = false
 		switching = false
 	}
 }
 
-onMount(() => { void refreshEnvironments() })
+onMount(() => {
+	void refreshEnvironments()
+})
 
 const surface = $derived(currentSurface())
 
@@ -168,17 +203,28 @@ function buttonClass(active: boolean): string {
 		{#if isTauri()}
 			{#each environmentSelection?.environments ?? [] as entry (entry.id)}
 				{@const active = entry.id === environmentSelection?.selectedEnvironmentId}
-				<button type="button" data-testid="environment-choice-{entry.id}" onclick={() => selectEnvironment(entry.id)} disabled={!environmentAvailable(entry) || environmentBusy} title="{entry.purchasedName}.aven.ceo" aria-label="Umgebung {entry.purchasedName}.aven.ceo" aria-current={active ? 'page' : undefined} class="relative text-xs {buttonClass(active)} disabled:opacity-40">
+				<button
+					type="button"
+					data-testid="environment-choice-{entry.id}"
+					onclick={() => selectEnvironment(entry.id)}
+					disabled={!environmentAvailable(entry) || environmentBusy}
+					title="{entry.purchasedName}.aven.ceo"
+					aria-label="Umgebung {entry.purchasedName}.aven.ceo"
+					aria-current={active ? 'page' : undefined}
+					class="relative text-xs {buttonClass(active)} disabled:opacity-40"
+				>
 					{entry.purchasedName.slice(0, 2).toUpperCase()}
-					{#if active}<span class="-left-[13px] absolute h-6 w-1 rounded-full bg-primary"></span>{/if}
+					{#if active}
+						<span class="-left-[13px] absolute h-6 w-1 rounded-full bg-primary"></span>
+					{/if}
 				</button>
 			{/each}
 		{:else}
-		{#each SPARKS as spark (spark.id)}
-			{@const active = todoActor.state.active === spark.id && surface === 'intents'}
-			<button
-				type="button"
-				onclick={() => {
+			{#each SPARKS as spark (spark.id)}
+				{@const active = todoActor.state.active === spark.id && surface === 'intents'}
+				<button
+					type="button"
+					onclick={() => {
 					// One call puts the rail on the intents surface — route and flag
 					// together — and the active spark is reducer state like any
 					// other, switched through the SHOW event, the same door the
@@ -186,16 +232,16 @@ function buttonClass(active: boolean): string {
 					openSurface('intents')
 					void todoActor.applyEvent({ send: 'SHOW', payload: { spark: spark.id } })
 				}}
-				title={spark.name}
-				aria-label="Spark {spark.name}"
-				class="relative text-xs {buttonClass(active)} {active ? '' : 'opacity-70'}"
-			>
-				{spark.id.slice(0, 2).toUpperCase()}
-				{#if active}
-					<span class="-left-[13px] absolute h-6 w-1 rounded-full bg-primary"></span>
-				{/if}
-			</button>
-		{/each}
+					title={spark.name}
+					aria-label="Spark {spark.name}"
+					class="relative text-xs {buttonClass(active)} {active ? '' : 'opacity-70'}"
+				>
+					{spark.id.slice(0, 2).toUpperCase()}
+					{#if active}
+						<span class="-left-[13px] absolute h-6 w-1 rounded-full bg-primary"></span>
+					{/if}
+				</button>
+			{/each}
 		{/if}
 
 		<!-- The rail's foot: the tool surfaces, below the contexts. The way
@@ -235,24 +281,19 @@ function buttonClass(active: boolean): string {
 	</aside>
 
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col">
-		{#if isTauri()}
-			<header class="flex shrink-0 items-center gap-3 border-border border-b px-4 py-2 text-sm">
-				<span class="text text--eyebrow-quiet">Umgebung</span>
-				{#if selectedEnvironment}
-					<span data-testid="environment-current" class="font-medium">{selectedEnvironment.purchasedName}.aven.ceo</span>
-				{:else}
-					<span>Wähle deine Umgebung</span>
-				{/if}
-				<button type="button" onclick={refreshEnvironments} disabled={environmentBusy} aria-label="Umgebungen aktualisieren" class="ml-auto text-xs underline disabled:opacity-50">Aktualisieren</button>
-			</header>
+		{#if environmentFailure}
+			<p class="px-4 py-2 text-sm text-error-ink">{environmentFailure}</p>
 		{/if}
-		{#if environmentFailure}<p class="px-4 py-2 text-sm text-error-ink">{environmentFailure}</p>{/if}
 		{#if customerReady}
 			{#key environmentSelection?.selectedEnvironmentId ?? 'browser'}
 				{@render children()}
 			{/key}
 		{:else}
-			<main class="grid min-h-0 flex-1 place-items-center p-6 text-center"><p>{environmentBusy ? 'Umgebungen werden geladen …' : 'Wähle links eine deiner Umgebungen, um deine Arbeit zu öffnen.'}</p></main>
+			<main class="grid min-h-0 flex-1 place-items-center p-6 text-center">
+				<p>
+					{environmentBusy ? 'Umgebungen werden geladen …' : 'Wähle links eine deiner Umgebungen, um deine Arbeit zu öffnen.'}
+				</p>
+			</main>
 		{/if}
 	</div>
 </div>

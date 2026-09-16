@@ -32,8 +32,10 @@ The native client's **Skills** surface now uses the customer-backed Studio API.
 The native environment rail selects one owned customer environment for the signed-in
 session. Studio requests, Actor runs, drafts, and artifact previews follow that
 selection. Switching clears the in-memory Studio snapshot and selected Skill or
-artifact, then reloads the new customer's data; it does not start a Source or grant
-unattended access to another environment.
+artifact, discards queued review callbacks captured for the previous customer, then
+reloads the new customer's data. A switch waits while a customer write or review is
+being saved. It does not start a Source or grant unattended access to another
+environment.
 It supports artifact exploration, solver-filled goals, fixed steps, exact nested
 Skill references, revision-checked drafts, immutable `studio.skill@1` publication,
 execution, provenance inspection, and planning-only budget comparisons. The

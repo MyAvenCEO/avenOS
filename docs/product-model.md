@@ -34,7 +34,9 @@ A customer environment is not automatically synonymous with an Aven. One identit
 account may now own several environments by purchasing different globally unique
 platform names. Each name creates a separate environment and customer database; the
 client works in one selected environment at a time without changing the identity
-session. A mapping that permits several Avens in one environment remains future
+session. Changing that selection clears customer-scoped client projections and
+unsubmitted review actions; a customer write already being saved must finish first.
+A mapping that permits several Avens in one environment remains future
 product work. Environment identity is the stable UUID, not the email address,
 purchased name, database name, or identity subject.
 The former checkout limit of one name per account was removed because it blocked
