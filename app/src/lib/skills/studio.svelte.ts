@@ -72,18 +72,37 @@ export const studioName = (a: StudioArtifact) =>
 export const studio = $state({
 	snapshot: null as StudioSnapshot | null,
 	requestedArtifactId: null as string | null,
+	requestedSkillId: null as string | null,
+	requestedSkillAction: 'open' as 'open' | 'use' | 'prepare',
 	refreshVersion: 0
 })
+let studioEnvironmentEpoch = 0
+let refreshSequence = 0
+
+export function resetStudioForEnvironment(): void {
+	studioEnvironmentEpoch++
+	refreshSequence++
+	studio.snapshot = null
+	studio.requestedArtifactId = null
+	studio.requestedSkillId = null
+	studio.requestedSkillAction = 'open'
+	studio.refreshVersion = 0
+}
+
 export async function studioRequest<T = unknown>(
 	operation: string,
 	data: Record<string, unknown> = {}
 ): Promise<T> {
+	const epoch = studioEnvironmentEpoch
 	const result = await invoke<T>('studio_request', { command: { operation, data } })
-	if (!['state', 'inspect', 'explore', 'preview', 'compare'].includes(operation))
+	if (epoch !== studioEnvironmentEpoch)
+		throw new Error('Studio environment changed during the request.')
+	if (
+		!['state', 'inspect', 'explore', 'preview', 'compare', 'catalog', 'present'].includes(operation)
+	)
 		studio.refreshVersion++
 	return result
 }
-let refreshSequence = 0
 export async function refreshStudio() {
 	const sequence = ++refreshSequence
 	const snapshot = await studioRequest<StudioSnapshot>('state')

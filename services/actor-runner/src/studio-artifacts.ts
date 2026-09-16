@@ -9,6 +9,7 @@ import {
 
 export interface StudioArtifact {
 	artifactId: string
+	artifactSha256: string
 	typeKey: string
 	typeVersion: number
 	payload: Record<string, unknown>

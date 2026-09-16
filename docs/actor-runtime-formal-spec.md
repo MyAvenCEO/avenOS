@@ -10,6 +10,11 @@ Companion: [Actors, skills, planning, and durable execution](./generic-actor-reg
 
 Proof strategy: [Proving actor execution on device and server](./actor-runtime-proof-strategy.md)
 
+Proposed next cutover: [Shared Studio discovery and execution](skill-studio-shared-runtime.md)
+specifies richer authored programs, named cardinality-aware results, retained catalog
+identity, and a proposed runner @3 contract. Those additions are not implemented by
+the @2 protocol described below; the new cutover does not require legacy compatibility.
+
 The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are normative. Code examples
 are wire shapes, not invitations to trust fields supplied by an app.
 

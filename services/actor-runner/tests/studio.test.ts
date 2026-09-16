@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import {
 	ACTOR_RUN_PROTOCOL,
+	ActorRegistry,
+	definitionFromManifest,
 	type PlanRunSecurityContext,
 	type PlanRunStartRequest
 } from '@avenos/actors'
@@ -117,6 +119,105 @@ async function prepared() {
 	return { ...f, source: source!, parent: parent!, child: child!, activate }
 }
 describe('Studio application', () => {
+	test('agent-facing catalog and Skill presentation use authorized read-only artifacts', async () => {
+		const f = fixture()
+		const registry = new ActorRegistry()
+		const definition = definitionFromManifest({
+			id: 'sample',
+			authority: 'ceo.aven',
+			namespace: 'studio-fixture',
+			version: '1',
+			name: 'Independent Actor',
+			description: 'A test Actor',
+			tags: ['test'],
+			methods: [
+				{
+					name: 'inspect',
+					description: 'Inspect something.',
+					parameters: { type: 'object' },
+					mode: 'view',
+					idempotency: 'pure'
+				}
+			]
+		})
+		registry.registerDefinition(definition)
+		const service = new StudioService(f.service.database, f.store, f.service.runner, {
+			registry: () => registry.snapshot(),
+			authorizer: () => ({
+				decide: (request) => ({
+					allow: request.action === 'discover',
+					decisionId: 'test',
+					reasonCode: 'NOT_RUNNABLE'
+				})
+			})
+		})
+		const page = await service.call({ operation: 'catalog', data: {} }, f.security, {}, true)
+		expect(page).toMatchObject({
+			visibleCount: 1,
+			entries: [{ readiness: 'unsupported-runtime', canInvokeNow: false }]
+		})
+		expect(JSON.stringify(page)).not.toContain('address')
+		const [skill] = await f.publish(
+			'studio.skill',
+			draftFor(file, understanding, 'Inbox understanding')
+		)
+		const presentation = await service.call(
+			{ operation: 'present', data: { artifactId: skill!.artifactId } },
+			f.security,
+			{},
+			true
+		)
+		expect(presentation).toMatchObject({ name: 'Inbox understanding', status: 'valid', version: 1 })
+		expect(presentation.artifactDigest).toBe(skill!.artifactSha256)
+		expect(f.query).not.toHaveBeenCalled()
+		await expect(
+			f.service.call({ operation: 'catalog', data: {} }, f.security, {}, true)
+		).rejects.toThrow('ACTOR_CATALOG_UNCONFIGURED')
+		const hiddenService = new StudioService(f.service.database, f.store, f.service.runner, {
+			registry: () => registry.snapshot(),
+			authorizer: () => ({
+				decide: () => ({ allow: false, decisionId: 'hidden', reasonCode: 'HIDDEN' })
+			})
+		})
+		const preview = await hiddenService.call(
+			{
+				operation: 'preview',
+				data: {
+					definition: {
+						version: 2,
+						name: 'Try a private capability',
+						inputs: {},
+						parametersSchema: { type: 'object', properties: {}, additionalProperties: false },
+						steps: [
+							{
+								id: 'private',
+								kind: 'invoke',
+								label: 'Try it',
+								capabilityId: definition.capabilities[0]!.id,
+								inputs: {},
+								parameters: {},
+								outputs: {}
+							}
+						],
+						outputs: {},
+						policy: {
+							maxInvocations: 1,
+							maxDepth: 1,
+							maxMembers: 1,
+							maxConcurrentChildren: 1,
+							allowModel: false
+						}
+					}
+				}
+			},
+			f.security,
+			{},
+			true
+		)
+		expect(preview).toMatchObject({ ok: false, issues: [{ code: 'CAPABILITY_UNAVAILABLE' }] })
+		expect(JSON.stringify(preview)).not.toContain('CONTRACT_INCOMPLETE')
+		expect(f.query).not.toHaveBeenCalled()
+	})
 	test('preview and what-if comparison have no publications, writes or model calls', async () => {
 		const f = fixture()
 		const baseline = draftFor(file, brief)

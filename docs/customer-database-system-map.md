@@ -74,8 +74,9 @@ documents, or chat history.
 
 ## One database per customer
 
-Each paid customer environment receives one PostgreSQL database named from its stable
-environment UUID. It contains:
+Each paid platform name creates one customer environment. The same identity subject
+may own several names and therefore several environments. Each environment receives
+one PostgreSQL database named from its stable environment UUID. It contains:
 
 ```text
 cust_<environment-id>
@@ -124,6 +125,15 @@ requires observing the expected schema version, migration digest, privileges, an
 routing generation in the target database.
 
 ## Request path
+
+The native client lists the signed-in owner's ready environments. It selects the only
+ready environment automatically or requires an explicit choice when there are several.
+Switching the choice keeps the same identity session and remounts the customer workspace
+so prior conversations, Intents, artifacts, Studio selections, email import progress,
+and in-memory watchers do not appear in
+the newly selected environment. The client sends only the environment UUID, never a
+database name or credential. The facade currently admits owner access only; the stored
+`admin` and `member` labels do not define product permissions yet.
 
 For a customer request:
 

@@ -8,6 +8,7 @@ import {
 	type ProjectionArtifact
 } from '$lib/intents/persistent-artifact-projection'
 import { shell } from '$lib/intents/talk.svelte'
+import { resetStudioForEnvironment } from '$lib/skills/studio.svelte'
 import {
 	clientDocumentParallelism,
 	clientDocumentProcessingStatus,
@@ -56,6 +57,19 @@ export interface UploadedArtifactReceipt {
 /** One upload at a time — the composer shows a single upload's progress. */
 let uploadInFlight = false
 const processingWatchers = new Set<string>()
+let workspaceEpoch = 0
+
+export function resetCustomerWorkspace(): void {
+	workspaceEpoch++
+	processingWatchers.clear()
+	emailDocumentQueue.discardPending()
+	resetStudioForEnvironment()
+	chat.resetForEnvironment()
+	intents.resetForEnvironment()
+	shell.tab = 'intents'
+	shell.detail = false
+	shell.rightOpen = false
+}
 
 /** Default placement for the next process. Each upload freezes its own value. */
 export const documentExecutionPreference = $state<{ environment: ExecutionEnvironment }>({
@@ -92,8 +106,10 @@ function persistentTurns(detail: PersistentIntentDetail) {
 }
 
 export async function refreshIntent(intentId: string): Promise<PersistentIntentDetail | null> {
+	const epoch = workspaceEpoch
 	try {
 		const detail = await invoke<PersistentIntentDetail>('intent_get', { intentId })
+		if (epoch !== workspaceEpoch) return null
 		intents.applyPersistent(detail)
 		chat.hydrate(detail.id, persistentTurns(detail))
 		// Bring the persisted source file back into the chat's in-memory
@@ -121,14 +137,20 @@ export async function refreshIntent(intentId: string): Promise<PersistentIntentD
 }
 
 export async function loadPersistentIntents(): Promise<void> {
+	const epoch = workspaceEpoch
 	const summaries = await invoke<Array<{ id: string }>>('intent_list')
+	if (epoch !== workspaceEpoch) return
 	const details = await Promise.all(summaries.map((intent) => refreshIntent(intent.id)))
+	if (epoch !== workspaceEpoch) return
 	try {
 		const browse = await invoke<{ artifacts: ProjectionArtifact[] }>('artifact_store_list')
+		if (epoch !== workspaceEpoch) return
 		const sources = await discoverIntentSources(browse.artifacts, (artifactId) =>
 			invoke<{ payload?: Record<string, unknown> }>('artifact_get', { artifactId })
 		)
+		if (epoch !== workspaceEpoch) return
 		for (const detail of details) {
+			if (epoch !== workspaceEpoch) return
 			if (
 				!detail ||
 				detail.sourceArtifactId ||
@@ -145,6 +167,7 @@ export async function loadPersistentIntents(): Promise<void> {
 		// The next reload or a fresh processing watch will try the durable projection again.
 	}
 	for (const detail of details) {
+		if (epoch !== workspaceEpoch) return
 		const source = detail
 			? (detail.artifacts.find((artifact) => artifact.relation === 'source') ??
 				intents.items
@@ -154,7 +177,14 @@ export async function loadPersistentIntents(): Promise<void> {
 		const executionEnvironment = source?.artifactId
 			? await clientDocumentSourceExecutionEnvironment(source.artifactId)
 			: null
-		if (detail && source?.artifactId && executionEnvironment) {
+		if (epoch !== workspaceEpoch) return
+		if (
+			detail &&
+			source?.artifactId &&
+			executionEnvironment &&
+			(!detail.fileSkill?.presentation ||
+				!isTerminalProcessing(detail.fileSkill.presentation.state))
+		) {
 			// Restoring history is not a new request to reconcile the entire account
 			// using each historical document's placement. New imports and the review
 			// tool explicitly start reconciliation against the current snapshot.
@@ -182,12 +212,13 @@ export async function watchArtifactProcessing(
 	artifactId: string,
 	intentId?: string
 ): Promise<void> {
+	const epoch = workspaceEpoch
 	if (processingWatchers.has(artifactId)) return
 	processingWatchers.add(artifactId)
 	let delay = 300
 	let consecutiveFailures = 0
 	try {
-		while (chat.hasArtifact(artifactId)) {
+		while (epoch === workspaceEpoch && chat.hasArtifact(artifactId)) {
 			try {
 				const local = clientDocumentProcessingStatus(artifactId)
 				const lookup =
@@ -195,6 +226,7 @@ export async function watchArtifactProcessing(
 					(await invoke<ArtifactProcessingLookup>('artifact_processing_status', {
 						artifactId
 					}))
+				if (epoch !== workspaceEpoch) return
 				consecutiveFailures = 0
 				if (lookup.pending || !lookup.presentation) {
 					chat.markArtifactProcessingPending(artifactId)
@@ -211,6 +243,7 @@ export async function watchArtifactProcessing(
 					delay = 1_500
 				}
 			} catch (error) {
+				if (epoch !== workspaceEpoch) return
 				const failure = transportError(error)
 				consecutiveFailures += 1
 				chat.markArtifactProcessingUnavailable(
@@ -227,7 +260,7 @@ export async function watchArtifactProcessing(
 			await wait(delay)
 		}
 	} finally {
-		processingWatchers.delete(artifactId)
+		if (epoch === workspaceEpoch) processingWatchers.delete(artifactId)
 	}
 }
 

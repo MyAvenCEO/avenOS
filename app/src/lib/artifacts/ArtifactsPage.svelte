@@ -3,7 +3,11 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
 import { shell } from '$lib/intents/talk.svelte'
 import { studio } from '$lib/skills/studio.svelte'
+import { studioRequest } from '$lib/skills/studio.svelte'
+import { presentSkillArtifact, type SkillPresentation } from '@avenos/actors/studio/presentation'
 import ArtifactCard from './ArtifactCard.svelte'
+import ArtifactSkillCard from './ArtifactSkillCard.svelte'
+import ArtifactSkillPreview from './ArtifactSkillPreview.svelte'
 import ArtifactContentViewer from './ArtifactContentViewer.svelte'
 import ArtifactSemanticViewer from './ArtifactSemanticViewer.svelte'
 import {
@@ -42,10 +46,32 @@ interface ArtifactContent {
 	base64: string
 }
 
+interface QueriedSkill {
+	artifactId: string
+	typeKey: string
+	typeVersion: number
+	artifactSha256?: string
+	payload: unknown
+	committedAt?: string
+}
+
+interface SkillQueryPage {
+	snapshotSequence: number
+	items: QueriedSkill[]
+	nextAfter: string | null
+}
+
 const FIXTURE_ID = '33333333-3333-4333-8333-333333333333'
 const FIXTURE_CHILD_ID = '55555555-5555-4555-8555-555555555555'
 /** Which uploaded file the grid has selected — the subject of the whole pane. */
 let rootId = $state<string | null>(null)
+let filter = $state<'all' | 'files' | 'skills'>('all')
+let queriedSkills = $state<QueriedSkill[]>([])
+let skillSnapshot = $state<number | null>(null)
+let skillNextAfter = $state<string | null>(null)
+let skillsLoading = $state(false)
+let skillsFailure = $state<string | null>(null)
+let exactLineage = $state<Record<string, unknown> | null>(null)
 /** The document, or where it came from. The document, by default. */
 let pane = $state<'file' | 'lineage'>('file')
 let result = $state<BrowseResult | null>(null)
@@ -85,12 +111,58 @@ interface RootFacts {
 }
 let rootFacts = $state<Record<string, RootFacts>>({})
 
+const skillPresentations = $derived(
+	Object.fromEntries(
+		queriedSkills.map((skill) => [
+			skill.artifactId,
+			presentSkillArtifact(
+				skill.artifactId,
+				skill.artifactSha256 ?? '',
+				skill.typeVersion,
+				skill.payload
+			)
+		])
+	)
+)
+
+const visibleArtifacts = $derived(
+	filter === 'files'
+		? (result?.artifacts ?? []).filter((item) => item.typeKey === 'core.file')
+		: filter === 'all'
+			? (result?.artifacts ?? []).filter((item) => item.typeKey !== 'studio.skill')
+			: []
+)
+const visibleSkills = $derived(
+	filter === 'skills'
+		? queriedSkills
+		: filter === 'all'
+			? [
+					...queriedSkills,
+					...(result?.artifacts ?? []).filter(
+						(item) =>
+							item.typeKey === 'studio.skill' &&
+							!queriedSkills.some((skill) => skill.artifactId === item.artifactId)
+					)
+				].map(
+					(item) =>
+						queriedSkills.find((skill) => skill.artifactId === item.artifactId) ?? {
+							artifactId: item.artifactId,
+							typeKey: item.typeKey,
+							typeVersion: item.typeVersion,
+							artifactSha256: 'artifactSha256' in item ? String(item.artifactSha256) : '',
+							payload: 'payload' in item ? item.payload : {},
+							committedAt: item.committedAt
+						}
+				)
+			: []
+)
+
 function factsFor(artifact: BrowsedArtifact): RootFacts {
 	return (
 		rootFacts[artifact.artifactId] ?? {
 			mediaType: '',
 			title: artifactTypeLabel(artifact.typeKey),
-			badge: 'DATEI',
+			badge: artifact.typeKey === 'core.file' ? 'DATEI' : 'ARTIFAKT',
 			sizeBytes: null
 		}
 	)
@@ -147,13 +219,57 @@ async function loadRootFacts(artifacts: readonly BrowsedArtifact[]): Promise<voi
 /** Pick a file: it becomes the subject of both panes, lineage included. */
 async function selectRoot(artifactId: string): Promise<void> {
 	rootId = artifactId
+	pane = 'file'
 	collapsedIds = new Set()
 	await selectArtifact(artifactId)
 }
 
+async function loadSkills(reset = false): Promise<void> {
+	if (skillsLoading || !isTauri()) return
+	if (reset) {
+		queriedSkills = []
+		skillSnapshot = null
+		skillNextAfter = null
+	}
+	skillsLoading = true
+	skillsFailure = null
+	try {
+		const page = await invoke<SkillQueryPage>('artifact_query', {
+			typeKey: 'studio.skill',
+			...(skillSnapshot !== null ? { snapshotSequence: skillSnapshot } : {}),
+			...(skillNextAfter ? { after: skillNextAfter } : {})
+		})
+		if (!page || !Array.isArray(page.items) || !Number.isSafeInteger(page.snapshotSequence))
+			throw new Error('The Skill list could not be read.')
+		queriedSkills = [
+			...queriedSkills,
+			...page.items.filter((item) => item.typeKey === 'studio.skill')
+		]
+		skillSnapshot = page.snapshotSequence
+		skillNextAfter = page.nextAfter ?? null
+	} catch (cause) {
+		skillsFailure = cause instanceof Error ? cause.message : String(cause)
+	} finally {
+		skillsLoading = false
+	}
+}
+
 /** The uploaded documents: roots that actually carry bytes worth showing. */
 const roots = $derived(artifactRoots(result?.artifacts ?? []))
-const rootArtifact = $derived(roots.find((artifact) => artifact.artifactId === rootId) ?? null)
+const rootArtifact = $derived(
+	result?.artifacts.find((artifact) => artifact.artifactId === rootId) ?? null
+)
+const selectedSkill = $derived(queriedSkills.find((skill) => skill.artifactId === rootId) ?? null)
+const skillPresentation = $derived(
+	envelope && envelope.typeKey === 'studio.skill' && selectedId === rootId
+		? presentSkillArtifact(
+				rootId!,
+				String(envelope.artifactSha256 ?? ''),
+				Number(envelope.typeVersion ?? 0),
+				envelope.payload
+			)
+		: null
+)
 /** Lineage is scoped to the selected file — not every artifact in the store. */
 const subtree = $derived(artifactSubtree(result?.artifacts ?? [], rootId))
 const treeRows = $derived(artifactTreeRows(subtree, collapsedIds, query))
@@ -198,6 +314,7 @@ async function refresh(): Promise<void> {
 	loading = true
 	failure = null
 	try {
+		void loadSkills(true)
 		if (isTauri()) {
 			const loaded = await invoke<BrowseResult>('artifact_store_list')
 			result = {
@@ -253,7 +370,7 @@ async function refresh(): Promise<void> {
 		// the selection round-trip.
 		const nextRoots = artifactRoots(result.artifacts)
 		void loadRootFacts(nextRoots)
-		if (!rootId || !nextRoots.some((artifact) => artifact.artifactId === rootId)) {
+		if (!rootId) {
 			const first = nextRoots[0]?.artifactId ?? null
 			if (first) await selectRoot(first)
 			else await selectArtifact(null)
@@ -276,6 +393,7 @@ async function selectArtifact(artifactId: string | null): Promise<void> {
 	sourceContent = null
 	sourceFailure = null
 	viewMode = 'view'
+	exactLineage = null
 	if (!artifactId) return
 	envelopeLoading = true
 	evidenceLoading = true
@@ -305,6 +423,18 @@ async function selectArtifact(artifactId: string | null): Promise<void> {
 		])
 		if (selectedId === artifactId) {
 			envelope = loaded
+			if (
+				loaded.typeKey === 'studio.skill' &&
+				!result?.artifacts.some((item) => item.artifactId === artifactId)
+			) {
+				void studioRequest<{ inputs?: unknown }>('inspect', { artifactId })
+					.then((details) => {
+						if (selectedId === artifactId) exactLineage = details as Record<string, unknown>
+					})
+					.catch(() => {
+						/* The exact preview remains available without Studio metadata. */
+					})
+			}
 			evidence = Array.isArray(evidenceResource.evidence) ? evidenceResource.evidence : []
 			if (loaded.blob) void loadContent(artifactId)
 			const first = evidence[0]
@@ -381,9 +511,8 @@ onMount(() => {
 		<h1 class="font-semibold text-sm">Artefakte</h1>
 		{#if result}
 			<span class="text text--mono-meta">
-				{roots.length}
-				{roots.length === 1 ? 'Datei' : 'Dateien'}
-				· {result.artifacts.length} Artefakte · Epoch
+				{visibleArtifacts.length + visibleSkills.length}
+				shown · {result.artifacts.length} Artefakte · Epoch
 				{result.storeEpoch.slice(
 					0,
 					8
@@ -398,22 +527,51 @@ onMount(() => {
 			Aktualisieren
 		</button>
 	</header>
+	<div class="flex items-center gap-1 px-1" role="group" aria-label="Artifact filter">
+		{#each [{ key: 'all', label: 'All' }, { key: 'files', label: 'Files' }, { key: 'skills', label: 'Skills' }] as choice}
+			<button
+				type="button"
+				onclick={() => (filter = choice.key as typeof filter)}
+				aria-pressed={filter === choice.key}
+				class="rounded-full px-3 py-1.5 text-xs {filter === choice.key ? 'bg-primary text-primary-foreground' : 'text-foreground/50 hover:bg-surface-sunken'}"
+			>
+				{choice.label}
+			</button>
+		{/each}
+	</div>
 
 	<div class="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row">
-		<!-- LEFT — every uploaded file, as a tile. -->
+		<!-- LEFT — authorized artifacts and an independently paged Skill index. -->
 		<section class="flex min-h-[14rem] min-w-0 flex-col lg:w-1/2">
 			{#if loading}
 				<p class="px-1 text-foreground/35 text-sm">Artifact Store wird gelesen …</p>
 			{:else if failure}
 				<p class="px-1 text-error-ink text-sm">{failure}</p>
-			{:else if roots.length === 0}
+			{:else if filter === 'skills' && skillsLoading && !queriedSkills.length}
+				<p role="status" class="px-1 text-foreground/35 text-sm">Skills werden geladen …</p>
+			{:else if filter === 'skills' && skillsFailure && !queriedSkills.length}
+				<p role="status" class="px-1 text-error-ink text-sm">
+					{skillsFailure}
+					<button type="button" onclick={() => void loadSkills(true)} class="underline">
+						Try again
+					</button>
+				</p>
+			{:else if visibleArtifacts.length + visibleSkills.length === 0}
 				<p class="px-1 text-foreground/35 text-sm">
-					Noch keine Dateien. Zieh eine Datei ins Fenster — sie wird als Intent aufgenommen.
+					{filter === 'skills' ? 'No saved Skills yet. Create one in Studio and it will appear here.' : 'Noch keine Artefakte. Zieh eine Datei ins Fenster — sie wird als Intent aufgenommen.'}
 				</p>
 			{:else}
 				<div class="min-h-0 flex-1 overflow-y-auto pr-1">
 					<div class="grid grid-cols-2 gap-3 xl:grid-cols-3">
-						{#each roots as artifact (artifact.artifactId)}
+						{#each visibleSkills as skill (skill.artifactId)}
+							<ArtifactSkillCard
+								presentation={skillPresentations[skill.artifactId] ?? presentSkillArtifact(skill.artifactId, skill.artifactSha256 ?? '', skill.typeVersion, skill.payload)}
+								committedAt={skill.committedAt ?? null}
+								selected={rootId === skill.artifactId}
+								onselect={() => void selectRoot(skill.artifactId)}
+							/>
+						{/each}
+						{#each visibleArtifacts as artifact (artifact.artifactId)}
 							{@const facts = factsFor(artifact)}
 							<ArtifactCard
 								artifactId={artifact.artifactId}
@@ -427,16 +585,26 @@ onMount(() => {
 							/>
 						{/each}
 					</div>
+					{#if filter === 'skills' && skillNextAfter}
+						<button
+							type="button"
+							disabled={skillsLoading}
+							onclick={() => void loadSkills()}
+							class="mt-4 w-full rounded-full border border-border px-4 py-2 text-xs hover:bg-surface-sunken disabled:opacity-40"
+						>
+							{skillsLoading ? 'Loading …' : 'More Skills'}
+						</button>
+					{/if}
 				</div>
 			{/if}
 		</section>
 
-		<!-- RIGHT — the document itself, or where it came from. -->
+		<!-- RIGHT — saved definition, content, or provenance. -->
 		<section
 			class="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface-raised lg:w-1/2"
 		>
 			<header class="flex items-center gap-2 border-border border-b px-3 py-2">
-				{#if selectedId || rootId}
+				{#if (selectedId || rootId) && !skillPresentation}
 					<button
 						type="button"
 						class="rounded-full border border-border px-3 py-1 text-xs"
@@ -453,7 +621,7 @@ onMount(() => {
 							? 'bg-primary text-primary-foreground'
 							: 'text-foreground/50'}"
 					>
-						Datei
+						Preview
 					</button>
 					<button
 						type="button"
@@ -462,304 +630,353 @@ onMount(() => {
 							? 'bg-primary text-primary-foreground'
 							: 'text-foreground/50'}"
 					>
-						Herkunft
+						Provenance
 					</button>
 				</div>
 				{#if rootArtifact}
 					<span class="min-w-0 flex-1 truncate text-right text-foreground/50 text-xs">
 						{factsFor(rootArtifact).title}
 					</span>
+				{:else if selectedSkill}
+					<span class="min-w-0 flex-1 truncate text-right text-foreground/50 text-xs"
+						>{skillPresentations[selectedSkill.artifactId]?.name ?? 'Skill'}</span
+					>
 				{/if}
 			</header>
 
-			{#if !rootArtifact}
-				<p class="m-auto text-foreground/35 text-sm">Wähle eine Datei aus.</p>
+			{#if !rootId}
+				<p class="m-auto text-foreground/35 text-sm">Choose an artifact.</p>
 			{:else if pane === 'file'}
-				<!-- The default: the document, filling the pane. Nothing else —
-				     the metadata lives one tab away, where it does not compete
-				     with the thing you opened. -->
-				{#key rootArtifact.artifactId}
+				{#key rootId}
 					{#if contentLoading}
 						<p class="m-auto text-foreground/35 text-sm">Datei wird geladen …</p>
+					{:else if skillPresentation}
+						<ArtifactSkillPreview
+							presentation={skillPresentation}
+							onOpenStudio={() => { studio.requestedSkillId = rootId; studio.requestedSkillAction = 'open'; shell.tab = 'skills' }}
+							onUseInSkill={() => { studio.requestedSkillId = rootId; studio.requestedSkillAction = 'use'; shell.tab = 'skills' }}
+							onPrepareRun={() => { studio.requestedSkillId = rootId; studio.requestedSkillAction = 'prepare'; shell.tab = 'skills' }}
+							onProvenance={() => (pane = 'lineage')}
+							onOpenChild={(id) => void selectRoot(id)}
+						/>
 					{:else if contentFailure}
 						<p class="m-auto px-4 text-error-ink text-sm">{contentFailure}</p>
 					{:else if content}
 						<div class="min-h-0 flex-1 overflow-auto">
 							<ArtifactContentViewer mediaType={content.mediaType} base64={content.base64} />
 						</div>
+					{:else if envelope && selectedId === rootId}
+						<ArtifactSemanticViewer
+							typeKey={String(envelope.typeKey ?? rootArtifact?.typeKey ?? '')}
+							payload={envelope.payload}
+						/>
 					{:else}
-						<p class="m-auto text-foreground/35 text-sm">Diese Datei hat keinen Inhalt.</p>
+						<p class="m-auto text-foreground/35 text-sm">Preview is loading …</p>
 					{/if}
 				{/key}
 			{:else}
-				<div class="flex min-h-0 flex-1 flex-col gap-2">
-					<section
-						class="flex min-h-0 shrink-0 basis-[45%] flex-col overflow-hidden border-border border-b"
-					>
-						<div class="flex flex-wrap items-center gap-2 border-border border-b p-3">
-							<input
-								bind:value={query}
-								placeholder="Typ, ID, Run, Input oder Local Key filtern"
-								class="min-w-0 flex-1 rounded-xl border border-border bg-surface-sunken px-3 py-2 text-xs outline-none focus:border-primary/25"
-							>
-							<div class="flex rounded-xl border border-border p-0.5 text-[length:var(--fs-micro)]">
+				{#if !rootArtifact}
+					<div class="min-h-0 flex-1 overflow-auto p-5 text-sm">
+						<p class="font-semibold">Exact artifact history</p>
+						<p class="mt-2 break-all font-mono text-foreground/45 text-xs">{rootId}</p>
+						{#if exactLineage}
+							{@const inputs = Array.isArray(exactLineage.inputs) ? exactLineage.inputs as Array<{ role?: string; artifactId?: string }> : []}
+							<p class="mt-4 text-foreground/55">{inputs.length} causal inputs</p>
+							<ul class="mt-2 space-y-2">
+								{#each inputs as input}
+									<li class="rounded-xl border border-border p-3">
+										<span class="font-medium">{input.role ?? 'Input'}</span
+										><span class="ml-2 break-all font-mono text-foreground/45 text-xs"
+											>{input.artifactId ?? 'unavailable'}</span
+										>
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<p role="status" class="mt-4 text-foreground/45">
+								Lineage details are unavailable in this browse window. The saved definition remains
+								accessible above.
+							</p>
+						{/if}
+					</div>
+				{:else}
+					<div class="flex min-h-0 flex-1 flex-col gap-2">
+						<section
+							class="flex min-h-0 shrink-0 basis-[45%] flex-col overflow-hidden border-border border-b"
+						>
+							<div class="flex flex-wrap items-center gap-2 border-border border-b p-3">
+								<input
+									bind:value={query}
+									placeholder="Typ, ID, Run, Input oder Local Key filtern"
+									class="min-w-0 flex-1 rounded-xl border border-border bg-surface-sunken px-3 py-2 text-xs outline-none focus:border-primary/25"
+								>
+								<div
+									class="flex rounded-xl border border-border p-0.5 text-[length:var(--fs-micro)]"
+								>
+									<button
+										type="button"
+										onclick={expandAll}
+										class="rounded-lg px-2 py-1.5 text-foreground/50 hover:bg-surface-sunken hover:text-foreground"
+									>
+										Alle öffnen
+									</button>
+									<button
+										type="button"
+										onclick={collapseAll}
+										disabled={branchCount === 0}
+										class="rounded-lg px-2 py-1.5 text-foreground/50 hover:bg-surface-sunken hover:text-foreground disabled:opacity-35"
+									>
+										Zuklappen
+									</button>
+								</div>
 								<button
 									type="button"
-									onclick={expandAll}
-									class="rounded-lg px-2 py-1.5 text-foreground/50 hover:bg-surface-sunken hover:text-foreground"
+									onclick={() => void refresh()}
+									class="rounded-xl border border-border px-3 py-2 text-xs hover:bg-surface-sunken"
 								>
-									Alle öffnen
-								</button>
-								<button
-									type="button"
-									onclick={collapseAll}
-									disabled={branchCount === 0}
-									class="rounded-lg px-2 py-1.5 text-foreground/50 hover:bg-surface-sunken hover:text-foreground disabled:opacity-35"
-								>
-									Zuklappen
+									Aktualisieren
 								</button>
 							</div>
-							<button
-								type="button"
-								onclick={() => void refresh()}
-								class="rounded-xl border border-border px-3 py-2 text-xs hover:bg-surface-sunken"
-							>
-								Aktualisieren
-							</button>
-						</div>
-						{#if loading}
-							<p class="p-4 text-foreground/35 text-sm">Artifact Store wird gelesen …</p>
-						{:else if failure}
-							<p class="p-4 text-error-ink text-sm">{failure}</p>
-						{:else if treeRows.length === 0}
-							<p class="p-4 text-foreground/35 text-sm">Keine Artefakte gefunden.</p>
-						{:else}
-							<div class="min-h-0 flex-1 overflow-auto" role="tree" aria-label="Artifact lineage">
-								{#each treeRows as row (row.artifact.artifactId)}
-									{@const artifact = row.artifact}
-									<div
-										role="treeitem"
-										aria-level={row.depth + 1}
-										aria-selected={selectedId === artifact.artifactId}
-										aria-expanded={row.hasChildren ? !collapsedIds.has(artifact.artifactId) : undefined}
-										class="flex min-w-0 items-center border-border/25 border-b transition-colors {selectedId ===
+							{#if loading}
+								<p class="p-4 text-foreground/35 text-sm">Artifact Store wird gelesen …</p>
+							{:else if failure}
+								<p class="p-4 text-error-ink text-sm">{failure}</p>
+							{:else if treeRows.length === 0}
+								<p class="p-4 text-foreground/35 text-sm">Keine Artefakte gefunden.</p>
+							{:else}
+								<div class="min-h-0 flex-1 overflow-auto" role="tree" aria-label="Artifact lineage">
+									{#each treeRows as row (row.artifact.artifactId)}
+										{@const artifact = row.artifact}
+										<div
+											role="treeitem"
+											aria-level={row.depth + 1}
+											aria-selected={selectedId === artifact.artifactId}
+											aria-expanded={row.hasChildren ? !collapsedIds.has(artifact.artifactId) : undefined}
+											class="flex min-w-0 items-center border-border/25 border-b transition-colors {selectedId ===
 								artifact.artifactId
 									? 'bg-surface-selected'
 									: 'hover:bg-surface-sunken/25'}"
-										style:padding-left={`${row.depth * 14 + 4}px`}
-									>
-										{#if row.hasChildren}
-											<button
-												type="button"
-												onclick={() => toggleBranch(artifact.artifactId)}
-												aria-label={collapsedIds.has(artifact.artifactId)
+											style:padding-left={`${row.depth * 14 + 4}px`}
+										>
+											{#if row.hasChildren}
+												<button
+													type="button"
+													onclick={() => toggleBranch(artifact.artifactId)}
+													aria-label={collapsedIds.has(artifact.artifactId)
 											? 'Zweig öffnen'
 											: 'Zweig schließen'}
-												class="grid size-6 shrink-0 place-items-center rounded text-foreground/50 hover:bg-surface-sunken hover:text-foreground"
-											>
-												<span
-													class="transition-transform {collapsedIds.has(artifact.artifactId)
+													class="grid size-6 shrink-0 place-items-center rounded text-foreground/50 hover:bg-surface-sunken hover:text-foreground"
+												>
+													<span
+														class="transition-transform {collapsedIds.has(artifact.artifactId)
 												? ''
 												: 'rotate-90'}"
-													>›</span
+														>›</span
+													>
+												</button>
+											{:else}
+												<span class="grid size-6 shrink-0 place-items-center text-foreground/35"
+													>·</span
 												>
-											</button>
-										{:else}
-											<span class="grid size-6 shrink-0 place-items-center text-foreground/35"
-												>·</span
+											{/if}
+											<button
+												type="button"
+												onclick={() => void selectArtifact(artifact.artifactId)}
+												class="min-w-0 flex-1 py-1.5 pr-2 text-left"
+												title="{artifact.typeKey}@{artifact.typeVersion} · {artifact.artifactId}"
 											>
-										{/if}
-										<button
-											type="button"
-											onclick={() => void selectArtifact(artifact.artifactId)}
-											class="min-w-0 flex-1 py-1.5 pr-2 text-left"
-											title="{artifact.typeKey}@{artifact.typeVersion} · {artifact.artifactId}"
-										>
-											<span class="flex min-w-0 items-baseline gap-2">
-												<span class="truncate font-medium text-xs">
-													{artifactTypeLabel(artifact.typeKey)}
+												<span class="flex min-w-0 items-baseline gap-2">
+													<span class="truncate font-medium text-xs">
+														{artifactTypeLabel(artifact.typeKey)}
+													</span>
+													<span
+														class="shrink-0 font-mono text-[length:var(--fs-nano)] text-foreground/35"
+													>
+														{artifact.localKey}
+													</span>
 												</span>
 												<span
-													class="shrink-0 font-mono text-[length:var(--fs-nano)] text-foreground/35"
+													class="flex min-w-0 items-baseline gap-2 font-mono text-[length:var(--fs-nano)] text-foreground/35"
 												>
-													{artifact.localKey}
+													<span class="truncate">{artifact.typeKey}@{artifact.typeVersion}</span>
+													<span class="ml-auto shrink-0">#{artifact.scopeSequence}</span>
+													{#if row.missingParentCount}
+														<span class="shrink-0 text-warning-ink">{row.missingParentCount}?</span>
+													{/if}
 												</span>
-											</span>
-											<span
-												class="flex min-w-0 items-baseline gap-2 font-mono text-[length:var(--fs-nano)] text-foreground/35"
-											>
-												<span class="truncate">{artifact.typeKey}@{artifact.typeVersion}</span>
-												<span class="ml-auto shrink-0">#{artifact.scopeSequence}</span>
-												{#if row.missingParentCount}
-													<span class="shrink-0 text-warning-ink">{row.missingParentCount}?</span>
-												{/if}
-											</span>
-										</button>
-									</div>
-								{/each}
-							</div>
-							{#if result?.truncated}
-								<p class="border-border border-t px-3 py-2 text-warning-ink text-xs">
-									Ansicht auf die neuesten 2.000 Artefakte begrenzt.
-								</p>
-							{/if}
-						{/if}
-					</section>
-
-					<section
-						class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-surface-raised"
-					>
-						{#if selected}
-							<header class="border-border border-b px-4 py-3">
-								<div class="flex items-baseline gap-2">
-									<h2 class="min-w-0 flex-1 truncate font-semibold text-sm">{selected.typeKey}</h2>
-									<span class="text text--mono-meta">v{selected.typeVersion}</span>
-								</div>
-								<div class="mt-1 flex items-center gap-2">
-									<button
-										type="button"
-										onclick={() => void copy(selected.artifactId)}
-										class="truncate font-mono text-[length:var(--fs-micro)] text-foreground/50 hover:text-foreground"
-										title="ID kopieren"
-									>
-										{selected.artifactId}
-									</button>
-									{#if selected.inputs.length > 0}
-										<span
-											class="ml-auto rounded-md bg-surface-sunken px-2 py-0.5 text-[length:var(--fs-micro)] text-foreground/50"
-											title={selected.inputs.map((input) => `${input.role}:${input.ordinal} → ${input.artifactId}`).join('\n')}
-										>
-											{selected.inputs.length} {selected.inputs.length === 1 ? 'Input' : 'Inputs'}
-										</span>
-									{/if}
-									<span
-										class={selected.inputs.length ? 'text-foreground/35 text-xs' : 'ml-auto text-foreground/35 text-xs'}
-										>#{selected.scopeSequence}</span
-									>
-								</div>
-								<div class="mt-3 flex items-center gap-1">
-									<button
-										type="button"
-										onclick={() => (viewMode = 'view')}
-										class="rounded-lg px-2.5 py-1 text-xs {viewMode === 'view' ? 'bg-primary text-primary-foreground' : 'text-foreground/50 hover:bg-surface-sunken'}"
-									>
-										Ansicht
-									</button>
-									<button
-										type="button"
-										onclick={() => (viewMode = 'raw')}
-										class="rounded-lg px-2.5 py-1 text-xs {viewMode === 'raw' ? 'bg-primary text-primary-foreground' : 'text-foreground/50 hover:bg-surface-sunken'}"
-									>
-										Raw
-									</button>
-									{#if evidenceLoading}
-										<span class="ml-auto text-foreground/35 text-[length:var(--fs-micro)]"
-											>Evidenz wird geladen …</span
-										>
-									{:else if evidence.length > 0}
-										<span
-											class="ml-auto rounded-full bg-info-surface px-2 py-0.5 text-info-ink text-[length:var(--fs-micro)]"
-											>▣ {evidence.length} Fundstellen</span
-										>
-									{/if}
-								</div>
-							</header>
-							{#if envelopeLoading}
-								<p class="p-4 text-foreground/35 text-sm">Envelope wird geladen …</p>
-							{:else if envelopeFailure}
-								<p class="p-4 text-error-ink text-sm">{envelopeFailure}</p>
-							{:else if envelope}
-								{#if viewMode === 'raw'}
-									<div class="flex min-h-0 flex-1 flex-col">
-										<div class="flex items-center justify-between border-border border-b px-4 py-2">
-											<span
-												class="font-semibold text-foreground/50 text-[length:var(--fs-micro)] uppercase tracking-wide"
-												>Unverändertes Envelope</span
-											><button
-												type="button"
-												onclick={() => void copy(envelopeJson)}
-												class="text-foreground/50 text-xs hover:text-foreground"
-											>
-												JSON kopieren
 											</button>
 										</div>
-										<pre
-											class="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-[length:var(--fs-eyebrow)] leading-relaxed"
-										>{envelopeJson}</pre>
-									</div>
-								{:else}
-									<div class="flex min-h-0 flex-1 flex-col lg:flex-row">
-										<div
-											class="flex min-h-[18rem] min-w-0 flex-1 flex-col {sourceContent || content || sourceLoading || contentLoading ? 'border-border lg:border-r' : ''}"
-										>
-											<ArtifactSemanticViewer
-												typeKey={selected.typeKey}
-												payload={envelope.payload}
-												{evidence}
-												{activeEvidence}
-												onEvidence={(edge) => void chooseEvidence(edge)}
-											/>
-										</div>
-										{#if sourceContent || content || sourceLoading || contentLoading || sourceFailure || contentFailure}
-											<div class="flex min-h-[22rem] min-w-0 flex-1 flex-col bg-surface-sunken/25">
-												<div
-													class="flex items-center justify-between border-border border-b bg-surface-raised px-4 py-2"
-												>
-													<div>
-														<p
-															class="font-semibold text-foreground/50 text-[length:var(--fs-micro)] uppercase tracking-wide"
-														>
-															{activeEvidence ? 'Belegquelle' : 'Vorschau'}
-														</p>
-														{#if activeEvidence}
-															<p
-																class="mt-0.5 font-mono text-foreground/35 text-[length:var(--fs-nano)]"
-															>
-																{activeEvidence.inputRole}:{activeEvidence.inputOrdinal}
-																· {activeEvidence.inputArtifactId.slice(0, 8)}
-															</p>
-														{/if}
-													</div>
-													{#if activeEvidence?.outputLocator.kind === 'json-pointer'}
-														<span
-															class="rounded-md bg-info-surface px-2 py-1 font-mono text-info-ink text-[length:var(--fs-nano)]"
-															>{activeEvidence.outputLocator.pointer}</span
-														>
-													{/if}
-												</div>
-												{#if sourceLoading || (!sourceContent && contentLoading)}
-													<p class="p-4 text-foreground/35 text-xs">Dokument wird gerendert …</p>
-												{:else if sourceFailure || (!sourceContent && contentFailure)}
-													<p class="p-4 text-error-ink text-xs">
-														{sourceFailure ?? contentFailure}
-													</p>
-												{:else if sourceContent && activeEvidence}
-													{#key `${activeEvidence.inputArtifactId}:${activeEvidence.ordinal}`}
-														<ArtifactContentViewer
-															{...sourceContent}
-															locator={activeEvidence.inputLocator}
-														/>
-													{/key}
-												{:else if content}
-													{#key selected.artifactId}
-														<ArtifactContentViewer {...content} />
-													{/key}
-												{/if}
-											</div>
-										{/if}
-									</div>
-									{#if evidenceFailure}
-										<p class="border-border border-t px-4 py-2 text-warning-ink text-xs">
-											Evidenz nicht verfügbar: {evidenceFailure}
-										</p>
-									{/if}
+									{/each}
+								</div>
+								{#if result?.truncated}
+									<p class="border-border border-t px-3 py-2 text-warning-ink text-xs">
+										Ansicht auf die neuesten 2.000 Artefakte begrenzt.
+									</p>
 								{/if}
 							{/if}
-						{:else}
-							<p class="m-auto text-foreground/35 text-sm">Wähle ein Artefakt aus.</p>
-						{/if}
-					</section>
-				</div>
+						</section>
+
+						<section
+							class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-surface-raised"
+						>
+							{#if selected}
+								<header class="border-border border-b px-4 py-3">
+									<div class="flex items-baseline gap-2">
+										<h2 class="min-w-0 flex-1 truncate font-semibold text-sm">
+											{selected.typeKey}
+										</h2>
+										<span class="text text--mono-meta">v{selected.typeVersion}</span>
+									</div>
+									<div class="mt-1 flex items-center gap-2">
+										<button
+											type="button"
+											onclick={() => void copy(selected.artifactId)}
+											class="truncate font-mono text-[length:var(--fs-micro)] text-foreground/50 hover:text-foreground"
+											title="ID kopieren"
+										>
+											{selected.artifactId}
+										</button>
+										{#if selected.inputs.length > 0}
+											<span
+												class="ml-auto rounded-md bg-surface-sunken px-2 py-0.5 text-[length:var(--fs-micro)] text-foreground/50"
+												title={selected.inputs.map((input) => `${input.role}:${input.ordinal} → ${input.artifactId}`).join('\n')}
+											>
+												{selected.inputs.length} {selected.inputs.length === 1 ? 'Input' : 'Inputs'}
+											</span>
+										{/if}
+										<span
+											class={selected.inputs.length ? 'text-foreground/35 text-xs' : 'ml-auto text-foreground/35 text-xs'}
+											>#{selected.scopeSequence}</span
+										>
+									</div>
+									<div class="mt-3 flex items-center gap-1">
+										<button
+											type="button"
+											onclick={() => (viewMode = 'view')}
+											class="rounded-lg px-2.5 py-1 text-xs {viewMode === 'view' ? 'bg-primary text-primary-foreground' : 'text-foreground/50 hover:bg-surface-sunken'}"
+										>
+											Ansicht
+										</button>
+										<button
+											type="button"
+											onclick={() => (viewMode = 'raw')}
+											class="rounded-lg px-2.5 py-1 text-xs {viewMode === 'raw' ? 'bg-primary text-primary-foreground' : 'text-foreground/50 hover:bg-surface-sunken'}"
+										>
+											Raw
+										</button>
+										{#if evidenceLoading}
+											<span class="ml-auto text-foreground/35 text-[length:var(--fs-micro)]"
+												>Evidenz wird geladen …</span
+											>
+										{:else if evidence.length > 0}
+											<span
+												class="ml-auto rounded-full bg-info-surface px-2 py-0.5 text-info-ink text-[length:var(--fs-micro)]"
+												>▣ {evidence.length} Fundstellen</span
+											>
+										{/if}
+									</div>
+								</header>
+								{#if envelopeLoading}
+									<p class="p-4 text-foreground/35 text-sm">Envelope wird geladen …</p>
+								{:else if envelopeFailure}
+									<p class="p-4 text-error-ink text-sm">{envelopeFailure}</p>
+								{:else if envelope}
+									{#if viewMode === 'raw'}
+										<div class="flex min-h-0 flex-1 flex-col">
+											<div
+												class="flex items-center justify-between border-border border-b px-4 py-2"
+											>
+												<span
+													class="font-semibold text-foreground/50 text-[length:var(--fs-micro)] uppercase tracking-wide"
+													>Unverändertes Envelope</span
+												><button
+													type="button"
+													onclick={() => void copy(envelopeJson)}
+													class="text-foreground/50 text-xs hover:text-foreground"
+												>
+													JSON kopieren
+												</button>
+											</div>
+											<pre
+												class="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-[length:var(--fs-eyebrow)] leading-relaxed"
+											>{envelopeJson}</pre>
+										</div>
+									{:else}
+										<div class="flex min-h-0 flex-1 flex-col lg:flex-row">
+											<div
+												class="flex min-h-[18rem] min-w-0 flex-1 flex-col {sourceContent || content || sourceLoading || contentLoading ? 'border-border lg:border-r' : ''}"
+											>
+												<ArtifactSemanticViewer
+													typeKey={selected.typeKey}
+													payload={envelope.payload}
+													{evidence}
+													{activeEvidence}
+													onEvidence={(edge) => void chooseEvidence(edge)}
+												/>
+											</div>
+											{#if sourceContent || content || sourceLoading || contentLoading || sourceFailure || contentFailure}
+												<div
+													class="flex min-h-[22rem] min-w-0 flex-1 flex-col bg-surface-sunken/25"
+												>
+													<div
+														class="flex items-center justify-between border-border border-b bg-surface-raised px-4 py-2"
+													>
+														<div>
+															<p
+																class="font-semibold text-foreground/50 text-[length:var(--fs-micro)] uppercase tracking-wide"
+															>
+																{activeEvidence ? 'Belegquelle' : 'Vorschau'}
+															</p>
+															{#if activeEvidence}
+																<p
+																	class="mt-0.5 font-mono text-foreground/35 text-[length:var(--fs-nano)]"
+																>
+																	{activeEvidence.inputRole}:{activeEvidence.inputOrdinal}
+																	· {activeEvidence.inputArtifactId.slice(0, 8)}
+																</p>
+															{/if}
+														</div>
+														{#if activeEvidence?.outputLocator.kind === 'json-pointer'}
+															<span
+																class="rounded-md bg-info-surface px-2 py-1 font-mono text-info-ink text-[length:var(--fs-nano)]"
+																>{activeEvidence.outputLocator.pointer}</span
+															>
+														{/if}
+													</div>
+													{#if sourceLoading || (!sourceContent && contentLoading)}
+														<p class="p-4 text-foreground/35 text-xs">Dokument wird gerendert …</p>
+													{:else if sourceFailure || (!sourceContent && contentFailure)}
+														<p class="p-4 text-error-ink text-xs">
+															{sourceFailure ?? contentFailure}
+														</p>
+													{:else if sourceContent && activeEvidence}
+														{#key `${activeEvidence.inputArtifactId}:${activeEvidence.ordinal}`}
+															<ArtifactContentViewer
+																{...sourceContent}
+																locator={activeEvidence.inputLocator}
+															/>
+														{/key}
+													{:else if content}
+														{#key selected.artifactId}
+															<ArtifactContentViewer {...content} />
+														{/key}
+													{/if}
+												</div>
+											{/if}
+										</div>
+										{#if evidenceFailure}
+											<p class="border-border border-t px-4 py-2 text-warning-ink text-xs">
+												Evidenz nicht verfügbar: {evidenceFailure}
+											</p>
+										{/if}
+									{/if}
+								{/if}
+							{:else}
+								<p class="m-auto text-foreground/35 text-sm">Wähle ein Artefakt aus.</p>
+							{/if}
+						</section>
+					</div>
+				{/if}
 			{/if}
 		</section>
 	</div>

@@ -29,6 +29,12 @@ export class DocumentImportQueue {
 		this.drain()
 	}
 
+	discardPending(): void {
+		for (const task of this.tasks) this.admitted.delete(task.id)
+		this.tasks.length = 0
+		this.state.pending = 0
+	}
+
 	private drain(): void {
 		while (this.tasks.length && this.state.active < this.maxParallelism) {
 			const task = this.tasks.shift()

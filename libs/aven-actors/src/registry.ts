@@ -117,7 +117,6 @@ function methodCapabilities(
 	return manifest.methods.flatMap((method) => {
 		const requires = method.requires ?? actorRequires
 		const produces = method.produces ?? actorProduces
-		if (produces.length === 0) return []
 		return [
 			{
 				id: resourceId({

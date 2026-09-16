@@ -49,6 +49,27 @@ describe('Chat barge-in', () => {
 	})
 })
 
+describe('Chat environment reset', () => {
+	test('discards conversations from every prior Intent session', async () => {
+		const stream = async function* (): AsyncGenerator<StreamEvent> {
+			yield { kind: 'text', text: 'Reply.' }
+		}
+		const chat = new Chat({}, undefined, stream)
+		chat.use('first-intent')
+		await chat.send('first')
+		chat.use('second-intent')
+		await chat.send('second')
+		expect(chat.turns).toHaveLength(2)
+
+		chat.resetForEnvironment()
+		chat.use('first-intent')
+		expect(chat.turns).toEqual([])
+		chat.use('second-intent')
+		expect(chat.turns).toEqual([])
+		expect(chat.lastRequest).toBeNull()
+	})
+})
+
 async function waitUntil(predicate: () => boolean): Promise<void> {
 	for (let attempt = 0; attempt < 100; attempt++) {
 		if (predicate()) return

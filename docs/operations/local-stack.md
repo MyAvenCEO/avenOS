@@ -123,7 +123,9 @@ finish the customer environment. The command also creates a disposable local
 entitlement; no checkout or external provider is involved in this developer shortcut.
 
 To exercise the user-facing checkout and email flow instead, begin at
-`http://localhost:13200` and inspect messages in Mailpit.
+`http://localhost:13200` and inspect messages in Mailpit. After buying one name,
+the same verified account can return to checkout for another globally unique name.
+Each completed purchase queues a separate customer environment and database.
 
 ## Start the Rust client
 
@@ -142,8 +144,11 @@ bun run local:app -- mac
 The local desktop build intentionally uses device authorization instead of claiming a
 deployed native passkey association. It opens the local identity dashboard, shows a
 device code, and waits. Sign in with the `localhost` passkey and approve the code. The
-Rust process receives the identity session, exchanges it for short-lived service
-tokens, and selects the provisioned customer environment.
+Rust process receives the identity session and exchanges it for short-lived service
+tokens. With one ready environment the client selects it automatically. With several,
+choose one using the platform-name initials in the left rail. You can change the
+selection without approving the device or signing in again; the workspace remounts
+for the chosen customer database.
 
 You can then import a document, inspect artifacts, chat through the local facade, and
 exercise Intent and Actor features without deployed credentials.
