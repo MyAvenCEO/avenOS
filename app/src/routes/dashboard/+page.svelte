@@ -12,7 +12,7 @@ import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import { anonymousSpeakerPayload } from '$lib/chat/anonymous-speaker'
 import { voiceController } from '$lib/voice/controller.svelte'
 import '$lib/actors/windows'
-import ArtifactsPage from '$lib/artifacts/ArtifactsPage.svelte'
+import ArtifactWorkspacePage from '$lib/artifacts/ArtifactWorkspacePage.svelte'
 import {
 	documentExecutionPreference,
 	ingestDroppedFiles,
@@ -572,9 +572,9 @@ function onGlobalKeydown(event: KeyboardEvent) {
 			<SkillsPlatform />
 		</div>
 	{:else if shell.tab === 'artifacts'}
-		<!-- Artifact Store debugger plus the retained local-download shelf. -->
+		<!-- Document library plus the retained Artifact Store history and local-download shelf. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
-			<ArtifactsPage />
+			<ArtifactWorkspacePage />
 		</div>
 	{/if}
 

@@ -118,11 +118,12 @@ export async function loadCatalog(): Promise<Map<string, ComponentCatalogEntry>>
 			componentRef: 'ceo.aven:component:data:artifacts@1',
 			schema: 'artifact_store',
 			ownerRoleSuffix: 'art_owner',
-			targetSchemaVersion: 3,
+			targetSchemaVersion: 4,
 			migrationFiles: [
 				artifactMigration('0001_core'),
 				artifactMigration('0002_upload_cleanup'),
-				artifactMigration('0003_intent_declaration_catalog')
+				artifactMigration('0003_intent_declaration_catalog'),
+				artifactMigration('0004_library_indexes')
 			],
 			externalProvisioner: 'artifact-store',
 			verifyTable: 'store_state',

@@ -38,8 +38,9 @@ The current application brings these parts into one flow:
   identity dashboard. Each passkey has an editable name.
 - Checkout records purchases, subscriptions, invoices, and every verified Polar
   webhook, including event types the product does not act on yet.
-- Documents can be imported, processed, stored as artifacts, and discussed in the
-  same Intent history.
+- Documents can be imported, processed, stored as artifacts, found in a filtered
+  library, and discussed in the same Intent history. The artifact history remains
+  available beside the library, including an exact-artifact handoff to Skill Studio.
 - Skills describe reusable work; Actor Runner admits durable runs and keeps their
   status, attempts, and recovery state.
 - A customer environment owns its Intents, artifacts, Actor runs, and future domain

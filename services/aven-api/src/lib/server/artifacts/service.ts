@@ -1095,6 +1095,15 @@ export class ArtifactFileService {
 		return this.#client(databaseName, scopeId, routingGeneration).queryArtifacts(scopeId, query)
 	}
 
+	async library(
+		databaseName: string,
+		scopeId: string,
+		query: Record<string, string | number | undefined>,
+		routingGeneration = 1
+	) {
+		return this.#client(databaseName, scopeId, routingGeneration).library(scopeId, query)
+	}
+
 	async content(
 		databaseName: string,
 		scopeId: string,

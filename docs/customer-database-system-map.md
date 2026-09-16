@@ -97,6 +97,12 @@ limited to the run table. Published Skills, synthetic Source definitions, captur
 activation/invocation receipts and results remain in the Artifact Store, accessed
 through its scoped API. Studio does not read Artifact tables directly.
 
+Artifact component schema version 4 adds read indexes for the source-bound library.
+The library projects original documents and current validated financial observations
+from immutable artifacts; it does not create mutable entity records. Its scoped read
+path uses the verified customer database and environment, and the native client does
+not provide physical routing.
+
 Studio query and command requests use the existing customer `actor-runs` route.
 The exact `POST /studio/query` suffix requires `actor-runs:read` and rejects
 mutating operations; `POST /studio/command` requires `actor-runs:write`.

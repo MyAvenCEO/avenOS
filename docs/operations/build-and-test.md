@@ -41,6 +41,18 @@ Run the application unit tests separately:
 (cd app && bun test)
 ```
 
+The artifact library's scoped SQL projection has a disposable PostgreSQL 17
+regression. It checks tenant isolation, validated revision selection, source-backed
+financial rows, paging, and a synthetic first page beyond the former browser tail:
+
+```sh
+python3 services/artifact-store/tests/library-query.py
+```
+
+The script starts and removes a `postgres:17-alpine` Docker container. Its synthetic
+documents contain no customer files. The timing it prints describes that fixture,
+not production-scale search latency.
+
 Skill Studio's compiler and service tests run in the customer-platform suite.
 Its `studio.persistence.e2e.test.ts` is included in the Actor Runner persistence
 stage of the full-stack gate and requires both its disposable PostgreSQL database
@@ -66,6 +78,19 @@ its file-watch limit, prefix the preview command with `CHOKIDAR_USEPOLLING=true`
 The browser test uses the real component and compiler, simulates only native IPC,
 and writes desktop/mobile screenshots under `/tmp/aven-studio-*.png`; it is not a
 replacement for the database-backed proof.
+
+The artifact library browser check exercises its category filter, financial table,
+on-demand source preview, and exact-ID handoff to Studio. Start an isolated app
+preview, then run the test in a second terminal:
+
+```sh
+(cd app && bunx vite build && bunx vite preview --host 127.0.0.1 --port 1463 --strictPort)
+bun app/tests/artifact-library-ui.mjs
+```
+
+`AVEN_LIBRARY_UI_URL` overrides its default preview origin. The test simulates the
+native IPC boundary and writes `/tmp/aven-artifact-library-invoice.png`; the scoped
+PostgreSQL regression above verifies the server projection separately.
 
 Format and lint changed files before committing:
 

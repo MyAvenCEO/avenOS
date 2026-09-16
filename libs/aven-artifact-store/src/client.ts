@@ -129,6 +129,16 @@ export class ArtifactStoreClient {
 		return this.#json(`/v1/scopes/${scopeId}/artifacts?${parameters}`)
 	}
 
+	library(
+		scopeId: string,
+		query: Record<string, string | number | undefined>
+	): Promise<ArtifactJson> {
+		const parameters = new URLSearchParams()
+		for (const [key, value] of Object.entries(query))
+			if (value !== undefined) parameters.set(key, String(value))
+		return this.#json(`/v1/scopes/${scopeId}/library?${parameters}`)
+	}
+
 	/** Materialize immutable outputs through the same scoped API on either execution host. */
 	async committedClientRun(
 		scopeId: string,
