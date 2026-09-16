@@ -1,0 +1,40 @@
+{
+	"engine": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+	"results": [
+		{
+			"documents": 1000,
+			"incrementalBuildMs": 759.3000000119209,
+			"p50Ms": 0.800000011920929,
+			"p95Ms": 5.699999988079071,
+			"maxExamined": 20
+		},
+		{
+			"documents": 10000,
+			"incrementalBuildMs": 52332.69999998808,
+			"p50Ms": 2.900000035762787,
+			"p95Ms": 10.199999988079071,
+			"maxExamined": 20
+		},
+		{
+			"documents": 100000,
+			"incrementalBuildMs": 679342.1000000238,
+			"p50Ms": 4.399999976158142,
+			"p95Ms": 5.899999976158142,
+			"maxExamined": 20
+		}
+	],
+	"measuredAt": "2026-09-16",
+	"schemaVersion": 4,
+	"fixture": "1000, 10000, 100000 synthetic documents; roughly 500 characters each; 30 exact-reference, common-term and intent-scoped queries per size",
+	"limits": {
+		"maxExaminedPerPage": 200,
+		"maxReturnedPerPage": 20,
+		"queryP95LimitMs": 250
+	},
+	"limitations": [
+		"Build times are incremental; persisted cache avoids full rebuilds on unchanged reloads.",
+		"Does not measure server inventory loading, network source downloads, or realistic document-size distribution.",
+		"Queries bound per-page work; total search coverage can require multiple pages.",
+		"Existing full intent hydration and in-memory intent/message search still need server pagination/indexing for unbounded archives."
+	]
+}

@@ -1,0 +1,35 @@
+{
+  "typeKey": "studio.source",
+  "version": 1,
+  "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "sourceId",
+      "name",
+      "kind",
+      "contractVersion"
+    ],
+    "properties": {
+      "sourceId": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160
+      },
+      "kind": {
+        "const": "synthetic-email"
+      },
+      "contractVersion": {
+        "const": 1
+      }
+    }
+  },
+  "blobPolicy": "forbidden",
+  "referenceRules": []
+}

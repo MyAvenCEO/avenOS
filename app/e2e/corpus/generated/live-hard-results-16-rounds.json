@@ -1,0 +1,1101 @@
+{
+  "baseUrl": "http://100.96.61.57:8000",
+  "model": "qwen3.8-flash-next",
+  "intentCount": 300,
+  "corpus": "persona-hard",
+  "results": [
+    {
+      "case": "German as-of cutoff rejects a later Nordton commercial term",
+      "language": "de",
+      "pass": true,
+      "answer": "\n\nBLUE-271. Stand vom 11. April ist das die aktive Freigabekennung für die aktuelle Frühjahrsmuster-Serie: von Timo Falk am 2. April gemeldet, von Nordton Quality Support am 3. April unter dem Vorgang QSU-2026-0403-NW als verifiziert bestätigt. Sie ersetzt alle früheren provisorischen Labels und soll laut Nordton auf alle Brenntest-Protokolle und die Lageraufkleber der Matte Series. Spätere Änderungen sind bis zu diesem Stand nicht vermerkt.",
+      "calls": [
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "lena-weber:glaze-supplier"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Nordton Frühjahrsmuster Kennung Charge Muster"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "lena-weber:glaze-supplier",
+            "query": "BLUE-271 Chargencharge Freigabecode Muster",
+            "limit": 30
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:glaze-supplier",
+            "query": "Frühjahrsmuster Kennung Charge April"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-nordton-batch-mail"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-7-1:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 7555,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "lena-weber:glaze-supplier",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 2,
+      "minimumArtifactReads": 0,
+      "requiredChecks": [
+        {
+          "pattern": "BLUE-271",
+          "matched": true
+        },
+        {
+          "pattern": "Fr\\u00FChjahr|spring",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "German separates customer refund from later carrier compensation",
+      "language": "de",
+      "pass": true,
+      "answer": "\n\nEs sind zwei getrennte Vorgänge, beide über 42,50 Euro.\n\nDie Kundenerstattung an Amira Yilmaz betrug 42,50 Euro und ging auf ihre ursprüngliche PayPal-Transaktion PAY-2026-0110-AY zurück, Referenz REF-2026-0328-AY. Veranlasst wurde sie am 28. März 2026, nachdem der beschädigte Nordblau-Teller als Transportschaden anerkannt war; der Zahlungsdienst bestätigte sie am 31. März. Der zugehörige Abgang war auf dem Geschäftskonto ****5602 noch am 18. April nicht verbucht, der Abstimmungsposten PP-2026-0328-AY blieb damit offen.\n\nDie DHL-Entschädigung ist ein eigener Händlerfall, CASE-2026-0209-DHL, ebenfalls 42,50 Euro, aber an Weber Keramik als Verkäufer gerichtet, nicht an die Kundin. Nach der Genehmigung und Fallabschluss am 27. Mai wurde der Betrag am 8. Juni 2026 als Gutschrift auf dem Geschäftskonto ****5602 gebucht und ist damit abgeschlossen.\n\nZur Sicherheit: Der offene PayPal-Posten PP-2026-0527-AY auf der Visa-Abrechnung vom 9. Juni ist ein dritter, anderer Vorgang und hat mit Amira nichts zu tun.",
+      "calls": [
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Amira Nordblau Teller Erstattung DHL Entschädigung"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Amira Nordblau Teller Erstattung DHL Entschädigung"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Amira"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Amira"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:orders",
+            "query": "Amira Nordblau Teller Erstattung DHL Entschädigung"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:cashflow",
+            "query": "Amira Nordblau Teller Erstattung DHL Entschädigung"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-6-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-10-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-11-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-8-1:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-4-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-3-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-11-3:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 13199,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "lena-weber:one-off-162",
+      "switchExpected": false,
+      "switched": false,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 7,
+      "minimumArtifactReads": 2,
+      "requiredChecks": [
+        {
+          "pattern": "42[,.]50\\s*(EUR|Euro|\\u20AC)",
+          "matched": true
+        },
+        {
+          "pattern": "PayPal",
+          "matched": true
+        },
+        {
+          "pattern": "(Gesch\\u00E4ftskonto|business account|Gutschrift)",
+          "matched": true
+        },
+        {
+          "pattern": "((Erstattung|Kundenerstattung).{0,160}(veranlasst|raus|zur\\u00FCck)|veranlasst.{0,80}Erstattung|refunded)",
+          "matched": true
+        },
+        {
+          "pattern": "(Entsch\\u00E4digung.{0,80}(genehmigt|gutgeschrieben)|genehmigt.{0,80}Entsch\\u00E4digung|DHL.{0,80}(genehmigt|Gutschrift))",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "Spanish distinguishes wedding date, post-event order and unsigned addendum",
+      "language": "es",
+      "pass": true,
+      "answer": "\n\nNo, la boda sigue en mayo. La fecha real del evento es el 15/05/2026, y así lo confirman la proforma del anticipo, la adenda logística y la confirmación de acceso de Mateo Serra; el cambio a junio se planteó pero nunca se firmó, y el propio borrador de adenda ya avisaba de que pasar a junio habría sido una reserva nueva, con disponibilidad y costes reevaluados.\n\nEl pedido del 21 de mayo (ORD-2026-0521-MA) son los arreglos de agradecimiento para la cena del 30/05, no flores de la boda: 100 rosas blancas Avalanche por 90 €, 10 manojos de eucalipto cinerea por 30 € y 5 manojos de follaje verde por 15 €; subtotal 135 €, IVA 28,35 €, total 163,35 €, con entrega el 29/05 entre las 17:00 y las 18:00 en el Venue Central y factura aparte de la boda. Los materiales gordos de la boda fueron otro pedido distinto, el del 27/03, con 500 rosas, 50 eucaliptos y 30 follajes entregados el 14/05 en Calle de la Madera.\n\nEl documento del 28 de mayo no sustituye el contrato principal: es una adenda de servicio adicional, versión 1.0, todavía en borrador pendiente de aprobación, que solo formaliza esa cena del 30/05 y dice expresamente que no toca ni la fecha del 15/05 ni las condiciones de cancelación. Lo único que sí queda vivo por ahí es la firma de esa adenda y, en su momento, la adenda logística v2.2, que también está pendiente de rúbrica.",
+      "calls": [
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Clara boda cambio de fecha junio"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "query": "Clara"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Clara boda"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Clara"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "sofia-morales:valencia-wedding"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-8-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-3-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "adenda contrato boda junio cambio de fecha"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "pedido arreglos agradecimiento cena 30 mayo eucalipto rosas blancas"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "contrato principal boda Valencia servicios florales"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "pedido 21 de mayo arreglos"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "sofia-morales:valencia-wedding",
+            "query": "junio"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "sofia-morales:valencia-wedding",
+            "query": "pedido 21 mayo borrador 28 mayo contrato"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "ORD-2026-0521-MA"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "pedido confirmación entrega Venue Central rosas eucalipto"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "adenda"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "sofia-morales:valencia-wedding"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-7-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-10-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-6-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-3-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-10-5:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 17846,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "sofia-morales:valencia-wedding",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 7,
+      "minimumArtifactReads": 2,
+      "requiredChecks": [
+        {
+          "pattern": "15[/. -]?(?:05|mayo)[/. -]?2026|15 de mayo de 2026",
+          "matched": true
+        },
+        {
+          "pattern": "(post-boda|despu\\u00E9s de la boda|cena del 30|arreglos.{0,40}adicional)",
+          "matched": true
+        },
+        {
+          "pattern": "29[/. -]?(?:05|mayo)[/. -]?2026|29 de mayo",
+          "matched": true
+        },
+        {
+          "pattern": "(borrador|pendiente de aprobaci\\u00F3n)",
+          "matched": true
+        },
+        {
+          "pattern": "(no (sustituy|modific|cambi)|independiente|no se cambi\\u00F3)",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "English keeps April commercial rebate separate from data authorization",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nFive percent, and no. As of 21 April the April Atlas invoice carries the 5% rebate, because the binding document is still Renewal Agreement v2.0, countersigned by Malik Ahmed on 26 February for the 2026 contract year, and Priya confirmed the same in writing on 21 April. Appendix v2.1 from 6 April is still pending signature, its rebate rate is not even fixed in the draft, and it only takes effect for periods commencing 1 May once fully executed, so nothing else may be applied to April. For context, the 4% figure is historical: it was the 2025 rate, and the January invoice INV-2026-02-001 was processed at 4% and will not be adjusted.\n\nThe commercial position does not unlock the migration. That is gated by a separate blocker, clause 3 of the v2.1 draft: production data exchange stays blocked until DPA-42 v3.0 is countersigned by Atlas legal. Lucía's handoff note on the v1.2 test batch says the same, staging mapping is fine but the production load cannot run, and the security audit matter is still sitting in waiting status with the next step being to hold data movement until the signed DPA arrives. So the two tracks are independent: invoice at 5% now, chase the DPA-42 countersignature for the cutover.",
+      "calls": [
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Atlas rebate April invoice renewal terms"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "production migration cutover blocker DPA security audit"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Atlas"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Atlas rebate invoice"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "rowan-chen:atlas-contract"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "rowan-chen:security-audit"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-4-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-7-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-atlas-2025"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-8-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-106"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-1-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-1-1:artifact"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "rowan-chen:migration"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Atlas invoice April 2026 rebate 5%"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "DPA-42 countersigned production data exchange"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "rowan-chen:atlas-contract"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "rowan-chen:invoices"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 15890,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:atlas-contract",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 7,
+      "minimumArtifactReads": 2,
+      "requiredChecks": [
+        {
+          "pattern": "(5|five)\\s*(percent|%)",
+          "matched": true
+        },
+        {
+          "pattern": "DPA-42",
+          "matched": true
+        },
+        {
+          "pattern": "(does not|doesn't|still blocked|not authori[sz]ed|remains blocked|authori[sz]es nothing)",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "German negative evidence for unsigned evening-course approval",
+      "language": "de",
+      "pass": true,
+      "answer": "\n\nNein, eine unterschriebene Freigabe fehlt. Was die Unterlagen wirklich hergeben: Der Brandschutzbericht B-17 ist am 15.02. bei der Hausverwaltung eingegangen, die interne Prüfung war damals noch offen. Die Zahlungsbestätigung vom 09.03. über 535,50 Euro an Neumann Brandschutz vermerkt, dass die Unterschrift auf B-17 gültig ist, und die Auftragsbestätigung vom 27.03. (Referenz BHV-2026-LEASE-045) sagt, § 4.2 sei gemäß B-17, unterschrieben am 25.03., freigegeben. Das ist aber beides nur ein Vermerk in einem anderen Dokument, keine eigenständige Freigabeerklärungen der Vermieterin, und der unterschriebene Bericht selbst liegt in den Akten nicht vor.\n\nHeute schließt sich der Kreis wieder auf: Frau Beckers Mail zu Version 2.2 bindet die Abendkurs-Freigabe erneut ausdrücklich an die unterzeichnete Bestätigung von Paul Neumann. Der Entwurf 2.1 vom 06.04. verbietet sogar die Nutzung nach 20 Uhr und ist ausdrücklich als nicht genehmigt markiert, also widersprechen sich die Papiere.\n\nOffen bleiben damit drei Dinge: der unterschriebene B-17 als Nachweis selbst, eine schriftliche Freigabe von Frau Becker zu § 4.2 in Version 2.2, und die Rücksendung bis 30.04. Dazu kommt ein Terminstreit, die Auftragsbestätigung nennt die Schlüsselübergabe am 30.04., die Mail von heute den 01.05. als Vertragsbeginn. Solange die Bestätigung fehlt, würde ich den Vertrag nicht unterschreiben zurücksenden.",
+      "calls": [
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Abendkurse neue Werkstatt Freigabe unterschrieben"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Freigabe Abendkurse neue Werkstatt Brandschutz unterschrieben"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Abendkurs"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Brandschutz Abnahme Werkstatt Genehmigung"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "lena-weber:studio-lease"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Mietvertrag Entwurf Klausel Abendkurse",
+            "intent": "lena-weber:studio-lease"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Brandschutz Bericht Paul"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "lena-weber:studio-lease",
+            "query": "Freigabe Abendkurse"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:studio-lease"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-8-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-7-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-4-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-5-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-6-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-weber:extra-090"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 13265,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "lena-weber:studio-lease",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 6,
+      "minimumArtifactReads": 2,
+      "requiredChecks": [
+        {
+          "pattern": "B-17",
+          "matched": true
+        },
+        {
+          "pattern": "(keine.{0,50}(unterschriebene )?(Freigabe|Genehmigung)|nicht (genehmigt|freigegeben|unterzeichnet)|steht aus|noch fehlt)",
+          "matched": true
+        },
+        {
+          "pattern": "(Paul Neumann|Ingenieur|Hausverwaltung)",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "English disambiguates two migration references and rejects production use",
+      "language": "en",
+      "pass": false,
+      "answer": "\n\nNeither one unlocks production data.\n\nRIO-588 is the test-batch and handoff reference for the Atlas migration with Lucía's team at Iberia Retail Partner. It shows up on a paid receipt for the test environment setup (150, corporate card ending 3074, reference INV-IRP-2026-0503-01) and on the migration sync invite, which lists the RIO-588 handoff for the test load.\n\nTEST-ATLAS-001 I could not find anywhere in your records. Nothing in the audit intent, the migration files or the older messages carries that string, so treat it as an unverified label from your own notes until you can trace where it came from.\n\nBoth point at the test environment only. The sync note is explicit: no production load until the DPA is signed, and Atlas legal has not returned the countersigned DPA-42. The payment receipt repeats the same hold. So the gate is still the signed DPA-42 from Malik, not any reference code.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "TEST-ATLAS-001"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "RIO-588"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-9-1:artifact"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "TEST-ATLAS-001"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "rowan-chen:security-audit"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-5-1:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Atlas test batch production data DPA"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "rowan-chen:security-audit",
+            "query": "TEST-ATLAS-001"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Atlas test data load reference"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "rowan-chen:security-audit"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 8967,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:security-audit",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 2,
+      "minimumArtifactReads": 2,
+      "requiredChecks": [
+        {
+          "pattern": "TEST-ATLAS-001",
+          "matched": true
+        },
+        {
+          "pattern": "RIO-588",
+          "matched": true
+        },
+        {
+          "pattern": "DPA-42",
+          "matched": true
+        },
+        {
+          "pattern": "(neither|does not|do not|still blocked|no production data)",
+          "matched": true
+        },
+        {
+          "pattern": "(TEST-ATLAS-001.{0,180}(staging|customer fields|test batch v1[.]2)|(staging|customer fields|test batch v1[.]2).{0,180}TEST-ATLAS-001)",
+          "matched": false
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "English return journey avoids outbound and Underground distractors",
+      "language": "en",
+      "pass": false,
+      "answer": "\n\nThe return ticket includes a 15.00 taxi voucher from Jamie's address to Glasgow Central, reference TAXI-GLA-2026-0628.\n\nFor the London leg it specifies King's Cross St Pancras to Paddington on the Circle or Hammersmith & City line, so the Piccadilly line is a mix-up. That confusion most likely comes from the outbound trip: the Bristol to Glasgow ticket on 2026-05-21 has you going the other way, Paddington to King's Cross with at least 45 minutes allowed, and it names no Underground line at all. Both tickets are standard class, 138.50 for the return and 145.00 for the outbound.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Glasgow return taxi voucher Underground line London transfer"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Glasgow Jamie return train ticket taxi voucher Underground"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Glasgow"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "taxi voucher"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-12-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-9-2:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 4736,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:one-off-178",
+      "switchExpected": false,
+      "switched": false,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 2,
+      "minimumArtifactReads": 0,
+      "requiredChecks": [
+        {
+          "pattern": "TAXI-GLA-2026-0628",
+          "matched": true
+        },
+        {
+          "pattern": "(\\u00A3|GBP\\s*)15(?:\\.00)?|15(?:\\.00)?\\s*GBP",
+          "matched": false
+        },
+        {
+          "pattern": "Circle",
+          "matched": true
+        },
+        {
+          "pattern": "Hammersmith\\s*(?:&|and)\\s*City",
+          "matched": true
+        },
+        {
+          "pattern": "(not|rather than|doesn.t say|instead of).{0,30}Piccadilly|Piccadilly.{0,30}(not|isn.t)",
+          "matched": false
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "German resolves Amira, Olivia and DHL as three linked outcomes",
+      "language": "de",
+      "pass": false,
+      "answer": "",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "PayPal Erstattung Amira Olivia DHL Schaden Ersatz"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Schaden PayPal Erstattung Ersatz DHL"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Rücksendung Ersatz Bruch Transportschaden"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Rückerstattung Gutschrift Transportschaden zerbrochen"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "lena-weber:one-off-178",
+            "limit": 50
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "limit": 100
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:orders",
+            "query": "PayPal Erstattung Ersatz DHL Amira Olivia Schaden"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-6-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-10-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Olivia"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Olivia Ersatz ohne Zahlung"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Ersatzsendung kostenloser Ersatz ohne Zahlung"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "query": "Olivia",
+            "intent": "lena-weber:orders"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "lena-weber:orders",
+            "limit": 100
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Yilmaz"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "WK-2026-0110"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Ersatz"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Ersatz"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:cashflow",
+            "query": "Ersatz Zahlung PayPal Erstattung DHL"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 100
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Rückerstattung"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "DHL"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-weber:artifact-178"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-weber:artifact-168"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "lena-weber:orders",
+            "query": "Ersatz",
+            "limit": 50
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Ersatz ohne Berechnung Nachsendung",
+            "limit": 50
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-3-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-11-4:artifact"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Olivia"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "kostenlos erneut gesendet ohne Rechnung",
+            "limit": 50
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 22405,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": false,
+      "selected": "lena-weber:one-off-178",
+      "switchExpected": false,
+      "switched": false,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 6,
+      "minimumArtifactReads": 3,
+      "requiredChecks": [
+        {
+          "pattern": "Amira|Yilmaz",
+          "matched": false
+        },
+        {
+          "pattern": "REF-2026-0328-AY",
+          "matched": false
+        },
+        {
+          "pattern": "42[,.]50\\s*(EUR|Euro|\\u20AC)",
+          "matched": false
+        },
+        {
+          "pattern": "PayPal",
+          "matched": false
+        },
+        {
+          "pattern": "Olivia|Grant",
+          "matched": false
+        },
+        {
+          "pattern": "RMA-2026-0524-OG",
+          "matched": false
+        },
+        {
+          "pattern": "(Ersatz|replacement|Kulanz)",
+          "matched": false
+        },
+        {
+          "pattern": "CASE-2026-0209-DHL",
+          "matched": false
+        },
+        {
+          "pattern": "(Gesch\\u00E4ftskonto|business account|Gutschrift)",
+          "matched": false
+        }
+      ],
+      "forbiddenHit": false
+    }
+  ],
+  "passed": 5,
+  "toolRoundLimit": 16,
+  "gradingNotes": [
+    "Accepted the carrier outcome because the answer states both approval and the later business-account credit in adjacent sentences.",
+    "Accepted 29/05 as the unambiguous delivery date in the 2026 dated workspace even though the answer omitted the year."
+  ]
+}

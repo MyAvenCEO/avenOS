@@ -42,6 +42,55 @@ const receipt = (
 })
 
 describe('observation-driven general solver', () => {
+	test('bounds independent invocations and admits their receipts in frontier order', async () => {
+		const operations = [operation('page', ['page(P)'], ['done(P)'])]
+		const ingredients = Array.from({ length: 6 }, (_, index) =>
+			fact(`page-${index}`, `page(p${index})`)
+		)
+		const frontier = await solveObservedFrontier('pages', operations, ingredients)
+		for (const maxParallelism of [1, 2, 5]) {
+			let active = 0
+			let peak = 0
+			const result = await executeObservedProgram({
+				runId: 'pages',
+				operations,
+				ingredients,
+				maxParallelism,
+				port: {
+					lookup: async () => null,
+					invoke: async (invocation) => {
+						active++
+						peak = Math.max(peak, active)
+						await new Promise((resolve) => setTimeout(resolve, 7 - active))
+						active--
+						return receipt(invocation, [
+							fact(`done-${invocation.bindings.P}`, `done(${invocation.bindings.P})`)
+						])
+					}
+				}
+			})
+			expect(peak).toBe(maxParallelism)
+			expect(result.state).toBe('complete')
+			expect(result.receipts.map((item) => item.invocationId)).toEqual(
+				frontier.map((item) => item.id)
+			)
+		}
+		await expect(
+			executeObservedProgram({
+				runId: 'invalid',
+				operations,
+				ingredients,
+				maxParallelism: 33,
+				port: {
+					lookup: async () => null,
+					invoke: async () => {
+						throw new Error('unused')
+					}
+				}
+			})
+		).rejects.toThrow('between 1 and 32')
+	})
+
 	test('anonymous requirements are independent and Cartesian matching is bounded', async () => {
 		const operations = [operation('join', ['left(X, _)', 'right(X, _)'], ['done(X)'])]
 		const ingredients = [

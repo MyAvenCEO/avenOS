@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-03-03",
+        "intentId": "rowan-chen:security-audit",
+        "kind": "calendar",
+        "user": "Check calendar for Lucía's sync. Did she confirm the DPA status for the Atlas migration?",
+        "assistant": "No, the invite only covers the technical handoff for test batch v1.2. The DPA status is separate; we are still waiting for Malik to countersign DPA-42 before any production data moves.",
+        "artifact": {
+          "title": "Sync de migración Atlas - Lote de prueba",
+          "from": "Lucía Ortega",
+          "to": "Rowan Chen",
+          "language": "es",
+          "body": "Evento: Sync de migración Atlas - Lote de prueba\nFecha: 2026-03-03\nHora: 10:00 - 10:30 GMT\nUbicación: Microsoft Teams\nAsistentes: Lucía Ortega (Iberia retail partner), Rowan Chen (Consultancy)\nEstado: Confirmado\n\nAgenda:\n1. Revisión de los campos de cliente en el entorno de staging.\n2. Confirmación de la referencia de handoff RIO-588 para la carga de prueba.\n\nNota importante: No podemos ejecutar la carga en producción hasta que el DPA esté firmado. El equipo legal de Atlas aún no ha devuelto la versión firmada de DPA-42."
+        },
+        "probe": {
+          "question": "What is the handoff reference for the test batch mentioned in the invite?",
+          "answer": "RIO-588"
+        }
+      },
+      {
+        "date": "2026-03-06",
+        "intentId": "rowan-chen:household",
+        "kind": "todo",
+        "user": "Add to list: verify Tess's invoice against the quote before paying from the reserve.",
+        "assistant": "Added. Due date set for 2026-03-10. Status: Pending. Linked to rowan-chen:household. Reminder: Check if the £1,200 deposit matches the agreed stage 1 payment.",
+        "artifact": {
+          "title": "Task: Verify Morgan Joinery Invoice",
+          "from": "Rowan Chen",
+          "to": null,
+          "language": "en",
+          "body": "Owner: Rowan Chen\nAction: Verify Tess Morgan's invoice against the signed quote for cabinet delivery.\nDue Date: 2026-03-10\nStatus: Pending\nLinked Matter: rowan-chen:household\nNotes: Ensure the £1,200.00 deposit matches the agreed stage 1 payment. Do not release funds from the protected reserve until measurements are confirmed by Tess. Contact Hazel Reed if any items are missing."
+        },
+        "probe": {
+          "question": "What is the due date for verifying the invoice?",
+          "answer": "2026-03-10"
+        }
+      },
+      {
+        "date": "2026-03-09",
+        "intentId": "rowan-chen:atlas-contract",
+        "kind": "receipt",
+        "user": "Did the Feb invoice payment clear? Need to confirm the rebate amount for the ledger.",
+        "assistant": "Yes, cleared today. The rebate applied is 5% (£100.00) on the £2,000.00 subtotal, per the signed renewal. Net payable was £2,300.00.",
+        "artifact": {
+          "title": "Payment Receipt: Atlas Ltd",
+          "from": "Atlas Ltd",
+          "to": "Rowan Chen Consultancy",
+          "language": "en",
+          "body": "Merchant: Atlas Ltd\nDate: 2026-03-09\nReference: ATLAS-PAY-2026-0309-02\nDescription: Payment for Invoice INV-2026-03-001 (February Services)\nSubtotal: £2,000.00\nVAT (20%): £400.00\nRebate Applied: 5% (£100.00)\nTotal Paid: £2,300.00\nCurrency: GBP\nPayment Method: Bank Transfer\nStatus: Completed\nNote: Rebate calculated per Renewal Agreement v2.0 signed 2026-02-26."
+        },
+        "probe": {
+          "question": "What was the rebate amount applied to this payment?",
+          "answer": "£100.00"
+        }
+      },
+      {
+        "date": "2026-03-12",
+        "intentId": "rowan-chen:foster-dog",
+        "kind": "transport-ticket",
+        "user": "Booked the train for the Glasgow visit. Need to check the time for Bea's handoff.",
+        "assistant": "Ticket confirmed. Departure is 09:15 from Bristol Temple Meads. Bea needs Pip by 08:30, so leave early. Fare was £62.50.",
+        "artifact": {
+          "title": "GWR E-Ticket Confirmation",
+          "from": "GWR",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Operator: GWR\nTraveller: Rowan Chen\nRoute: Bristol Temple Meads to London Paddington\nTravel Date: 2026-03-14\nDeparture: 09:15\nArrival: 11:10\nClass: Standard\nFare: £62.50\nBooking Reference: GWR-2026-0312-441\nStatus: Confirmed\nPayment Method: Monzo Household Debit ending 5526\nNote: Valid for the specified date only. Connection to Glasgow arranged separately via LNER from King's Cross."
+        },
+        "probe": {
+          "question": "What is the booking reference for this ticket?",
+          "answer": "GWR-2026-0312-441"
+        }
+      },
+      {
+        "date": "2026-03-15",
+        "intentId": "rowan-chen:garden",
+        "kind": "event-ticket",
+        "user": "Got the ticket for the seed swap. Is it valid for the morning shift?",
+        "assistant": "Yes, valid for the 10:00 entry. Asha is opening the shed at 09:00, so you can drop off the tools first. Admission is free for volunteers.",
+        "artifact": {
+          "title": "Bristol Community Garden Seed Swap Ticket",
+          "from": "Bristol Community Garden Trust",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Event: Spring Seed Swap & Tool Handoff\nVenue: Bristol Community Garden, Main Shed Area\nDate: 2026-03-15\nTime: 10:00 - 12:00\nHolder: Rowan Chen\nAdmission Category: Volunteer (Free)\nPrice: £0.00\nTicket Reference: BCGT-EVT-2026-0315-09\nStatus: Confirmed\nNote: Entry requires volunteer ID. Shed locker label GREEN-806 must be checked before tool distribution."
+        },
+        "probe": {
+          "question": "What is the ticket reference for the seed swap?",
+          "answer": "BCGT-EVT-2026-0315-09"
+        }
+      }
+    ],
+    "continuity": "Open: DPA-42 v3.0 awaiting countersignature from Malik Ahmed (Atlas Legal); production data exchange blocked. Open: Sam Patel access pending DPA signature. Resolved: Atlas Feb invoice paid 2026-03-09 with 5% rebate applied. Resolved: GWR ticket booked for 2026-03-14 (Ref: GWR-2026-0312-441). Resolved: Seed swap ticket issued for 2026-03-15 (Ref: BCGT-EVT-2026-0315-09). Open: Morgan Joinery invoice verification due 2026-03-10."
+  }
+}

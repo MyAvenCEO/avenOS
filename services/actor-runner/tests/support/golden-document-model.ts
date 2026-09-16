@@ -6,7 +6,10 @@ import type {
 
 export class GoldenInvoiceModel implements DocumentModelGateway {
 	readonly requests: DocumentModelRequest[] = []
-	constructor(private readonly kind: 'invoice' | 'bank-statement' = 'invoice') {}
+	constructor(
+		private readonly kind: 'invoice' | 'bank-statement' = 'invoice',
+		private readonly transactionId = 'TX-1'
+	) {}
 
 	async status(): Promise<DocumentModelStatus> {
 		return { available: true, maxPages: 15, modelId: 'golden-vision', modelLabel: 'Golden Vision' }
@@ -74,7 +77,7 @@ export class GoldenInvoiceModel implements DocumentModelGateway {
 						periodEnd: '2025-01-31',
 						transactions: [
 							{
-								transactionId: 'TX-1',
+								transactionId: this.transactionId,
 								bookingDate: '2025-01-20',
 								valueDate: '2025-01-20',
 								title: 'SEPA transfer',

@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//avenOS//Synthetic Corpus//EN
+BEGIN:VEVENT
+UID:qwen-sofia-morales-8-4@synthetic.test
+DTSTAMP:20260427T180200Z
+DTSTART;TZID=Europe/Madrid:20260427T080000
+DTEND;TZID=Europe/Madrid:20260427T090000
+SUMMARY:Recepción Peonías Sustitutas - Mar Azul
+DESCRIPTION:EVENTO: Recepción Peonías Sustitutas - Mar Azul\nFECHA: 27/04/2026\nHORA INICIO: 08:00\nHORA FIN: 09:00\nLUGAR: Estudio Morales - Zona de Carga\nASISTENTES: Sofía Morales\, Mario Costa\, Reparto Mar Azul\nESTADO: Confirmado\n\nNOTAS:\n- Referencia de envío: ORANGE-64\n- Pedido original: MA-2026-0325\n- Sustitución por daño en transporte (RA-2026-0328)\n- Verificar temperatura de cámara fría antes de descargar.\n- Firmar albarán con referencia ORANGE-64 visible.
+X-SYNTHETIC-TEST-RECORD:TRUE
+END:VEVENT
+END:VCALENDAR

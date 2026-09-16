@@ -215,7 +215,8 @@ export class CustomerStore {
 		}>(
 			`SELECT e.id,e.purchased_name,m.role,e.desired_state,e.observed_state,e.routing_generation
 			 FROM customer_environments e JOIN customer_environment_memberships m ON m.environment_id=e.id
-			 WHERE m.subject_id=$1 ORDER BY e.created_at,e.id`,
+			 WHERE m.subject_id=$1 AND m.role='owner' AND e.owner_subject_id=$1
+			 ORDER BY e.created_at,e.id`,
 			[subjectId]
 		)
 		return Promise.all(
@@ -267,7 +268,7 @@ export class CustomerStore {
 				 FROM customer_environments e
 				 JOIN customer_environment_memberships m ON m.environment_id=e.id AND m.subject_id=$2
 				 JOIN customer_environment_components c ON c.environment_id=e.id AND c.component_ref=$3
-				 WHERE e.id=$1`,
+				 WHERE e.id=$1 AND e.owner_subject_id=$2 AND m.role='owner'`,
 				[environmentId, claims.sub, componentRef]
 			)
 		).rows[0]

@@ -625,3 +625,68 @@ describe('artifact file coordinator', () => {
 		])
 	})
 })
+
+test('source inventory pages do not rescan prefixes, load lineage, or accept another scope/epoch cursor', async () => {
+	let epoch = 'epoch-1'
+	const positions: string[] = []
+	const fetch: ArtifactStoreFetch = async (input, init) => {
+		const request = new Request(input, init),
+			url = new URL(request.url)
+		if (url.pathname.endsWith('/v1/context')) return Response.json({ storeEpoch: epoch })
+		if (url.pathname.endsWith('/publications')) {
+			expect(url.searchParams.get('limit')).toBe('50')
+			const after = url.searchParams.get('afterSequence') ?? ''
+			positions.push(after)
+			return Response.json({
+				storeEpoch: epoch,
+				nextAfterSequence: after === '0' ? 50 : null,
+				items:
+					after === '0'
+						? [
+								{
+									publicationId,
+									scopeSequence: 50,
+									kind: 'run',
+									runId: intentId,
+									committedAt: observedAt,
+									artifacts: [
+										{
+											artifactId,
+											localKey: 'file',
+											publicationOrdinal: 0,
+											typeKey: 'core.file',
+											typeVersion: 1,
+											artifactSha256: sha256,
+											producerRunId: intentId,
+											output: null
+										}
+									]
+								}
+							]
+						: []
+			})
+		}
+		throw Error(`Unexpected request: ${url.pathname}`)
+	}
+	const service = ArtifactFileService.fromConfig(
+		{
+			ARTIFACT_STORE_BASE_URL: 'http://artifact-store.test',
+			ARTIFACT_STORE_BEARER_TOKEN: 'service-token'
+		},
+		fetch
+	)
+	if (!service) throw Error('Missing service')
+	const first = await service.browsePage('cust_acme', scopeId)
+	expect(first.artifacts).toHaveLength(1)
+	expect(first.nextCursor).toBeTruthy()
+	const last = await service.browsePage('cust_acme', scopeId, 1, first.nextCursor ?? undefined)
+	expect(last.nextCursor).toBeNull()
+	expect(positions).toEqual(['0', '50'])
+	await expect(
+		service.browsePage('another_database', scopeId, 1, first.nextCursor ?? undefined)
+	).rejects.toMatchObject({ status: 400 })
+	epoch = 'epoch-2'
+	await expect(
+		service.browsePage('cust_acme', scopeId, 1, first.nextCursor ?? undefined)
+	).rejects.toMatchObject({ status: 409 })
+})

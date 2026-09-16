@@ -665,6 +665,14 @@ sequenceDiagram
     S->>D: one authorized customer-store operation
 ```
 
+The desktop coalesces simultaneous identity-token exchanges and keeps an issued token
+in memory for at most five seconds, keyed by a digest of the native session. Cache
+residence ends at least fifteen seconds before token expiry; malformed or missing
+expiry claims disable caching. Logout clears the cache. This adds at most five
+seconds before a remote session revocation is observed by the desktop's next token
+exchange; facade JWT validation and customer authorization still run on every
+product request. No identity token is persisted by this cache.
+
 The identity token proves who authenticated and with what assurance. The tenant grant
 proves what that subject may do in a particular customer environment. Neither replaces
 the other.
@@ -1037,3 +1045,13 @@ persistence layer.
 The actor-runtime papers in this repository are design inputs for the
 manifest, admission, idempotency, checkpoint, and effect-reconciliation semantics.
 Actor execution and customer-component provisioning remain separate runtime protocols.
+
+### Intent retrieval projections
+
+The initial Intent schema keeps rebuildable normalized full-text columns beside the
+owned Intent and contribution rows. A trigger derives each contribution's owner from
+its parent Intent. Retrieval still requires the verified subject on both sides of the
+join. Search cursors bind the subject, record kind, query and scope; full message reads
+repeat authorization independently. Schema version 1 includes these columns and
+indexes from creation, without an older-schema upgrade or backfill. Conversation
+data stays in its owning customer database.

@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-05-18",
+        "intentId": "rowan-chen:household",
+        "kind": "transaction",
+        "user": "Ellis, did the stage 2 deposit for Tess go out? Need to check the reserve balance before we book the fitters.",
+        "assistant": "Checking Monzo. Yes, cleared. Reserve is down but safe. Invoice INV-MJ-2026-005 marked paid.",
+        "artifact": {
+          "title": "Monzo Transaction Detail: Morgan Joinery Ltd",
+          "from": "Monzo",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Transaction ID: MON-2026-0518-5526\nDate: 2026-05-18\nMerchant: Morgan Joinery Ltd\nAmount: -£1,200.00 GBP\nCurrency: GBP\nMethod: Monzo Household Debit ending 5526\nStatus: Completed\nReference: INV-MJ-2026-005\nDescription: Stage 2 Cabinet Deposit\n\nAccount Balance After Transaction: £3,300.00 GBP\nNote: This payment releases the second tranche for cabinet manufacturing. Ensure measurements match Tess's final quote before fitting begins."
+        },
+        "probe": {
+          "question": "What was the account balance after the stage 2 deposit?",
+          "answer": "£3,300.00 GBP"
+        }
+      },
+      {
+        "date": "2026-05-21",
+        "intentId": "rowan-chen:kitchen",
+        "kind": "order",
+        "user": "Ordered the SALT-312 paint again. Need it before the fitters arrive next week. Check delivery window.",
+        "assistant": "Confirmed. Delivery Thursday. Order ref KS-2026-0521-12. Total £45.50.",
+        "artifact": {
+          "title": "Kitchen Supplier Order Confirmation",
+          "from": "Kitchen Supplier",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Order Reference: KS-2026-0521-12\nDate: 2026-05-21\nItems:\n1x Dulux Easycare Kitchen Paint (SALT-312, 2.5L) - £28.00\n1x Microfibre Roller Set - £12.50\n1x Masking Tape Pack - £5.00\nSubtotal: £45.50\nVAT (20%): Included in price\nTotal Paid: £45.50 GBP\nPayment Method: PayPal\nDelivery Window: 2026-05-28, 09:00-17:00\nStatus: Dispatched\nNote: Please inspect upon arrival. If items are missing, contact support immediately with this reference."
+        },
+        "probe": {
+          "question": "What is the delivery window for the paint order?",
+          "answer": "2026-05-28, 09:00-17:00"
+        }
+      },
+      {
+        "date": "2026-05-24",
+        "intentId": "rowan-chen:garden",
+        "kind": "return",
+        "user": "Asha, the seedling trays from last week were cracked. Returning them. Need a credit for the next batch.",
+        "assistant": "Noted. Drop off at the shed. I'll log it against the volunteer account.",
+        "artifact": {
+          "title": "Community Garden Return Authorization",
+          "from": "Asha Green",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Return Reference: CG-RET-2026-0524-01\nDate: 2026-05-24\nOriginal Order: CG-ORD-2026-0510-05\nItems: 4x Seedling Trays (Plastic)\nReason: Damaged in transit/storage\nStatus: Pending Inspection\nRefund Destination: Volunteer Account Credit\nTiming: Credit applied after physical check at shed.\nNote: Leave items in locker GREEN-806. I will sign off when I open the shed on Saturday."
+        },
+        "probe": {
+          "question": "Where should the damaged trays be left?",
+          "answer": "locker GREEN-806"
+        }
+      },
+      {
+        "date": "2026-05-27",
+        "intentId": "rowan-chen:garden",
+        "kind": "support",
+        "user": "Asha, did you get the trays? Need to know if the credit is sorted before I order more.",
+        "assistant": "Got them. Credit applied. All good for the next batch.",
+        "artifact": {
+          "title": "Community Garden Support Update",
+          "from": "Asha Green",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Case Reference: CG-RET-2026-0524-01\nDate: 2026-05-27\nStatus: Resolved\nInvestigation: Trays inspected. Damage confirmed as pre-existing crack, not user error.\nOutcome: Credit of £12.00 applied to volunteer account.\nNext Step: You can place new orders using the credit balance. No further action needed."
+        },
+        "probe": {
+          "question": "How much credit was applied to the volunteer account?",
+          "answer": "£12.00"
+        }
+      },
+      {
+        "date": "2026-05-28",
+        "intentId": "rowan-chen:atlas-contract",
+        "kind": "legal",
+        "user": "Malik, checking the status of the Atlas renewal appendix v2.1. Is the 7% rebate term active for May invoices?",
+        "assistant": "The renewal appendix v2.1 is currently in draft state. It has not been countersigned by Atlas Legal. Therefore, the 7% rebate term is not yet active. Please await the signed document.",
+        "artifact": {
+          "title": "DRAFT: Atlas Consultancy Renewal Appendix v2.1",
+          "from": "Malik Ahmed",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "PARTIES:\n1. Atlas Ltd (\"Client\")\n2. Rowan Chen Consultancy (\"Consultant\")\n\nDOCUMENT VERSION: v2.1 (Draft)\nDATE: 2026-05-28\n\nTERMS:\n1. Rebate Structure: The Consultant shall apply a rebate of 7% on all invoices issued between 2026-05-01 and 2026-12-31.\n2. Payment Terms: Net 30 days from invoice date.\n3. Data Processing: Production data exchange remains blocked until DPA-42 v3.0 is countersigned.\n\nAPPROVAL STATE: DRAFT. Not countersigned.\nNOTE: This draft supersedes the 5% term in v2.0 but does not activate until signed by both parties."
+        },
+        "probe": {
+          "question": "What is the approval state of the Atlas renewal appendix v2.1?",
+          "answer": "DRAFT. Not countersigned."
+        }
+      }
+    ],
+    "continuity": "Open: Atlas Renewal Appendix v2.1 remains unsigned draft; 7% rebate application blocked. Open: DPA-42 v3.0 unsigned; production data exchange blocked. Open: Invoice INV-2026-04-002 (£1,200.00) issued to Bristol Nonprofit, unpaid. Resolved: Stage 2 cabinet deposit (£1,200.00) paid to Morgan Joinery; reserve balance £3,300.00. Resolved: Damaged seedling trays returned; £12.00 credit applied to volunteer account. New: Paint order KS-2026-0521-12 dispatched for delivery 2026-05-28."
+  }
+}

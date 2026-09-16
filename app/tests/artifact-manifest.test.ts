@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
 	artifactManifest,
 	formatBytes,
+	lookupArtifacts,
 	MAX_MANIFEST_ENTRIES,
 	processingStateLabel,
 	resolveArtifact
@@ -120,7 +121,35 @@ describe('artifactManifest', () => {
 		const lines = text.split('\n')
 		// header + capped entries + the overflow line
 		expect(lines).toHaveLength(MAX_MANIFEST_ENTRIES + 2)
-		expect(lines[lines.length - 1]).toBe('…and 5 more')
+		expect(lines[1]).toContain(`file-${MAX_MANIFEST_ENTRIES + 4}.pdf`)
+		expect(text).not.toContain('file-0.pdf')
+		expect(lines[lines.length - 1]).toBe(
+			'…and 5 older files; use workspace_search with kind document to search them'
+		)
+	})
+})
+
+describe('lookupArtifacts', () => {
+	const files = Array.from({ length: 47 }, (_, index) => ({
+		intentId: index % 2 === 0 ? 'orders' : 'archive',
+		artifactId: `file-${index}`,
+		title: index === 46 ? 'Refund for Amira.pdf' : `Record ${index}.pdf`,
+		kind: index === 46 ? 'receipt' : 'document',
+		summary: index === 46 ? 'Return completed to original card' : undefined
+	})).reverse()
+
+	test('searches older and archived file metadata with bounded pages', () => {
+		const first = lookupArtifacts(files, '', 0, 20)
+		expect(first.rows).toHaveLength(20)
+		expect(first.total).toBe(47)
+		expect(first.hasMore).toBe(true)
+		const older = lookupArtifacts(files, '', 40, 20)
+		expect(older.rows).toHaveLength(7)
+		expect(older.hasMore).toBe(false)
+		expect(
+			lookupArtifacts(files, 'archive record 1').rows.some((row) => row.intentId === 'archive')
+		).toBe(true)
+		expect(lookupArtifacts(files, 'amira original card').rows[0]?.artifactId).toBe('file-46')
 	})
 })
 

@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-02-03",
+        "intentId": "sofia-morales:flower-supplier",
+        "kind": "order",
+        "user": "Oliver, necesito confirmar que las peonías sustitutas salen hoy. Isabel dice que el hueco de descarga es mañana a las 8. ¿Tengo el tracking?",
+        "assistant": "Dear Sofía, your order MA-2026-0203 is confirmed. Substitution accepted. Shipment dispatched via DHL Express. Tracking: DHL-ES-99821. Delivery window: Feb 4, 08:00-10:00. Please ensure cold storage is ready.",
+        "artifact": {
+          "title": "Order Confirmation & Substitution Notice",
+          "from": "Oliver Kent <export@marazul.test>",
+          "to": "Sofía Morales <sofia@estudiomorales.test>",
+          "language": "en",
+          "body": "Dear Sofía,\n\nYour order MA-2026-0203 is confirmed. Substitution accepted. Shipment dispatched via DHL Express. Tracking: DHL-ES-99821. Delivery window: Feb 4, 08:00-10:00. Please ensure cold storage is ready.\n\nOrder Details:\n- Item: Peonías Coral Charm (Substituted for Sarah Bernhardt due to stock).\n- Quantity: 50 stems.\n- Gross: 150.00 EUR\n- VAT (21%): 31.50 EUR\n- Shipping: 15.00 EUR\n- Total Paid: 196.50 EUR\n- Method: Visa ending 6418\n- Status: Dispatched\n\nBest regards,\nOliver Kent\nMar Azul Export Desk"
+        },
+        "probe": {
+          "question": "¿Qué método de pago usé para este pedido de peonías?",
+          "answer": "Visa ending 6418"
+        }
+      },
+      {
+        "date": "2026-02-06",
+        "intentId": "sofia-morales:flower-supplier",
+        "kind": "return",
+        "user": "Isabel, las peonías llegaron con los tallos rotos en la caja 3. No las puedo usar para la boda de Clara. Necesito la autorización de devolución ya.",
+        "assistant": "Sofía, recibido. Autorización de devolución RA-2026-0206 emitida. Motivo: Daño en transporte (tallos rotos). Recogida programada para el 07/02/2026 entre 14:00 y 16:00. El reembolso se procesará a la Visa terminada en 6418 tras la inspección en almacén.",
+        "artifact": {
+          "title": "Autorización de Devolución (RMA)",
+          "from": "Isabel Ríos <isabel@marazul.test>",
+          "to": "Sofía Morales <sofia@estudiomorales.test>",
+          "language": "es",
+          "body": "Estimada Sofía,\n\nHemos procesado su solicitud. Aquí tiene la autorización de devolución.\n\nReferencia Original: MA-2026-0203\nReferencia Devolución: RA-2026-0206\nMotivo: Daño en transporte (tallos rotos en caja 3).\nEstado: Pendiente de recogida.\nFecha Recogida: 07/02/2026 (14:00-16:00).\nDestino Reembolso: Visa terminada en 6418.\nImporte Estimado: 196.50 EUR.\n\nPor favor, empaquete las flores dañadas en la caja original si es posible. El reembolso se emitirá tras la verificación física en nuestro almacén.\n\nSaludos,\nIsabel Ríos\nMar Azul"
+        },
+        "probe": {
+          "question": "¿Cuándo está programada la recogida de las flores dañadas?",
+          "answer": "07/02/2026 (14:00-16:00)"
+        }
+      },
+      {
+        "date": "2026-02-09",
+        "intentId": "sofia-morales:staff",
+        "kind": "support",
+        "user": "Hola, soy Sofía de Estudio Morales. Tengo un problema con el turno de Lucía del 11/02. Ella dice que no puede entrar hasta las 10:00, pero el montaje es a las 08:00. ¿Podéis ajustar el registro de horas para que no salga como ausencia injustificada?",
+        "assistant": "Estimada Sofía,\n\nGracias por su contacto. Hemos revisado el registro de horas de Lucía Ferrer para el 11/02/2026. El sistema marcaba una entrada tardía. Hemos ajustado manualmente el inicio del turno a las 10:00 según su solicitud y la confirmación de la empleada. El estado del turno es ahora 'Confirmado' con horario modificado. No se generará alerta de ausencia.",
+        "artifact": {
+          "title": "Ticket de Soporte RRHH #HR-2026-0209",
+          "from": "Soporte Interno <soporte@estudiomorales.test>",
+          "to": "Sofía Morales <sofia@estudiomorales.test>",
+          "language": "es",
+          "body": "Estimada Sofía,\n\nGracias por su contacto. Hemos revisado el registro de horas de Lucía Ferrer para el 11/02/2026. El sistema marcaba una entrada tardía. Hemos ajustado manualmente el inicio del turno a las 10:00 según su solicitud y la confirmación de la empleada. El estado del turno es ahora 'Confirmado' con horario modificado. No se generará alerta de ausencia.\n\nReferencia: HR-2026-0209\nEmpleado: Lucía Ferrer\nFecha: 11/02/2026\nAcción: Ajuste manual de horario (08:00 -> 10:00).\nEstado: Resuelto.\n\nSaludos cordiales,\nEquipo de Soporte"
+        },
+        "probe": {
+          "question": "¿A qué hora se ajustó el inicio del turno de Lucía?",
+          "answer": "10:00"
+        }
+      },
+      {
+        "date": "2026-02-12",
+        "intentId": "sofia-morales:quotes",
+        "kind": "legal",
+        "user": "Elena, aquí tienes el borrador para Clara Beltrán. Ella quiere cambiar la fecha de la boda y necesita saber si el anticipo cubre el nuevo transporte. Por favor, revisa la cláusula de penalización.",
+        "assistant": "Estimada Sofía,\n\nRecibido el borrador v2.0. He revisado la cláusula 4.2 sobre cambios de fecha. El anticipo actual no cubre el sobrecoste de transporte si la nueva fecha cae en temporada alta. Sugiero añadir una adenda explícita. El documento está en estado 'Pendiente de revisión por cliente'. No se debe facturar hasta la firma de esta adenda.",
+        "artifact": {
+          "title": "Borrador Contrato Servicios Florales v2.0",
+          "from": "Elena Soler <elena@solerlegal.test>",
+          "to": "Sofía Morales <sofia@estudiomorales.test>",
+          "language": "es",
+          "body": "Estimada Sofía,\n\nAdjunto el borrador revisado.\n\nPartes: Estudio Morales (Sofía Morales) y Clara Beltrán.\nVersión: 2.0\nFecha: 12/02/2026\nEstado: Pendiente de revisión por cliente.\n\nCláusula 4.2 (Cambios de Fecha):\n\"En caso de cambio de fecha solicitado por el cliente, el anticipo de 500.00 EUR se mantiene válido para el nuevo evento, salvo que la nueva fecha implique un incremento en los costes logísticos o de personal superior al 10%. En tal caso, se emitirá una factura complementaria antes de la entrega.\"\n\nNota: Clara Beltrán ha solicitado mover la boda de mayo a junio. Junio es temporada alta. El transporte adicional no está cubierto por el anticipo inicial.\n\nQuedo a la espera de su confirmación para enviar a firma.\n\nAtentamente,\nElena Soler\nSoler Legal"
+        },
+        "probe": {
+          "question": "¿Cuál es el estado actual del contrato?",
+          "answer": "Pendiente de revisión por cliente"
+        }
+      },
+      {
+        "date": "2026-02-15",
+        "intentId": "sofia-morales:valencia-wedding",
+        "kind": "invoice",
+        "user": "Mateo, te paso la factura final de la boda de Clara. Incluye el montaje extra que pedisteis el sábado. ¿Me confirmas que la puerta de carga estará libre a las 07:00 del día 20?",
+        "assistant": "Sofía, factura recibida. Confirmo la disponibilidad de la puerta de carga para el 20/02/2026 a las 07:00. El acceso será con la clave SOL-983. Procederemos al pago una vez verifiquemos la entrega de los centros de mesa.",
+        "artifact": {
+          "title": "Factura Final #INV-2026-0215",
+          "from": "Estudio Morales <facturas@estudiomorales.test>",
+          "to": "Clara Beltrán <clara.beltran@example.test>",
+          "language": "es",
+          "body": "FACTURA FINAL\n\nEmisor: Estudio Morales (Sofía Morales)\nCliente: Clara Beltrán\nNº Factura: INV-2026-0215\nFecha: 15/02/2026\nEvento: Boda Valencia - 20/02/2026\n\nConceptos:\n1. Ramo de novia y boutonniere: 150.00 EUR\n2. Centros de mesa (10 uds): 600.00 EUR\n3. Montaje extra y transporte (20/02): 200.00 EUR\n\nSubtotal: 950.00 EUR\nIVA (21%): 199.50 EUR\nTOTAL: 1.149.50 EUR\n\nAnticipo recibido: 500.00 EUR\nPendiente de pago: 649.50 EUR\n\nMétodo de pago: Transferencia bancaria o Bizum.\nVencimiento: 18/02/2026.\n\nGracias por confiar en Estudio Morales."
+        },
+        "probe": {
+          "question": "¿Cuánto queda pendiente de pagar de esta factura?",
+          "answer": "649.50 EUR"
+        }
+      }
+    ],
+    "continuity": "Open: Legal contract v2.0 for Clara Beltrán pending client review/signature (Feb 12). Final invoice INV-2026-0215 issued Feb 15, payment due Feb 18. Return RA-2026-0206 for damaged peonies collected Feb 7, refund pending inspection. Resolved: Order MA-2026-0203 dispatched Feb 3. Staff shift adjustment for Lucía Ferrer confirmed Feb 9. Venue access confirmed with Mateo Serra for Feb 20."
+  }
+}

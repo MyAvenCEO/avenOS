@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-04-03",
+        "intentId": "rowan-chen:kitchen",
+        "kind": "support",
+        "user": "Hazel, the paint arrived but the roller set is missing from the box. Order KS-2026-0327-88. Need a fix before fitters arrive Thursday.",
+        "assistant": "Apologies for the inconvenience. We have investigated order KS-2026-0327-88 and confirmed the roller set was omitted. A replacement has been dispatched via Royal Mail 24. Case ref: KS-SUP-2026-0403-01. Status: Resolved. Next step: Please allow 24-48 hours for delivery.",
+        "artifact": {
+          "title": "Support Case Update: Missing Item in Order KS-2026-0327-88",
+          "from": "Hazel Reed <support@kitchen-supplier.test>",
+          "to": "Rowan Chen <rowan.chen@consultancy.test>",
+          "language": "en",
+          "body": "Dear Rowan,\n\nThank you for contacting Kitchen Supplier Support regarding your recent order.\n\nCase Reference: KS-SUP-2026-0403-01\nOrder Reference: KS-2026-0327-88\nDate of Order: 2026-03-27\n\nWe have investigated the discrepancy reported regarding the Microfibre Roller Set. Our warehouse records confirm that while the Dulux Easycare Kitchen Paint (SALT-312) and Masking Tape Pack were picked correctly, the roller set was inadvertently omitted from the final packing stage.\n\nOutcome: A replacement Microfibre Roller Set has been dispatched separately via Royal Mail 24. No further action is required from you. The original order remains complete otherwise.\n\nStatus: Resolved\nNext Step: Please monitor your letterbox for the replacement item, expected within 24-48 hours.\n\nKind regards,\nHazel Reed\nRetailer Support Employee"
+        },
+        "probe": {
+          "question": "What is the case reference for the missing roller set?",
+          "answer": "KS-SUP-2026-0403-01"
+        }
+      },
+      {
+        "date": "2026-04-06",
+        "intentId": "rowan-chen:atlas-contract",
+        "kind": "legal",
+        "user": "Malik, confirming the status of the Atlas renewal appendix v2.1. Is the 5% rebate term active for April invoices?",
+        "assistant": "The renewal appendix v2.1 is currently in draft state. It has not been countersigned by Atlas Legal. Therefore, the 5% rebate term is not yet active for April invoices. Please await the signed document before adjusting any calculations.",
+        "artifact": {
+          "title": "DRAFT: Atlas Consultancy Renewal Appendix v2.1",
+          "from": "Malik Ahmed <legal@atlas.test>",
+          "to": "Rowan Chen <rowan.chen@consultancy.test>",
+          "language": "en",
+          "body": "PARTIES:\n1. Atlas Ltd (\"Client\")\n2. Rowan Chen Consultancy (\"Consultant\")\n\nDOCUMENT VERSION: v2.1 (Draft)\nDATE: 2026-04-06\n\nTERMS:\n1. Rebate Structure: The Consultant shall apply a rebate of 5% on all invoices issued between 2026-04-01 and 2026-12-31.\n2. Payment Terms: Net 30 days from invoice date.\n3. Data Processing: Subject to DPA-42 v3.0 execution.\n\nAPPROVAL STATE:\n- Consultant Signature: Pending\n- Client Signature: Pending\n- Legal Countersignature: Pending\n\nSTATUS: DRAFT. This document is not binding. Production data exchange remains blocked until DPA-42 is fully executed. Do not apply the 5% rebate to April invoices until this appendix is signed by both parties."
+        },
+        "probe": {
+          "question": "What is the current approval state of the renewal appendix?",
+          "answer": "DRAFT. This document is not binding."
+        }
+      },
+      {
+        "date": "2026-04-09",
+        "intentId": "rowan-chen:security-audit",
+        "kind": "invoice",
+        "user": "Mary, sending the invoice for the security audit prep. Note that production data hasn't moved yet due to the DPA delay.",
+        "assistant": "Invoice INV-2026-04-002 issued. Total £1,200.00. Status: Unpaid. Due date 2026-04-23. Please note that no production data transfer fees are included as the DPA is unsigned.",
+        "artifact": {
+          "title": "Invoice INV-2026-04-002: Security Audit Preparation",
+          "from": "Rowan Chen Consultancy",
+          "to": "Bristol Nonprofit",
+          "language": "en",
+          "body": "INVOICE NUMBER: INV-2026-04-002\nDATE: 2026-04-09\nDUE DATE: 2026-04-23\n\nCLIENT:\nBristol Nonprofit\nAttn: Mary Evans\n\nISSUER:\nRowan Chen Consultancy\n\nLINE ITEMS:\n1. Security Audit Preparation & Review (Hours: 10) - £1,000.00\n2. Documentation & Compliance Check - £200.00\n\nSUBTOTAL: £1,200.00\nVAT (20%): £0.00 (Exempt/Reverse Charge applicable if registered)\nTOTAL DUE: £1,200.00 GBP\n\nPAYMENT STATUS: Unpaid\n\nNOTE: This invoice covers preparation work only. No fees for production data migration are included as DPA-42 v3.0 remains unsigned. Data exchange is blocked pending legal countersignature."
+        },
+        "probe": {
+          "question": "What is the total amount due on this invoice?",
+          "answer": "£1,200.00"
+        }
+      },
+      {
+        "date": "2026-04-12",
+        "intentId": "rowan-chen:family-visit",
+        "kind": "payment",
+        "user": "Jo, paid the deposit for the new dog sitter for the Glasgow trip. Refund from Bea came through to PayPal.",
+        "assistant": "Payment confirmed. £40.00 sent to Jamie's recommended sitter. Refund of £25.00 from Bea's cancellation has cleared to PayPal. Foster coordinator approval for the new sitter is logged.",
+        "artifact": {
+          "title": "Payment Confirmation: Dog Sitting Deposit",
+          "from": "Rowan Chen",
+          "to": "Jamie Chen",
+          "language": "en",
+          "body": "TRANSACTION REFERENCE: PAY-2026-0412-DOG\nDATE: 2026-04-12\nSENDER: Rowan Chen\nRECIPIENT: Alex Thorne (Sitter)\nAMOUNT: £40.00 GBP\nCURRENCY: GBP\nMETHOD: PayPal\nSTATUS: Completed\nSETTLEMENT REF: PAYPAL-2026-0412-8891\n\nNOTE: Deposit for dog sitting services for dates 2026-04-28 to 2026-04-29. Foster coordinator Jo Harding has approved Alex Thorne. Previous booking with Bea Fox (Ref: BEA-DOG-2026-03) was cancelled and refunded £25.00 to PayPal on 2026-04-10."
+        },
+        "probe": {
+          "question": "How much was the deposit sent to the new sitter?",
+          "answer": "£40.00"
+        }
+      },
+      {
+        "date": "2026-04-15",
+        "intentId": "rowan-chen:invoices",
+        "kind": "card-statement",
+        "user": "Reconciling cashflow. Did the Atlas payment clear? Also checking the GWR refund and software subs.",
+        "assistant": "Atlas payment of £2,300.00 cleared on 2026-03-09. GWR refund of £25.00 credited on 2026-03-20. Software subs total £45.00. Balance due on card ending 3074 is £1,245.00.",
+        "artifact": {
+          "title": "Company Mastercard Statement: March 2026",
+          "from": "Monzo Business",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "CARD ENDING: 3074\nPERIOD: 2026-03-01 to 2026-03-31\n\nLINE ITEMS:\n2026-03-05 | Out | Adobe Creative Cloud | -£10.00\n2026-03-10 | Out | Microsoft 365 | -£12.00\n2026-03-15 | Out | GWR Rail Ticket | -£85.00\n2026-03-20 | In | GWR Delay Repay Refund | +£25.00\n2026-03-25 | Out | Zoom Pro | -£13.00\n\nTOTAL DUE: £1,245.00 GBP\nPAYMENT DATE: 2026-04-15\nSTATUS: Paid\n\nNOTE: Atlas Ltd payment (INV-2026-03-001) received via bank transfer, not card. Card balance reflects travel and software expenses only."
+        },
+        "probe": {
+          "question": "What was the amount of the GWR refund credited?",
+          "answer": "£25.00"
+        }
+      }
+    ],
+    "continuity": "Open: DPA-42 v3.0 and Atlas Renewal Appendix v2.1 remain unsigned drafts; production data exchange and 5% rebate application are blocked. Open: Invoice INV-2026-04-002 (£1,200.00) issued to Bristol Nonprofit, unpaid. Resolved: Missing roller set from order KS-2026-0327-88 resolved via replacement dispatch (Case KS-SUP-2026-0403-01). Resolved: Dog sitting cover for Glasgow trip secured with Alex Thorne (Deposit £40.00 paid); Bea Fox refund (£25.00) cleared to PayPal. Resolved: March card statement reconciled; GWR refund (£25.00) credited."
+  }
+}

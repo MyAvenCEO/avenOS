@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-04-03",
+        "intentId": "sofia-morales:flower-supplier",
+        "kind": "support",
+        "user": "Oliver, regarding the peony substitution for order MA-2026-0325. The RMA RA-2026-0328 was collected yesterday. Has the refund hit the card yet? I need to clear the invoice for Isabel.",
+        "assistant": "Hello Sofía. I have checked the status of your refund request linked to case MA-EXP-2026-0403. The physical return of the damaged stems (Ref: RA-2026-0328) was logged by our warehouse team on 2026-04-02. The financial credit of 180.00 EUR has been processed and applied to your original payment method, the Visa ending in 6418. Please allow 3-5 business days for the funds to appear in your statement. We appreciate your patience.",
+        "artifact": {
+          "title": "Refund Status Update - Case MA-EXP-2026-0403",
+          "from": "Oliver Kent <oliver.kent@marazul-export.test>",
+          "to": "Sofía Morales <sofia.morales@estudiomorales.test>",
+          "language": "en",
+          "body": "Dear Sofía,\n\nThank you for contacting Mar Azul Export Support.\n\nCase Reference: MA-EXP-2026-0403\nOriginal Order: MA-2026-0325\nReturn Authorization: RA-2026-0328\n\nStatus: Refund Processed\n\nWe confirm that the return of the damaged peonies was received and inspected at our Valencia warehouse on 2026-04-02. The inspection confirmed damage in transit as reported. Consequently, a full refund of 180.00 EUR has been issued to the original payment method: Visa ending in 6418.\n\nTransaction Reference: MA-REF-20260402-991\nAmount: 180.00 EUR\nDate Processed: 2026-04-02\n\nPlease note that while the credit has been issued by Mar Azul, the time it takes to appear on your bank statement depends on your card issuer. We recommend checking your statement in 3-5 business days.\n\nIf you have further questions regarding the substitution order MA-2026-0410, please reply to this email.\n\nBest regards,\n\nOliver Kent\nExport Support Specialist\nMar Azul Export Desk"
+        },
+        "probe": {
+          "question": "How much was refunded for the damaged peonies?",
+          "answer": "180.00 EUR"
+        }
+      },
+      {
+        "date": "2026-04-06",
+        "intentId": "sofia-morales:valencia-wedding",
+        "kind": "legal",
+        "user": "Elena, Clara wants to move the wedding to May 15th. She's worried about the deposit. Can you draft the addendum to Contract v2.0? We need to confirm if the 500 EUR covers the new transport date.",
+        "assistant": "Sofía, I have prepared Addendum v2.1 to the Floral Services Contract. It explicitly states that the existing 500.00 EUR deposit is retained but does not cover the additional transport surcharge of 150.00 EUR for the new date (15/05/2026). The document is currently in 'Draft' status. Please send this to Clara for signature before we lock the venue slot with Mateo.",
+        "artifact": {
+          "title": "Addendum v2.1 to Floral Services Contract - Clara Beltrán",
+          "from": "Elena Soler <e.soler@solerlegal.test>",
+          "to": "Sofía Morales <sofia.morales@estudiomorales.test>",
+          "language": "es",
+          "body": "ADENDA AL CONTRATO DE SERVICIOS FLORALES\n\nPartes: Estudio Morales (Sofía Morales) y Clara Beltrán.\nVersión: 2.1\nFecha: 06/04/2026\nEstado: Borrador - Pendiente de firma\n\nCláusula Adicional 4.2.1 (Cambio de Fecha):\nEl Cliente solicita el cambio de la fecha del evento del 20/04/2026 al 15/05/2026.\n\n1. El anticipo de 500.00 EUR ya abonado mediante Stripe (Ref: STR-2026-0318-CLARA) se mantiene como garantía de reserva.\n2. Dado que la nueva fecha cae en temporada alta, se aplica un recargo de transporte y logística adicional de 150.00 EUR.\n3. El Cliente debe abonar dicho recargo antes del 10/04/2026 para confirmar la disponibilidad de la furgoneta refrigerada y el personal.\n4. La clave de acceso a la puerta de carga (SOL-983) se mantiene válida para la nueva fecha, sujeta a confirmación final con el gestor del local.\n\nFirma del Cliente: _________________________\nFirma de Estudio Morales: _________________________"
+        },
+        "probe": {
+          "question": "What is the additional transport surcharge for the new date?",
+          "answer": "150.00 EUR"
+        }
+      },
+      {
+        "date": "2026-04-09",
+        "intentId": "sofia-morales:cold-room",
+        "kind": "invoice",
+        "user": "Alba, here is the invoice for the compressor replacement and calibration on March 4th. Mario confirmed the temperature is stable at 4°C. Please send the PDF for accounting.",
+        "assistant": "Sofía, invoice INV-2026-0409-ALBA is attached. It covers the compressor unit, labor, and calibration service. Payment is due within 15 days via SEPA transfer to our account. Thank you for the quick confirmation from Mario.",
+        "artifact": {
+          "title": "Factura de Servicios - Taller Alba",
+          "from": "Alba Pérez <alba@talleralba.test>",
+          "to": "Sofía Morales <sofia.morales@estudiomorales.test>",
+          "language": "es",
+          "body": "FACTURA Nº INV-2026-0409-ALBA\n\nEmisor: Taller Alba Refrigeración\nCliente: Estudio Morales (Sofía Morales)\nFecha de Emisión: 09/04/2026\nFecha de Servicio: 04/03/2026\n\nConceptos:\n1. Compresor frigorífico modelo CF-200: 450,00 EUR\n2. Mano de obra técnica (3h): 120,00 EUR\n3. Calibración de sensores y certificado: 50,00 EUR\n\nSubtotal: 620,00 EUR\nIVA (21%): 130,20 EUR\nTOTAL: 750,20 EUR\n\nMétodo de Pago: Transferencia SEPA\nCuenta: ES**...8821 (Taller Alba)\nReferencia: INV-2026-0409-ALBA\nEstado: Pendiente de pago\nVencimiento: 24/04/2026\n\nNota: Se adjunta informe técnico confirmando temperatura estable a 4°C tras la intervención."
+        },
+        "probe": {
+          "question": "What is the total amount due for the cold room maintenance?",
+          "answer": "750,20 EUR"
+        }
+      },
+      {
+        "date": "2026-04-12",
+        "intentId": "sofia-morales:home-budget",
+        "kind": "payment",
+        "user": "Tomás, sending the Bizum for Nico's school trip deposit. Also, check the bank app, I used the Stripe voucher for the extra school fee so we don't double pay.",
+        "assistant": "Received the Bizum. I see the voucher application in the statement too. Good catch on the double charge. I'll update the shared budget sheet.",
+        "artifact": {
+          "title": "Confirmación de Pago Bizum",
+          "from": "Sofía Morales",
+          "to": "Tomás Vidal",
+          "language": "es",
+          "body": "CONFIRMACIÓN DE TRANSFERENCIA BIZUM\n\nFecha: 12/04/2026\nHora: 10:45\nEmisor: Sofía Morales\nReceptor: Tomás Vidal\nImporte: 45,00 EUR\nConcepto: Cuota colegio Nico - Abril\nReferencia: BZM-20260412-554\nEstado: Completado\n\nNota adicional: El cargo duplicado de la cuota escolar (45,00 EUR) detectado en marzo ha sido compensado mediante el voucher de Stripe VCH-2026-0318-45. No se ha realizado nuevo cargo por este concepto en la tarjeta Visa 6418."
+        },
+        "probe": {
+          "question": "What was the reference number for the Bizum payment to Tomás?",
+          "answer": "BZM-20260412-554"
+        }
+      },
+      {
+        "date": "2026-04-15",
+        "intentId": "sofia-morales:quotes",
+        "kind": "card-statement",
+        "user": "Checking the statement before I chase Clara for the remaining balance. Did the Mar Azul refund clear?",
+        "assistant": "Yes, the refund from Mar Azul is visible on the 04/03 line item. The net balance is lower than expected, which is good. I'll send the final invoice reminder to Clara once the addendum is signed.",
+        "artifact": {
+          "title": "Extracto de Tarjeta Visa - Estudio Morales",
+          "from": "Banco Virtual",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "EXTRACTO DE TARJETA DE CRÉDITO\n\nTitular: Sofía Morales\nTarjeta: Visa terminada en 6418\nPeriodo: 01/04/2026 - 15/04/2026\n\nMovimientos:\n1. 02/04/2026 - Mar Azul Importación - 320,00 EUR (Cargo)\n2. 03/04/2026 - Mar Azul Reembolso - 180,00 EUR (Abono)\n3. 05/04/2026 - Taller Alba Refrigeración - 750,20 EUR (Cargo)\n4. 08/04/2026 - Rent-a-Car Valencia - 145,00 EUR (Cargo)\n5. 10/04/2026 - Stripe Payout - 500,00 EUR (Abono)\n\nSaldo Anterior: 1.200,00 EUR\nTotal Cargos: 1.215,20 EUR\nTotal Abonos: 680,00 EUR\nSaldo Actual: 1.735,20 EUR\nFecha de Vencimiento: 28/04/2026\nEstado: Pendiente de pago"
+        },
+        "probe": {
+          "question": "What was the amount of the Mar Azul refund shown in the statement?",
+          "answer": "180,00 EUR"
+        }
+      }
+    ],
+    "continuity": "Open: Legal Addendum v2.1 for Clara Beltrán pending signature (Apr 6). Final invoice INV-2026-0427 payment still outstanding. Cold room invoice INV-2026-0409-ALBA issued Apr 9, due Apr 24. Resolved: Mar Azul refund of 180.00 EUR processed Apr 2, visible on card statement Apr 15. Bizum payment of 45.00 EUR to Tomás for school costs confirmed Apr 12. Stripe voucher VCH-2026-0318-45 applied to school fees. New: Wedding date changed to May 15, 2026, requiring 150.00 EUR transport surcharge. Venue access key SOL-983 remains valid for new date."
+  }
+}

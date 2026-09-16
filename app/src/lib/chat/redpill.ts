@@ -48,37 +48,16 @@ export const CHAT_MODEL = 'deepseek/deepseek-v4-flash-0731'
 
 export type StreamEvent =
 	| { kind: 'text'; text: string }
+	| { kind: 'finish'; reason: string }
+	| { kind: 'usage'; usage: Record<string, unknown> }
 	/** One fragment of a tool call. Name and arguments arrive in pieces. */
 	| { kind: 'tool'; index: number; id?: string; name?: string; args?: string }
 
-/**
- * Characters this assistant is expected to produce: Latin with the German
- * accents, digits, whitespace, and ordinary punctuation.
- */
-const EXPECTED = /[^\p{Script=Latin}\p{Nd}\p{P}\p{Zs}\n\r€$%+<=>^`|~°²³µ]/gu
-
-/**
- * Drop characters the model had no business emitting.
- *
- * `phala/gemma-4-31b-it` intermittently corrupts its own output — doubled
- * fragments, stray capitals, and Arabic or CJK codepoints dropped into German
- * sentences ("Ja" arriving as "JaLHيJa"). Measured at roughly two replies in
- * six on a bad run and none in twelve on a good one, with tools, temperature
- * and the system prompt all ruled out as causes, and the non-TEE route to the
- * same weights affected too.
- *
- * So this treats the symptom, deliberately. It matters most for the voice: the
- * synthesizer will earnestly attempt to pronounce an Arabic letter dropped into
- * a German clause. The cost is that genuinely non-Latin replies are mangled,
- * which is an acceptable trade for an assistant that only speaks German.
- *
- * Also strips chat-template control tokens leaking into the prose (`<|"|>`,
- * `<|im_end|>`) — never something to show, let alone pronounce.
- */
+/** Remove leaked chat-template tokens; retain multilingual text and JSON punctuation. */
 const CONTROL_TOKENS = /<\|[^|>]{0,24}\|>/g
 
 export function sanitize(text: string): string {
-	return text.replace(CONTROL_TOKENS, '').replace(EXPECTED, '')
+	return text.replace(CONTROL_TOKENS, '')
 }
 
 /**
@@ -96,15 +75,13 @@ export function eventsFromFrame(frame: string): StreamEvent[] {
 	if (data === '' || data === '[DONE]') return []
 
 	try {
-		const delta = JSON.parse(data)?.choices?.[0]?.delta
-		if (!delta) return []
-
+		const payload = JSON.parse(data)
+		const choice = payload.choices?.[0]
+		const delta = choice?.delta ?? {}
 		const events: StreamEvent[] = []
+		if (payload.usage) events.push({ kind: 'usage', usage: payload.usage })
 		if (typeof delta.content === 'string' && delta.content !== '') {
-			// Prose additionally loses braces and pipes: German Fließtext has no use
-			// for either, and single stray `}`s — leaked call syntax — slip under
-			// any run-length guard. Arguments keep theirs; JSON needs them.
-			const text = sanitize(delta.content).replace(/[{}|]/g, '')
+			const text = sanitize(delta.content)
 			if (text !== '') events.push({ kind: 'text', text })
 		}
 		for (const call of delta.tool_calls ?? []) {
@@ -113,15 +90,11 @@ export function eventsFromFrame(frame: string): StreamEvent[] {
 				index: call.index ?? 0,
 				id: call.id,
 				name: call.function?.name,
-				// Sanitized like prose: the serving corruption hits this stream too,
-				// and a stray Arabic glyph inside a title otherwise lands on the todo
-				// list itself. The filter keeps JSON punctuation, so valid arguments
-				// pass through untouched.
+				// Arguments may contain verbatim source quotes; preserve them byte for byte.
 				args: call.function?.arguments
-					? sanitize(call.function.arguments)
-					: call.function?.arguments
 			})
 		}
+		if (choice?.finish_reason) events.push({ kind: 'finish', reason: choice.finish_reason })
 		return events
 	} catch {
 		// A frame split across two network chunks would land here. The caller
@@ -180,6 +153,7 @@ export interface ChatProxyRequest {
 	model?: string
 	temperature?: number
 	json?: boolean
+	thinking?: boolean
 	max_tokens?: number
 }
 
@@ -194,10 +168,10 @@ export function openAiGatewayRequest(input: ChatProxyRequest): OpenAiChatComplet
 		model: chosen,
 		messages: input.messages,
 		stream: true,
-		...(chosen === CHAT_MODEL && {
-			chat_template_kwargs: { enable_thinking: false },
-			frequency_penalty: 0.3
+		...((chosen === CHAT_MODEL || input.thinking !== undefined) && {
+			chat_template_kwargs: { enable_thinking: input.thinking ?? false }
 		}),
+		...(chosen === CHAT_MODEL && { frequency_penalty: 0.3 }),
 		max_tokens: requestedTokens,
 		...(input.json === true && { response_format: { type: 'json_object' } }),
 		...(typeof input.temperature === 'number' && {
@@ -254,22 +228,43 @@ export async function* streamChat(
 	messages: ChatMessage[],
 	tools: ToolSpec[],
 	signal?: AbortSignal,
-	model?: string
+	model?: string,
+	options: Pick<ChatProxyRequest, 'json' | 'thinking' | 'max_tokens'> = {}
 ): AsyncGenerator<StreamEvent> {
-	const source = await openChatStream({ messages, tools, ...(model && { model }) }, signal)
+	const source = await openChatStream(
+		{ messages, tools, ...(model && { model }), ...options },
+		signal
+	)
+	yield* streamEvents(withStallWatchdog(source), signal)
+}
+
+/** Shared SSE decoder: preserve completion status, including across split transport chunks. */
+export async function* streamEvents(
+	source: AsyncIterable<string>,
+	signal?: AbortSignal
+): AsyncGenerator<StreamEvent> {
 	let buffer = ''
-	for await (const chunk of withStallWatchdog(source)) {
+	let finished = false
+	for await (const chunk of source) {
 		buffer += chunk
 
 		// SSE frames are separated by a blank line. Anything after the last
 		// one is a partial frame — keep it in the buffer until its tail turns up.
-		const frames = buffer.split('\n\n')
+		const frames = buffer.split(/\r?\n\r?\n/)
 		buffer = frames.pop() ?? ''
 
 		for (const frame of frames) {
-			for (const event of eventsFromFrame(frame)) yield event
+			for (const event of eventsFromFrame(frame)) {
+				if (event.kind === 'finish') finished = true
+				yield event
+			}
 		}
 	}
+	for (const event of eventsFromFrame(buffer)) {
+		if (event.kind === 'finish') finished = true
+		yield event
+	}
+	if (!finished && !signal?.aborted) throw new Error('Stream ended without completion status')
 }
 
 /**
@@ -279,9 +274,7 @@ export async function* streamChat(
  * waiting on a first token, and getting the contract right beats getting it
  * fast. So it runs on kimi-k3 while the voice loop stays on the fast lane.
  *
- * Deliberately NOT built on streamChat's events: the prose lane strips braces
- * and pipes as anti-glitch armor, which would gut the JSON this lane exists to
- * produce. The frames are read raw here — output for a machine, not a voice.
+ * Reads structured drafting frames directly and validates the completed JSON.
  */
 export const DESIGN_MODEL = 'moonshotai/kimi-k3'
 

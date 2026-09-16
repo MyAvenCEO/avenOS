@@ -2,3 +2,5 @@
 deploy/e2e/fixtures/*.pdf binary
 fixtures/golden/reconciliation-market/*.pdf binary
 fixtures/golden/bank-csv/*.csv -text -diff
+# Synthetic source manifests hash exact email/document bytes, including CRLF.
+app/e2e/corpus/generated/assets/** -text

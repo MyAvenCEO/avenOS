@@ -406,6 +406,9 @@ Still required for general skill execution:
 
 ## Where to continue reading
 
+- [Skill Studio: discover possibilities and build reusable programs](skill-studio.md)
+  separates the implemented client/agent composition slice from the wider target
+  design, including immutable Skills, nested calls and artifact subscriptions.
 - [Actors, skills, planning, and durable execution](generic-actor-registry-and-runtime.md)
   develops the complete conceptual model, including authorization, dynamic lifecycle,
   XRechnung, and continuations.

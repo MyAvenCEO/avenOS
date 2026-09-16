@@ -1,3 +1,4 @@
+import { StudioSkillV2Error } from '@avenos/actors'
 import type {
 	PlanRunContinuationSubmission,
 	PlanRunner,
@@ -11,6 +12,7 @@ import { BodyLimitError, readBoundedBytes } from '@avenos/http-boundary'
 import { ZodError } from 'zod'
 import { parsePlanRunStartCommand } from './command.js'
 import { CustomerExecutionPaused, PlanRunConflict } from './sql-runner.js'
+import { StudioConflict, type StudioService } from './studio-service.js'
 
 const json = (status: number, body: unknown): Response =>
 	new Response(JSON.stringify(body), {
@@ -93,6 +95,7 @@ function visible(record: PlanRunRecord | null, subjectId: string): PlanRunRecord
 
 interface RunnerProvider {
 	forGrant(grant: TenantGrantClaims): Promise<PlanRunner>
+	studioForGrant?(grant: TenantGrantClaims): Promise<StudioService>
 }
 
 export function createActorRunnerHandler(
@@ -118,9 +121,11 @@ export function createActorRunnerHandler(
 				tenantGrantPublicKey: config.tenantGrantPublicKey,
 				tenantGrantIssuer: config.tenantGrantIssuer,
 				componentRef: 'os.aven:component:actors:run-repository@1',
-				requiredAction: ['GET', 'HEAD'].includes(request.method)
-					? 'actor-runs:read'
-					: 'actor-runs:write'
+				requiredAction:
+					['GET', 'HEAD'].includes(request.method) ||
+					(request.method === 'POST' && url.pathname === '/api/actor-runs/studio/query')
+						? 'actor-runs:read'
+						: 'actor-runs:write'
 			})
 			const claims = admitted.identity
 			const runner = await runners.forGrant(admitted.tenant)
@@ -138,6 +143,24 @@ export function createActorRunnerHandler(
 			const segments = url.pathname.replace(/\/$/, '').split('/').filter(Boolean)
 			if (segments[0] !== 'api' || segments[1] !== 'actor-runs') {
 				return json(404, { code: 'ROUTE_NOT_FOUND' })
+			}
+			if (
+				segments[2] === 'studio' &&
+				segments.length === 4 &&
+				['query', 'command'].includes(segments[3]!) &&
+				request.method === 'POST'
+			) {
+				if (!runners.studioForGrant) return json(404, { code: 'STUDIO_UNAVAILABLE' })
+				const studio = await runners.studioForGrant(admitted.tenant)
+				return json(
+					200,
+					await studio.call(
+						await readJson(request),
+						security,
+						{ session: { identityToken: admitted.identityToken, sessionId: claims.sid } },
+						segments[3] === 'query'
+					)
+				)
 			}
 			if (segments.length === 2 && request.method === 'POST') {
 				const command = parsePlanRunStartCommand(await readJson(request))
@@ -202,6 +225,10 @@ export function createActorRunnerHandler(
 			}
 			return json(404, { code: 'ROUTE_NOT_FOUND' })
 		} catch (error) {
+			if (error instanceof StudioSkillV2Error)
+				return json(400, { code: 'STUDIO_INVALID', message: error.message, issues: error.issues })
+			if (error instanceof StudioConflict)
+				return json(409, { code: 'STUDIO_CONFLICT', message: error.message })
 			if (error instanceof CustomerExecutionPaused)
 				return json(503, { code: 'CUSTOMER_EXECUTION_PAUSED', message: error.message })
 			if (error instanceof BodyLimitError) return json(error.status, { code: error.code })

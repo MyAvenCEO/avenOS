@@ -1,4 +1,4 @@
-import { createActorPlanExecutor } from '@avenos/actors'
+import { createActorPlanExecutor, TrustedActorInstallations } from '@avenos/actors'
 import { ArtifactStoreClient } from '@avenos/artifact-store'
 import { importTenantGrantPublicKey } from '@avenos/aven-customer-contracts'
 import { TenantPoolProvider } from '@avenos/aven-customer-runtime'
@@ -15,13 +15,28 @@ import { HttpLlmGatewayClient } from '@avenos/llm-client/http'
 import type pg from 'pg'
 import { createApplicationExecutor } from './application-executor.js'
 import { loadActorRunnerConfig } from './config.js'
+import { createDocumentCatalogSource } from './document-catalog.js'
 import { createActorRunnerHandler } from './handler.js'
 import { createServerActorExecutionHost } from './host.js'
 import { SqlPlanRunner } from './sql-runner.js'
+import { StudioArtifacts } from './studio-artifacts.js'
+import {
+	createStudioRuntimeAuthorizer,
+	createStudioRuntimeFactory,
+	createStudioRuntimeRegistry,
+	installStudioRuntimeActors
+} from './studio-runtime.js'
+import { StudioService } from './studio-service.js'
+import { createStudioV2Executor, STUDIO_SKILL_V2 } from './studio-v2-executor.js'
 
 const config = loadActorRunnerConfig()
+const studioInstallations = new TrustedActorInstallations()
+await installStudioRuntimeActors(studioInstallations)
 const componentRef = 'os.aven:component:actors:run-repository@1'
-const runners = new WeakMap<pg.Pool, { runner: SqlPlanRunner; api: pg.Pool; worker: pg.Pool }>()
+const runners = new WeakMap<
+	pg.Pool,
+	{ runner: SqlPlanRunner; studio: StudioService; api: pg.Pool; worker: pg.Pool }
+>()
 const drains = new WeakMap<pg.Pool, Promise<void>>()
 const evict = async (pool: pg.Pool) => {
 	const entry = runners.get(pool)
@@ -68,6 +83,12 @@ const documentModel = new LlmDocumentModelGateway(
 )
 const handler = createActorRunnerHandler(
 	{
+		studioForGrant: async (grant) => {
+			const api = await apiPools.forGrant(grant)
+			const entry = runners.get(api)
+			if (!entry) throw new Error('Studio runtime has not been admitted.')
+			return entry.studio
+		},
 		forGrant: async (grant) => {
 			const [api, worker] = await Promise.all([
 				apiPools.forGrant(grant),
@@ -84,16 +105,33 @@ const handler = createActorRunnerHandler(
 					'x-aven-routing-generation': String(grant.routingGeneration)
 				})
 			})
-			const documents = createDocumentSkillExecutor({
+			const documentDependencies = {
 				model: documentModel,
-				artifactsFor: (request) => ({
+				artifactsFor: (request: import('@avenos/actors').PlanRunStartRequest) => ({
 					client: artifactClient,
 					scopeId: grant.environmentId,
 					userId: request.security.principal.subjectId
 				})
-			})
+			}
+			const documents = createDocumentSkillExecutor(documentDependencies)
+			const studioArtifacts = new StudioArtifacts(artifactClient, grant.environmentId)
+			const studioRegistry = createStudioRuntimeRegistry()
+			const studioFactory = createStudioRuntimeFactory()
+			const studioAuthorizer = createStudioRuntimeAuthorizer(grant.environmentId)
 			const execute = createApplicationExecutor(
 				[
+					{
+						skillRef: STUDIO_SKILL_V2,
+						execute: createStudioV2Executor(studioArtifacts, {
+							registryFor: () => studioRegistry.snapshot(),
+							authorizerFor: () => studioAuthorizer,
+							factoriesFor: () => ({
+								resolve: (factoryId) =>
+									factoryId === studioFactory.offer.factoryId ? studioFactory : undefined
+							}),
+							installations: studioInstallations
+						})
+					},
 					{ skillRef: DOCUMENT_INGEST_SKILL, execute: documents },
 					{
 						skillRef: RECONCILIATION_SKILL,
@@ -108,8 +146,26 @@ const handler = createActorRunnerHandler(
 				],
 				createActorPlanExecutor(createServerActorExecutionHost())
 			)
-			const runner = new SqlPlanRunner(api, worker, execute, true)
-			const entry = { runner, api, worker }
+			const runner = new SqlPlanRunner(
+				api,
+				worker,
+				execute,
+				true,
+				15 * 60_000,
+				config.ACTOR_RUNNER_MAX_PARALLELISM
+			)
+			const entry = {
+				runner,
+				studio: new StudioService(
+					api,
+					studioArtifacts,
+					runner,
+					createDocumentCatalogSource(grant.environmentId, studioInstallations),
+					studioInstallations
+				),
+				api,
+				worker
+			}
 			runners.set(api, entry)
 			runners.set(worker, entry)
 			void runner

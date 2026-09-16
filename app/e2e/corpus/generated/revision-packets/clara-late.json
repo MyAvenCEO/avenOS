@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-sofia-morales-7-2",
+      "user": "Elena, te paso el borrador de la adenda para la boda de Clara. Como no firmamos el cambio a junio, esto solo cubre la logística del 15 de mayo y las condiciones de cancelación si surge algo. La fecha sigue siendo 15/05. Revisa la cláusula de acceso con Mateo.",
+      "assistant": "Recibido. Confirmo que el borrador mantiene la fecha original del 15/05/2026 y no altera el contrato base. La cláusula de acceso refleja la clave SOL-983 y el horario de carga. Queda pendiente de firma por ambas partes.",
+      "artifact": {
+        "title": "ADENDA LOGÍSTICA Y CANCELACIÓN - CONTRATO V2",
+        "from": "Elena Pérez (Estudio Morales)",
+        "to": "Clara Beltrán",
+        "language": "es",
+        "body": "ADENDA AL CONTRATO DE SERVICIOS FLORALES\nPartes: Estudio Morales (Sofía Morales) y Clara Beltrán.\nVersión: 2.2 (Borrador)\nFecha: 06/04/2026\nEstado: Borrador - Pendiente de firma\n\nCláusula Adicional 4.3 (Logística y Acceso):\nSe confirma la fecha del evento como 15/05/2026. El acceso al recinto se realizará a través de la puerta de carga a las 07:00 horas, utilizando la clave de acceso SOL-983. El proveedor garantiza la disponibilidad de personal para la descarga y montaje dentro de la ventana horaria acordada con el gestor del venue.\n\nCláusula Adicional 4.4 (Condiciones de Cancelación):\nEn caso de cancelación por parte del cliente con menos de 15 días de antelación, se retendrá el 50% del saldo pendiente. Cualquier cambio de fecha solicitado con posterioridad a esta adenda requerirá la firma de un nuevo documento y la disponibilidad de agenda del proveedor.\n\nNota: Esta adenda no modifica la fecha original del contrato base."
+      },
+      "probe": {
+        "question": "¿Qué clave de acceso se especifica en la cláusula de logística de la adenda v2.2?",
+        "answer": "SOL-983"
+      }
+    },
+    {
+      "id": "qwen-sofia-morales-10-2",
+      "user": "Isabel, necesito confirmar el pedido extra para Clara. Son arreglos de agradecimiento para la cena del 30 de mayo. Rosas blancas y eucalipto, igual que la boda pero menos cantidad. Entrega el 29 por la tarde en el mismo sitio. ¿Me pasas la confirmación?",
+      "assistant": "Hola Sofía. Pedido registrado como ORD-2026-0521-MA. Confirmo la entrega para el 29/05/2026 a las 17:00 en el Venue Central. El importe se facturará aparte de la boda principal.",
+      "artifact": {
+        "title": "CONFIRMACIÓN DE PEDIDO EXTRA - MAR AZUL",
+        "from": "Isabel Ríos (Mar Azul)",
+        "to": "Sofía Morales (Estudio Morales)",
+        "language": "es",
+        "body": "CONFIRMACIÓN DE PEDIDO\nNº Pedido: ORD-2026-0521-MA\nFecha: 21/05/2026\nCliente: Estudio Morales\nEvento: Arreglos Post-Boda Clara Beltrán\n\nArtículos Reservados:\n1. Rosas Blancas Avalanche (100 uds): 90,00 EUR\n2. Eucalipto Cinerea (10 manojos): 30,00 EUR\n3. Follaje Verde Variado (5 manojos): 15,00 EUR\n\nSubtotal: 135,00 EUR\nIVA (21%): 28,35 EUR\nTotal Estimado: 163,35 EUR\n\nEstado: Confirmado\nVentana de Entrega: 29/05/2026, 17:00 - 18:00\nDirección: Venue Central, Valencia\nNota: Este pedido es independiente de la factura principal de la boda del 15/05/2026."
+      },
+      "probe": {
+        "question": "¿Cuál es el número de pedido asignado a los arreglos post-boda de Clara Beltrán?",
+        "answer": "ORD-2026-0521-MA"
+      }
+    },
+    {
+      "id": "qwen-sofia-morales-10-5",
+      "user": "Elena, te paso el borrador final para cerrar el tema de los arreglos extra de Clara. Ya que la boda fue el 15 de mayo, esto solo cubre el pago y la entrega del 29 de mayo. No toca el contrato original. Revisa que quede claro que es un servicio adicional.",
+      "assistant": "Perfecto. El borrador separa claramente el servicio adicional del contrato principal. La fecha de entrega y el importe están correctos. Queda listo para enviar a Clara para su aprobación.",
+      "artifact": {
+        "title": "ADENDA SERVICIO ADICIONAL - CONTRATO V2",
+        "from": "Elena Pérez (Estudio Morales)",
+        "to": "Clara Beltrán",
+        "language": "es",
+        "body": "ADENDA DE SERVICIO ADICIONAL\nPartes: Estudio Morales (Sofía Morales) y Clara Beltrán.\nVersión: 1.0 (Borrador Final)\nFecha: 28/05/2026\nEstado: Borrador - Pendiente de aprobación\n\nCláusula Adicional 5.1 (Objeto):\nEsta adenda formaliza la solicitud de arreglos florales adicionales para la cena del 30/05/2026, derivada del evento principal del 15/05/2026.\n\nCláusula Adicional 5.2 (Entrega y Pago):\nLa entrega se realizará el 29/05/2026 entre las 17:00 y las 18:00 horas en el Venue Central. El importe total de este servicio adicional es de 163,35 EUR (IVA incluido), que se facturará de forma independiente al saldo de la boda.\n\nCláusula Adicional 5.3 (Independencia):\nEste documento no modifica las condiciones de cancelación ni la fecha del evento principal (15/05/2026) establecidas en el contrato base y su adenda logística."
+      },
+      "probe": {
+        "question": "¿Qué fecha de entrega se especifica en la cláusula 5.2 de la adenda de servicio adicional?",
+        "answer": "29/05/2026"
+      }
+    }
+  ]
+}

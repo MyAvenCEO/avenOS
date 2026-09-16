@@ -10,6 +10,46 @@ import { decodedPage } from '../src/shared'
 import { documentSource, textPdf } from './support/chunk-fixtures'
 import { CsvMemoryGateway } from './support/csv-corpus'
 
+test('one multi-page model import uses independent actor lanes up to the advertised capacity', async () => {
+	const model = new GoldenInvoiceModel()
+	const complete = model.complete.bind(model)
+	let active = 0
+	let peak = 0
+	model.complete = async (request) => {
+		active++
+		peak = Math.max(peak, active)
+		await new Promise((resolve) => setTimeout(resolve, 12))
+		try {
+			return await complete(request)
+		} finally {
+			active--
+		}
+	}
+	model.status = async () => ({ available: true, maxPages: 15, maxParallelism: 5 })
+	const decoder = new ServerDocumentDecoder()
+	const createActors = () => createDocumentActors(decoder, model)
+	const actors = createActors()
+	const source = documentSource(
+		textPdf(Array.from({ length: 5 }, (_, index) => [`Invoice page ${index + 1}`])),
+		'invoice.pdf'
+	)
+	const runtime = new DocumentProcessingRuntime(
+		actors,
+		new CsvMemoryGateway(),
+		() => model.status(),
+		{},
+		createActors
+	)
+	try {
+		const result = await runtime.start(source)
+		expect(peak).toBe(5)
+		expect(result.metadata.completedChunks).toBe(5)
+		expect(result.state).not.toBe('failed')
+	} finally {
+		await runtime.close()
+	}
+}, 120000)
+
 test('a context row copied into another invoice chunk requires review and grounds validation in details', async () => {
 	for (const duplicate of [false, true]) {
 		const model = new GoldenInvoiceModel()

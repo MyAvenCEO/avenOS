@@ -4,22 +4,25 @@ import { bus, type HeldPreview } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { singleton } from '$lib/actors/singleton'
 import {
-	type ArtifactProcessingLookup,
 	type ArtifactProcessingPresentation,
 	type ArtifactProcessingStage,
 	type ArtifactProcessingState,
-	type ArtifactProcessingView,
-	artifactMetadataHighlights,
 	artifactTypeLabel
 } from '$lib/artifacts/processing'
+import { pageMessages } from '$lib/chat/history-selection'
 import { persistentLogEntries } from './activity-log'
+import { artifactManifest } from './artifact-manifest'
 import {
-	artifactManifest,
-	formatBytes,
-	processingStateLabel,
-	resolveArtifact
-} from './artifact-manifest'
+	DEFAULT_INTENT_CONTEXT_LIMIT,
+	INTENT_LOOKUP_LIMIT,
+	lookupIntents,
+	selectContextIntents
+} from './context-selection'
 import { preserveLiveFileProjection } from './persistent-artifact-projection'
+import { cleanRetrievalHandlers, retrievalSpecs } from './retrieval-tools'
+import { SourceCatalog } from './source-catalog'
+import { readSource, type SourceProvider, searchSources } from './source-retrieval'
+import { readStoredSource } from './stored-source'
 
 /**
  * THE INTENTS — the workspace's subjects, MOCKED (0158) but owned by an
@@ -49,6 +52,7 @@ export interface MockArtifact {
 	stageKey?: string
 	/** Last persisted processing state of this artifact (live view wins). */
 	state?: ArtifactProcessingState
+	searchVersion?: string
 	/** One-line processing summary, if the processor produced one. */
 	summary?: string | null
 	/** Human type label from the processor, e.g. "PDF document" or "Invoice". */
@@ -114,6 +118,7 @@ export interface PersistentIntentDetail {
 	sourceArtifactId: string | null
 	createdAt: string
 	updatedAt: string
+	contributionsHasMore?: boolean
 	contributions: Contribution[]
 	artifacts: Array<{
 		artifactId: string
@@ -137,17 +142,6 @@ function processingNote(state: NonNullable<PersistentIntentDetail['fileSkill']>[
 	if (state === 'succeeded') return 'Processing complete'
 	if (state === 'needs_review') return 'Processing finished with a warning'
 	return 'Processing failed at the last known stage'
-}
-
-/** Hard bounds on what artifact_detail may pull into the model context. */
-const MAX_PREVIEW_BYTES = 64 * 1024
-const MAX_PREVIEW_CHARS = 1600
-
-function base64ToText(base64: string): string {
-	const binary = atob(base64)
-	const bytes = new Uint8Array(binary.length)
-	for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-	return new TextDecoder('utf-8', { fatal: false }).decode(bytes)
 }
 
 const INTENTS: MockIntent[] = [
@@ -821,14 +815,40 @@ const now = () => {
 	return `heute · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+const shortIndexText = (value: string, limit: number) =>
+	value.length > limit ? `${value.slice(0, limit - 1)}…` : value
+
 const persistencePending = (title: string) => ({
 	record: '{"ok":false,"error":"intent persistence pending"}',
 	wire: `"${title}" is still becoming persistent. Try again in a moment.`
 })
 
 class IntentsActor extends Actor {
-	items = $state<MockIntent[]>(INTENTS)
+	environmentRevision = 0
+	items = $state<MockIntent[]>(structuredClone(INTENTS))
+	contextItemsById = $derived(new Map(this.items.map((item) => [item.id, item])))
 	selectedId = $state(INTENTS[0].id)
+	recentIds = $state<string[]>([INTENTS[0].id])
+
+	/** Customer-environment changes discard the LRU along with the workspace projection. */
+	resetForEnvironment(): void {
+		this.environmentRevision++
+		this.#sourceCatalog?.close()
+		this.#sourceCatalog = null
+		this.#searchScope = null
+		this.items = structuredClone(INTENTS)
+		this.selectedId = INTENTS[0].id
+		this.recentIds = [INTENTS[0].id]
+	}
+
+	/** Opening an intent moves it to the front of the small prompt index. */
+	select(id: string): void {
+		this.selectedId = id
+		this.recentIds = [id, ...this.recentIds.filter((recent) => recent !== id)].slice(
+			0,
+			DEFAULT_INTENT_CONTEXT_LIMIT
+		)
+	}
 
 	beginFileIntent(id: string, title: string, focus = true): void {
 		const intent: MockIntent = {
@@ -858,7 +878,7 @@ class IntentsActor extends Actor {
 		this.items = this.items.filter((item) => item.id !== id)
 		this.items.unshift(intent)
 		if (focus) {
-			this.selectedId = id
+			this.select(id)
 			chatActor.core.use(id)
 		}
 	}
@@ -905,6 +925,7 @@ class IntentsActor extends Actor {
 				artifactId: artifact.artifactId,
 				typeKey: artifact.typeKey,
 				stageKey: artifact.stageKey ?? undefined,
+				searchVersion: detail.fileSkill?.projectionVersion ?? '',
 				// The processing projection lives on the file-skill row; the
 				// source file carries it into the manifest and the tool result.
 				...(isSource && presentation
@@ -955,6 +976,7 @@ class IntentsActor extends Actor {
 		)
 		if (existing) Object.assign(existing, mapped)
 		else this.items.unshift(mapped)
+		this.indexIntent(mapped)
 	}
 
 	attachFileSource(intentId: string, artifactId: string, title: string): void {
@@ -982,6 +1004,7 @@ class IntentsActor extends Actor {
 				stages: []
 			})
 		}
+		this.indexIntent(intent)
 	}
 
 	/** Paint the client-owned document run over the persistent intent projection. */
@@ -1038,6 +1061,9 @@ class IntentsActor extends Actor {
 		}
 		if (fileSkill) Object.assign(fileSkill, next)
 		else intent.skills.push(next)
+		for (const artifact of intent.artifacts)
+			artifact.searchVersion = presentation.derivedArtifacts.map((a) => a.artifactId).join(',')
+		this.indexIntent(intent)
 	}
 
 	constructor() {
@@ -1052,11 +1078,6 @@ class IntentsActor extends Actor {
 				'Lists, switches, creates, edits, merges, archives, restores and deletes them by message.',
 			tags: ['intents'],
 			methods: [
-				{
-					name: 'intent_list',
-					description: 'Lists all intents with id, title, type and status.',
-					parameters: { type: 'object', properties: {} }
-				},
 				{
 					name: 'intent_switch',
 					description:
@@ -1162,390 +1183,569 @@ class IntentsActor extends Actor {
 						required: ['intent']
 					}
 				},
-				{
-					name: 'artifact_detail',
-					description:
-						'Reads one file of this conversation: kind, size, processing state, summary and key ' +
-						'figures (plus a short excerpt for small text files). The files are listed under ' +
-						'ARTIFACTS in your context. Call it before answering anything about a file — never ' +
-						'guess file contents or figures.',
-					parameters: {
-						type: 'object',
-						properties: {
-							artifact: { type: 'string', description: 'file name, part of a name, or artifact id' }
-						},
-						required: ['artifact']
-					}
-				}
+				...retrievalSpecs
 			]
 		})
-		this.bind({
-			intent_list: () => {
-				const rows = this.items.map((i) => ({
-					id: i.id,
-					title: i.title,
-					type: i.type,
-					status: i.status
-				}))
-				return {
-					record: JSON.stringify({ ok: true, intents: rows, selected: this.selectedId }),
-					wire:
-						`On screen: ${this.selectedId}.\n` +
-						rows.map((r) => `${r.id}: "${r.title}" (${r.type}, ${r.status})`).join('\n') +
-						'\nIf the request is about an intent other than the one on screen, call ' +
-						'intent_switch with it BEFORE answering.'
-				}
-			},
-			intent_switch: (p) => {
-				const hit = this.find(String(p.intent ?? ''))
-				if (!hit) return this.miss(String(p.intent ?? ''))
-				this.goTo(hit.id)
-				return {
-					record: JSON.stringify({ ok: true, selected: hit.id }),
-					wire: `"${hit.title}" is on screen now.`
-				}
-			},
-			intent_create: async (p) => {
-				const title = String(p.title ?? '').trim()
-				if (title === '')
-					return { record: '{"ok":false,"error":"title missing"}', wire: 'A title is needed.' }
-				if (isTauri()) {
-					const id = crypto.randomUUID()
-					const detail = await invoke<PersistentIntentDetail>('intent_create', {
-						intent: {
-							id,
-							title,
-							intentType: String(p.type ?? 'auftrag'),
-							sourceLabel: String(p.source ?? 'Freitext · Chat'),
-							deadline: p.deadline ? String(p.deadline) : null,
-							routingSummary: `Intent: ${title}`
-						}
-					})
-					this.applyPersistent(detail)
-					this.goTo(id)
+		this.bind(
+			cleanRetrievalHandlers({
+				intent_list: async (p) => {
+					if (isTauri()) {
+						const result = await invoke('intent_search', {
+							input: {
+								query: p.query,
+								cursor: p.cursor,
+								limit: Math.min(Number(p.limit ?? 20), 20)
+							}
+						})
+						return { record: JSON.stringify(result), wire: JSON.stringify(result) }
+					}
+					const query = String(p.query ?? '').trim()
+					const page = lookupIntents(
+						this.items,
+						query,
+						Number(p.offset ?? 0),
+						Number(p.limit ?? INTENT_LOOKUP_LIMIT),
+						(id, needle) => chatActor.core.conversationMatches(id, needle)
+					)
+					const rows = page.rows.map((i) => ({
+						id: i.id,
+						title: shortIndexText(i.title, 160),
+						type: i.type,
+						status: i.status,
+						source: shortIndexText(i.source, 100)
+					}))
 					return {
-						record: JSON.stringify({ ok: true, created: id, persistent: true }),
+						record: JSON.stringify({
+							ok: true,
+							intents: rows,
+							selected: this.selectedId,
+							total: page.total,
+							offset: page.offset,
+							hasMore: page.hasMore
+						}),
+						wire:
+							`On screen: ${this.selectedId}. ${page.total} matching intents; showing ${rows.length} from offset ${page.offset}.\n` +
+							(rows.length
+								? rows
+										.map((r) => `${r.id}: "${r.title}" (${r.type}, ${r.status}; ${r.source})`)
+										.join('\n')
+								: 'No matches.') +
+							(page.hasMore
+								? `\nMore results: call intent_list with offset ${page.offset + rows.length}${query ? ` and query "${query}"` : ''}.`
+								: '') +
+							'\nIf the request is about an intent other than the one on screen, call ' +
+							'intent_switch with it BEFORE answering.'
+					}
+				},
+				intent_detail: async (p) => {
+					const hit = await this.resolvePersistent(String(p.intent ?? ''))
+					if (!hit) return this.miss(String(p.intent ?? ''))
+					const query = String(p.query ?? '').trim()
+					const detail =
+						hit.persistent && isTauri()
+							? await invoke<PersistentIntentDetail>('intent_get', { intentId: hit.id })
+							: null
+					const history = detail
+						? detail.contributions
+								.filter(
+									(entry) =>
+										(entry.contributorKind === 'human' || entry.contributorKind === 'agent') &&
+										entry.text !== null
+								)
+								.map((entry) => ({
+									role:
+										entry.contributorKind === 'human' ? ('user' as const) : ('assistant' as const),
+									content: entry.text ?? ''
+								}))
+						: chatActor.core.messageHistory(hit.id)
+					const conversationPage = pageMessages(history, query, 0, 10)
+					const activity = detail
+						? detail.contributions
+								.filter((entry) => entry.kind !== 'message')
+								.slice(-10)
+								.map((entry) => `${entry.kind}: ${(entry.text ?? '').slice(0, 500)}`)
+						: hit.log
+								.slice(-10)
+								.map(
+									(entry) =>
+										`${entry.step}: ${(entry.note ?? entry.card?.text ?? '').slice(0, 500)}`
+								)
+					const result = {
+						ok: true,
+						id: hit.id,
+						title: hit.title,
+						status: hit.status,
+						source: hit.source,
+						conversation: conversationPage.rows,
+						conversationMatches: detail ? undefined : conversationPage.total,
+						olderMessagesAvailable: detail?.contributionsHasMore ?? conversationPage.hasMore,
+						notice: detail
+							? 'This is recent history only. Use intent_messages to search all stored messages.'
+							: undefined,
+						matchMode: conversationPage.matchMode,
+						activity,
+						artifacts: hit.artifacts
+							.slice(-10)
+							.reverse()
+							.map((artifact) => artifact.title),
+						artifactCount: hit.artifacts.length,
+						olderArtifactsAvailable: hit.artifacts.length > 10
+					}
+					return { record: JSON.stringify(result), wire: JSON.stringify(result) }
+				},
+				message_detail: async (p) => {
+					if (!isTauri())
+						return {
+							record: '{"ok":false,"error":"Persistent messages require a native session"}',
+							wire: 'Use intent_messages for local history.'
+						}
+					const result = await invoke('intent_message_get', {
+						messageId: String(p.id ?? ''),
+						offset: Number(p.offset ?? 0)
+					})
+					return { record: JSON.stringify(result), wire: JSON.stringify(result) }
+				},
+				intent_messages: async (p) => {
+					if (isTauri()) {
+						const result = await invoke('intent_search', {
+							messages: true,
+							input: {
+								query: p.query,
+								cursor: p.cursor,
+								limit: Math.min(Number(p.limit ?? 10), 20),
+								intent: p.intent
+							}
+						})
+						return { record: JSON.stringify(result), wire: JSON.stringify(result) }
+					}
+					const key = String(p.intent ?? this.selectedId)
+					const hit = this.find(key)
+					if (!hit) return this.miss(key)
+					const detail =
+						hit.persistent && isTauri()
+							? await invoke<PersistentIntentDetail>('intent_get', { intentId: hit.id })
+							: null
+					const history = detail
+						? detail.contributions
+								.filter(
+									(entry) =>
+										(entry.contributorKind === 'human' || entry.contributorKind === 'agent') &&
+										entry.text !== null
+								)
+								.map((entry) => ({
+									role:
+										entry.contributorKind === 'human' ? ('user' as const) : ('assistant' as const),
+									content: entry.text ?? ''
+								}))
+						: chatActor.core.messageHistory(hit.id)
+					const query = String(p.query ?? '').trim()
+					const page = pageMessages(history, query, Number(p.offset ?? 0), Number(p.limit ?? 10))
+					const result = {
+						ok: true,
+						intent: hit.id,
+						query,
+						messages: page.rows,
+						total: page.total,
+						offset: page.offset,
+						hasMore: page.hasMore,
+						matchMode: page.matchMode
+					}
+					return {
+						record: JSON.stringify(result),
+						wire:
+							JSON.stringify(result) +
+							(page.hasMore
+								? ` More messages: call intent_messages with offset ${page.offset + page.rows.length}.`
+								: '')
+					}
+				},
+				intent_switch: async (p) => {
+					const hit = await this.resolvePersistent(String(p.intent ?? ''))
+					if (!hit) return this.miss(String(p.intent ?? ''))
+					this.goTo(hit.id)
+					return {
+						record: JSON.stringify({ ok: true, selected: hit.id }),
+						wire: `"${hit.title}" is on screen now.`
+					}
+				},
+				intent_create: async (p) => {
+					const title = String(p.title ?? '').trim()
+					if (title === '')
+						return { record: '{"ok":false,"error":"title missing"}', wire: 'A title is needed.' }
+					if (isTauri()) {
+						const id = crypto.randomUUID()
+						const detail = await invoke<PersistentIntentDetail>('intent_create', {
+							intent: {
+								id,
+								title,
+								intentType: String(p.type ?? 'auftrag'),
+								sourceLabel: String(p.source ?? 'Freitext · Chat'),
+								deadline: p.deadline ? String(p.deadline) : null,
+								routingSummary: `Intent: ${title}`
+							}
+						})
+						this.applyPersistent(detail)
+						this.goTo(id)
+						return {
+							record: JSON.stringify({ ok: true, created: id, persistent: true }),
+							wire: `Created "${title}" and switched to it.`
+						}
+					}
+					const intent: MockIntent = {
+						id: slug(title),
+						type: String(p.type ?? 'auftrag'),
+						title,
+						source: String(p.source ?? 'Freitext · Chat'),
+						when: now(),
+						...(p.deadline ? { deadline: String(p.deadline) } : {}),
+						status: 'working',
+						log: [
+							{
+								step: 'Auftrag erfasst',
+								when: now(),
+								state: 'done',
+								skill: 'email-manager',
+								note: 'im Gespräch angelegt'
+							}
+						],
+						artifacts: [],
+						skills: []
+					}
+					this.items.unshift(intent)
+					this.goTo(intent.id)
+					return {
+						record: JSON.stringify({ ok: true, created: intent.id }),
 						wire: `Created "${title}" and switched to it.`
 					}
-				}
-				const intent: MockIntent = {
-					id: slug(title),
-					type: String(p.type ?? 'auftrag'),
-					title,
-					source: String(p.source ?? 'Freitext · Chat'),
-					when: now(),
-					...(p.deadline ? { deadline: String(p.deadline) } : {}),
-					status: 'working',
-					log: [
-						{
-							step: 'Auftrag erfasst',
-							when: now(),
-							state: 'done',
-							skill: 'email-manager',
-							note: 'im Gespräch angelegt'
+				},
+				intent_update: async (p) => {
+					const hit = this.find(String(p.intent ?? ''))
+					if (!hit) return this.miss(String(p.intent ?? ''))
+					if (hit.persistent && isTauri()) {
+						if (hit.persistentVersion === undefined) return persistencePending(hit.title)
+						const update: Record<string, unknown> = {
+							expectedVersion: hit.persistentVersion,
+							clearDeadline: typeof p.deadline === 'string' && p.deadline.trim() === ''
 						}
-					],
-					artifacts: [],
-					skills: []
-				}
-				this.items.unshift(intent)
-				this.goTo(intent.id)
-				return {
-					record: JSON.stringify({ ok: true, created: intent.id }),
-					wire: `Created "${title}" and switched to it.`
-				}
-			},
-			intent_update: async (p) => {
-				const hit = this.find(String(p.intent ?? ''))
-				if (!hit) return this.miss(String(p.intent ?? ''))
-				if (hit.persistent && isTauri()) {
-					if (hit.persistentVersion === undefined) return persistencePending(hit.title)
-					const update: Record<string, unknown> = {
-						expectedVersion: hit.persistentVersion,
-						clearDeadline: typeof p.deadline === 'string' && p.deadline.trim() === ''
+						if (typeof p.title === 'string' && p.title.trim()) update.title = p.title.trim()
+						if (typeof p.type === 'string' && p.type.trim()) update.intentType = p.type.trim()
+						if (typeof p.source === 'string' && p.source.trim())
+							update.sourceLabel = p.source.trim()
+						if (typeof p.deadline === 'string' && p.deadline.trim())
+							update.deadline = p.deadline.trim()
+						if (
+							typeof p.status === 'string' &&
+							['working', 'waiting', 'done', 'error'].includes(p.status)
+						)
+							update.state = p.status
+						if (Object.keys(update).length <= 2 && update.clearDeadline === false)
+							return {
+								record: '{"ok":false,"error":"nothing to change"}',
+								wire: 'Nothing to change.'
+							}
+						const detail = await invoke<PersistentIntentDetail>('intent_update', {
+							intentId: hit.id,
+							update
+						})
+						this.applyPersistent(detail)
+						return {
+							record: JSON.stringify({ ok: true, updated: hit.id, persistent: true }),
+							wire: `Updated "${detail.title}".`
+						}
 					}
-					if (typeof p.title === 'string' && p.title.trim()) update.title = p.title.trim()
-					if (typeof p.type === 'string' && p.type.trim()) update.intentType = p.type.trim()
-					if (typeof p.source === 'string' && p.source.trim()) update.sourceLabel = p.source.trim()
-					if (typeof p.deadline === 'string' && p.deadline.trim())
-						update.deadline = p.deadline.trim()
+					const changed: string[] = []
+					if (typeof p.title === 'string' && p.title.trim() !== '') {
+						hit.title = p.title.trim()
+						changed.push('title')
+					}
+					if (typeof p.type === 'string' && p.type.trim() !== '') {
+						hit.type = p.type.trim()
+						changed.push('type')
+					}
+					if (typeof p.source === 'string' && p.source.trim() !== '') {
+						hit.source = p.source.trim()
+						changed.push('source')
+					}
+					if (typeof p.deadline === 'string') {
+						if (p.deadline.trim() === '') delete hit.deadline
+						else hit.deadline = p.deadline.trim()
+						changed.push('deadline')
+					}
 					if (
 						typeof p.status === 'string' &&
 						['working', 'waiting', 'done', 'error'].includes(p.status)
-					)
-						update.state = p.status
-					if (Object.keys(update).length <= 2 && update.clearDeadline === false)
+					) {
+						hit.status = p.status as IntentState
+						changed.push('status')
+					}
+					if (changed.length === 0)
 						return {
 							record: '{"ok":false,"error":"nothing to change"}',
 							wire: 'Nothing to change.'
 						}
-					const detail = await invoke<PersistentIntentDetail>('intent_update', {
-						intentId: hit.id,
-						update
-					})
-					this.applyPersistent(detail)
 					return {
-						record: JSON.stringify({ ok: true, updated: hit.id, persistent: true }),
-						wire: `Updated "${detail.title}".`
+						record: JSON.stringify({ ok: true, updated: hit.id, changed }),
+						wire: `Updated ${changed.join(', ')} of "${hit.title}".`
 					}
-				}
-				const changed: string[] = []
-				if (typeof p.title === 'string' && p.title.trim() !== '') {
-					hit.title = p.title.trim()
-					changed.push('title')
-				}
-				if (typeof p.type === 'string' && p.type.trim() !== '') {
-					hit.type = p.type.trim()
-					changed.push('type')
-				}
-				if (typeof p.source === 'string' && p.source.trim() !== '') {
-					hit.source = p.source.trim()
-					changed.push('source')
-				}
-				if (typeof p.deadline === 'string') {
-					if (p.deadline.trim() === '') delete hit.deadline
-					else hit.deadline = p.deadline.trim()
-					changed.push('deadline')
-				}
-				if (
-					typeof p.status === 'string' &&
-					['working', 'waiting', 'done', 'error'].includes(p.status)
-				) {
-					hit.status = p.status as IntentState
-					changed.push('status')
-				}
-				if (changed.length === 0)
-					return { record: '{"ok":false,"error":"nothing to change"}', wire: 'Nothing to change.' }
-				return {
-					record: JSON.stringify({ ok: true, updated: hit.id, changed }),
-					wire: `Updated ${changed.join(', ')} of "${hit.title}".`
-				}
-			},
-			intent_merge: async (p) => {
-				const target = this.find(String(p.into ?? ''))
-				if (!target) return this.miss(String(p.into ?? ''))
-				const froms = (Array.isArray(p.from) ? p.from : [p.from])
-					.map((f) => this.find(String(f ?? '')))
-					.filter((f): f is MockIntent => !!f && f.id !== target.id)
-				if (froms.length === 0)
-					return { record: '{"ok":false,"error":"nothing to merge"}', wire: 'Nothing to merge.' }
-				if (target.persistent || froms.some((intent) => intent.persistent)) {
-					if (!isTauri() || !target.persistent || froms.some((intent) => !intent.persistent)) {
+				},
+				intent_merge: async (p) => {
+					const target = this.find(String(p.into ?? ''))
+					if (!target) return this.miss(String(p.into ?? ''))
+					const froms = (Array.isArray(p.from) ? p.from : [p.from])
+						.map((f) => this.find(String(f ?? '')))
+						.filter((f): f is MockIntent => !!f && f.id !== target.id)
+					if (froms.length === 0)
+						return { record: '{"ok":false,"error":"nothing to merge"}', wire: 'Nothing to merge.' }
+					if (target.persistent || froms.some((intent) => intent.persistent)) {
+						if (!isTauri() || !target.persistent || froms.some((intent) => !intent.persistent)) {
+							return {
+								record: '{"ok":false,"error":"mixed persistence"}',
+								wire: 'Demo and persistent intents cannot be merged together.'
+							}
+						}
+						if (target.persistentVersion === undefined) return persistencePending(target.title)
+						if (froms.some((intent) => intent.persistentVersion === undefined))
+							return persistencePending('one or more source intents')
+						const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
+							intentId: target.id,
+							action: 'merge',
+							command: {
+								id: target.id,
+								commandId: crypto.randomUUID(),
+								expectedVersion: target.persistentVersion,
+								sources: froms.map((intent) => ({
+									id: intent.id,
+									expectedVersion: intent.persistentVersion
+								}))
+							}
+						})
+						chatActor.core.mergeSessions(
+							froms.map((intent) => intent.id),
+							target.id
+						)
+						this.items = this.items.filter(
+							(intent) => !froms.some((source) => source.id === intent.id)
+						)
+						this.applyPersistent(detail)
+						this.goTo(target.id)
 						return {
-							record: '{"ok":false,"error":"mixed persistence"}',
-							wire: 'Demo and persistent intents cannot be merged together.'
+							record: JSON.stringify({
+								ok: true,
+								into: target.id,
+								merged: froms.map((intent) => intent.id),
+								persistent: true
+							}),
+							wire: `Merged ${froms.map((intent) => `"${intent.title}"`).join(', ')} into "${detail.title}".`
 						}
 					}
-					if (target.persistentVersion === undefined) return persistencePending(target.title)
-					if (froms.some((intent) => intent.persistentVersion === undefined))
-						return persistencePending('one or more source intents')
-					const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
-						intentId: target.id,
-						action: 'merge',
-						command: {
-							id: target.id,
-							commandId: crypto.randomUUID(),
-							expectedVersion: target.persistentVersion,
-							sources: froms.map((intent) => ({
-								id: intent.id,
-								expectedVersion: intent.persistentVersion
-							}))
-						}
-					})
 					chatActor.core.mergeSessions(
-						froms.map((intent) => intent.id),
+						froms.map((f) => f.id),
 						target.id
 					)
-					this.items = this.items.filter(
-						(intent) => !froms.some((source) => source.id === intent.id)
-					)
-					this.applyPersistent(detail)
+					for (const f of froms) {
+						target.log.push(...f.log)
+						target.artifacts.push(...f.artifacts)
+						for (const sk of f.skills)
+							if (!target.skills.some((t) => t.skill === sk.skill)) target.skills.push(sk)
+						this.items = this.items.filter((i) => i.id !== f.id)
+					}
 					this.goTo(target.id)
 					return {
-						record: JSON.stringify({
-							ok: true,
-							into: target.id,
-							merged: froms.map((intent) => intent.id),
-							persistent: true
-						}),
-						wire: `Merged ${froms.map((intent) => `"${intent.title}"`).join(', ')} into "${detail.title}".`
+						record: JSON.stringify({ ok: true, into: target.id, merged: froms.map((f) => f.id) }),
+						wire: `Merged ${froms.map((f) => `"${f.title}"`).join(', ')} into "${target.title}".`
 					}
-				}
-				chatActor.core.mergeSessions(
-					froms.map((f) => f.id),
-					target.id
-				)
-				for (const f of froms) {
-					target.log.push(...f.log)
-					target.artifacts.push(...f.artifacts)
-					for (const sk of f.skills)
-						if (!target.skills.some((t) => t.skill === sk.skill)) target.skills.push(sk)
-					this.items = this.items.filter((i) => i.id !== f.id)
-				}
-				this.goTo(target.id)
-				return {
-					record: JSON.stringify({ ok: true, into: target.id, merged: froms.map((f) => f.id) }),
-					wire: `Merged ${froms.map((f) => `"${f.title}"`).join(', ')} into "${target.title}".`
-				}
-			},
-			intent_archive: async (p) => {
-				const hit = this.find(String(p.intent ?? ''))
-				if (!hit) return this.miss(String(p.intent ?? ''))
-				if (hit.status === 'archive')
-					return {
-						record: '{"ok":true,"already":true}',
-						wire: `"${hit.title}" is already archived.`
+				},
+				intent_archive: async (p) => {
+					const hit = this.find(String(p.intent ?? ''))
+					if (!hit) return this.miss(String(p.intent ?? ''))
+					if (hit.status === 'archive')
+						return {
+							record: '{"ok":true,"already":true}',
+							wire: `"${hit.title}" is already archived.`
+						}
+					if (hit.persistent && isTauri()) {
+						if (hit.persistentVersion === undefined) return persistencePending(hit.title)
+						const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
+							intentId: hit.id,
+							action: 'archive',
+							command: { id: hit.id, expectedVersion: hit.persistentVersion }
+						})
+						this.applyPersistent(detail)
+						this.goTo(hit.id)
+						return {
+							record: JSON.stringify({ ok: true, archived: hit.id, persistent: true }),
+							wire: `Archived "${hit.title}".`
+						}
 					}
-				if (hit.persistent && isTauri()) {
-					if (hit.persistentVersion === undefined) return persistencePending(hit.title)
-					const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
-						intentId: hit.id,
-						action: 'archive',
-						command: { id: hit.id, expectedVersion: hit.persistentVersion }
-					})
-					this.applyPersistent(detail)
+					hit.before = hit.status
+					hit.status = 'archive'
+					// The request and its answer belong to the intent being archived:
+					// they are its last exchange, so they go — and show — there.
 					this.goTo(hit.id)
 					return {
-						record: JSON.stringify({ ok: true, archived: hit.id, persistent: true }),
+						record: JSON.stringify({ ok: true, archived: hit.id }),
 						wire: `Archived "${hit.title}".`
 					}
-				}
-				hit.before = hit.status
-				hit.status = 'archive'
-				// The request and its answer belong to the intent being archived:
-				// they are its last exchange, so they go — and show — there.
-				this.goTo(hit.id)
-				return {
-					record: JSON.stringify({ ok: true, archived: hit.id }),
-					wire: `Archived "${hit.title}".`
-				}
-			},
-			intent_restore: async (p) => {
-				const hit = this.find(String(p.intent ?? ''))
-				if (!hit) return this.miss(String(p.intent ?? ''))
-				if (hit.persistent && isTauri()) {
-					if (hit.persistentVersion === undefined) return persistencePending(hit.title)
-					const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
-						intentId: hit.id,
-						action: 'restore',
-						command: { id: hit.id, expectedVersion: hit.persistentVersion }
-					})
-					this.applyPersistent(detail)
+				},
+				intent_restore: async (p) => {
+					const hit = this.find(String(p.intent ?? ''))
+					if (!hit) return this.miss(String(p.intent ?? ''))
+					if (hit.persistent && isTauri()) {
+						if (hit.persistentVersion === undefined) return persistencePending(hit.title)
+						const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
+							intentId: hit.id,
+							action: 'restore',
+							command: { id: hit.id, expectedVersion: hit.persistentVersion }
+						})
+						this.applyPersistent(detail)
+						this.goTo(hit.id)
+						return {
+							record: JSON.stringify({ ok: true, restored: hit.id, persistent: true }),
+							wire: `"${hit.title}" is back on the list and on screen.`
+						}
+					}
+					if (hit.status === 'archive') hit.status = hit.before ?? 'done'
 					this.goTo(hit.id)
 					return {
-						record: JSON.stringify({ ok: true, restored: hit.id, persistent: true }),
+						record: JSON.stringify({ ok: true, restored: hit.id }),
 						wire: `"${hit.title}" is back on the list and on screen.`
 					}
-				}
-				if (hit.status === 'archive') hit.status = hit.before ?? 'done'
-				this.goTo(hit.id)
-				return {
-					record: JSON.stringify({ ok: true, restored: hit.id }),
-					wire: `"${hit.title}" is back on the list and on screen.`
-				}
-			},
-			intent_delete: async (p) => {
-				const hit = this.find(String(p.intent ?? ''))
-				if (!hit) return this.miss(String(p.intent ?? ''))
-				if (this.items.length === 1)
-					return { record: '{"ok":false,"error":"last intent"}', wire: 'The last intent stays.' }
-				if (hit.persistent && isTauri()) {
-					if (hit.persistentVersion === undefined) return persistencePending(hit.title)
-					await invoke('intent_delete', {
-						intentId: hit.id,
-						command: { id: hit.id, expectedVersion: hit.persistentVersion }
-					})
-				}
-				this.items = this.items.filter((i) => i.id !== hit.id)
-				if (this.selectedId === hit.id) this.selectedId = this.items[0].id
-				return {
-					record: JSON.stringify({ ok: true, deleted: hit.id }),
-					wire: `Deleted "${hit.title}".`
-				}
-			},
-			artifact_detail: async (p) => {
-				const key = String(p.artifact ?? '')
-				const selected = this.items.find((i) => i.id === this.selectedId)
-				const hit =
-					(selected ? resolveArtifact(selected.artifacts, key) : undefined) ??
-					this.items
-						.filter((i) => !selected || i.id !== selected.id)
-						.map((i) => resolveArtifact(i.artifacts, key))
-						.find(Boolean)
-				if (!hit?.artifactId)
-					return {
-						record: JSON.stringify({ ok: false, error: `no artifact matches "${key}"` }),
-						wire: `No file matches "${key}". The files in this conversation are listed under ARTIFACTS in your context.`
-					}
-				const live = chatActor.core.artifactInfo(hit.artifactId)
-				let presentation: ArtifactProcessingView | null = live?.processing ?? null
-				if (isTauri() && presentation?.availability !== 'available') {
-					try {
-						const lookup = await invoke<ArtifactProcessingLookup>('artifact_processing_status', {
-							artifactId: hit.artifactId
+				},
+				intent_delete: async (p) => {
+					const hit = this.find(String(p.intent ?? ''))
+					if (!hit) return this.miss(String(p.intent ?? ''))
+					if (this.items.length === 1)
+						return { record: '{"ok":false,"error":"last intent"}', wire: 'The last intent stays.' }
+					if (hit.persistent && isTauri()) {
+						if (hit.persistentVersion === undefined) return persistencePending(hit.title)
+						await invoke('intent_delete', {
+							intentId: hit.id,
+							command: { id: hit.id, expectedVersion: hit.persistentVersion }
 						})
-						if (lookup.presentation)
-							presentation = { ...lookup.presentation, availability: 'available' }
-					} catch {
-						// keep what the local view already knows
 					}
-				}
-				const name = live?.originalName ?? hit.title
-				const highlights = artifactMetadataHighlights(presentation ?? undefined)
-				const state = processingStateLabel(live?.processing?.state ?? hit.state)
-				const summary = presentation?.summary ?? hit.summary ?? undefined
-				let preview: string | undefined
-				const mediaType = live?.mediaType
-				if (
-					isTauri() &&
-					mediaType &&
-					(mediaType.startsWith('text/') || mediaType.includes('json')) &&
-					(live?.length ?? 0) <= MAX_PREVIEW_BYTES
-				) {
-					try {
-						const content = await invoke<{ mediaType: string; base64: string }>(
-							'artifact_content_get',
-							{ artifactId: hit.artifactId }
-						)
-						const text = base64ToText(content.base64)
-						if (text && !text.includes('\u0000')) preview = text.slice(0, MAX_PREVIEW_CHARS)
-					} catch {
-						// a preview is a bonus; its absence never fails the lookup
+					await this.#sourceCatalog?.removeIntent(hit.id)
+					this.items = this.items.filter((i) => i.id !== hit.id)
+					if (this.selectedId === hit.id) this.select(this.items[0].id)
+					return {
+						record: JSON.stringify({ ok: true, deleted: hit.id }),
+						wire: `Deleted "${hit.title}".`
 					}
+				},
+				artifact_search: async (p) => {
+					const result = await searchSources(await this.checkedSourceProvider(), p)
+					return { record: JSON.stringify(result), wire: JSON.stringify(result) }
+				},
+				artifact_detail: async (p) => {
+					const result = await readSource(await this.checkedSourceProvider(), p)
+					return { record: JSON.stringify(result), wire: JSON.stringify(result) }
 				}
-				const kind = presentation
-					? artifactTypeLabel(presentation.preferredType)
-					: (hit.label ?? artifactTypeLabel(hit.typeKey ?? ''))
-				const record = JSON.stringify({
-					ok: true,
-					artifactId: hit.artifactId,
-					name,
-					kind,
-					mediaType: mediaType ?? null,
-					length: live?.length ?? null,
-					state,
-					summary,
-					highlights,
-					...(preview ? { preview } : {})
-				})
-				const wire =
-					`"${name}" — ${kind}, ` +
-					`${live?.length ? `${formatBytes(live.length)}, ` : ''}${state}.` +
-					(summary ? ` Summary: ${summary}.` : '') +
-					(highlights.length > 0 ? ` Key figures: ${highlights.join(', ')}.` : '') +
-					(preview ? ` First part: ${preview}` : '')
-				return { record, wire }
-			}
-		})
+			})
+		)
 	}
 
-	/**
-	 * Put an intent on screen AND carry the conversation there: the question
-	 * that asked for it and the answer it gets belong to that intent's stream.
-	 */
+	#sourceCatalog: SourceCatalog | null = null
+	#searchScope: string | null = null
+	async initializeSourceSearch() {
+		if (!isTauri()) return
+		const revision = this.environmentRevision
+		const scope = await invoke<string>('artifact_search_scope')
+		if (revision !== this.environmentRevision)
+			throw Error('Environment changed during search initialization.')
+		if (this.#searchScope !== scope) {
+			this.#sourceCatalog?.close()
+			this.#sourceCatalog = null
+			this.#searchScope = scope
+		}
+	}
+	registerDiscoveredSource(intentId: string, artifactId: string, title: string) {
+		this.sourceProvider()
+		this.#sourceCatalog?.register(
+			{ artifactId, intentId, title, kind: 'core.file' },
+			artifactId,
+			true
+		)
+		const loaded = this.items.find((i) => i.id === intentId)
+		if (loaded && !loaded.artifacts.some((a) => a.artifactId === artifactId))
+			this.attachFileSource(intentId, artifactId, title)
+	}
+
+	setSourceInventoryComplete(complete: boolean) {
+		this.sourceProvider()
+		if (this.#sourceCatalog) this.#sourceCatalog.inventoryComplete = complete
+	}
+	private async checkedSourceProvider(): Promise<SourceProvider> {
+		const revision = this.environmentRevision
+		const scope = await invoke<string>('artifact_search_scope')
+		if (revision !== this.environmentRevision)
+			throw Error('Environment changed during search initialization.')
+		if (scope !== this.#searchScope) {
+			this.resetForEnvironment()
+			throw Error('Environment changed. Reload the workspace before searching.')
+		}
+		return this.sourceProvider()
+	}
+	private sourceProvider(): SourceProvider {
+		if (!this.#sourceCatalog) {
+			this.#sourceCatalog = new SourceCatalog(async (entry) => {
+				if (!isTauri()) throw Error('Source text requires a connected desktop environment')
+				return readStoredSource(entry.artifactId, (command, args) => invoke(command, args))
+			}, this.#searchScope ?? undefined)
+		}
+		return this.#sourceCatalog
+	}
+	private indexIntent(intent: MockIntent) {
+		if (typeof indexedDB === 'undefined' || !this.#searchScope) return
+		this.sourceProvider()
+		for (const a of intent.artifacts)
+			if (a.artifactId && (a.typeKey === 'core.file' || !a.stageKey))
+				this.#sourceCatalog?.register(
+					{
+						artifactId: a.artifactId,
+						intentId: intent.id,
+						title: a.title,
+						kind: a.label ?? a.typeKey ?? a.kind,
+						summary: a.summary
+					},
+					JSON.stringify([a.state, a.searchVersion]),
+					!a.state || ['succeeded', 'needs_review', 'failed'].includes(a.state)
+				)
+	}
+
+	/** Put an Intent on screen and carry this question and answer into its stream. */
 	goTo(id: string): void {
-		this.selectedId = id
+		this.select(id)
 		chatActor.core.relocateTurn(id)
+	}
+
+	async resolvePersistent(key: string): Promise<MockIntent | undefined> {
+		if (!isTauri()) return this.find(key)
+		const matches = this.items.filter(
+			(i) => i.title.toLocaleLowerCase() === key.toLocaleLowerCase()
+		)
+		const exact =
+			this.items.find((i) => i.id === key) ?? (matches.length === 1 ? matches[0] : undefined)
+		const id =
+			exact?.id ?? (/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(key) ? key : null)
+		if (!id) return undefined
+		const revision = this.environmentRevision
+		const detail = await invoke<PersistentIntentDetail>('intent_get', { intentId: id })
+		if (revision !== this.environmentRevision) throw Error('Environment changed during lookup.')
+		this.applyPersistent(detail)
+		chatActor.core.hydrate(
+			detail.id,
+			detail.contributions.flatMap((c) =>
+				(c.contributorKind === 'human' || c.contributorKind === 'agent') && c.text
+					? [
+							{
+								id: c.id,
+								role: c.contributorKind === 'human' ? ('user' as const) : ('assistant' as const),
+								content: c.text
+							}
+						]
+					: []
+			)
+		)
+		return this.items.find((i) => i.id === id)
 	}
 
 	/** By id, else by a case-insensitive part of the title. */
@@ -1561,7 +1761,7 @@ class IntentsActor extends Actor {
 	miss(key: string) {
 		return {
 			record: JSON.stringify({ ok: false, error: `no intent matches "${key}"` }),
-			wire: `No intent matches "${key}". Ask intent_list for what exists.`
+			wire: `No intent matches "${key}". Use workspace_search with kind intent to find the exact ID.`
 		}
 	}
 
@@ -1573,20 +1773,25 @@ class IntentsActor extends Actor {
 export const intents = singleton('aven.intents', () => new IntentsActor())
 bus.register(intents)
 
-// The model decides where a request belongs BEFORE it acts, so it sees the
-// intents with every request — live data, never a vocabulary.
+// The model sees a small live index. intent_list can search the whole workspace.
 chatActor.core.context = () => {
 	const on = intents.items.find((i) => i.id === intents.selectedId)
-	const rows = intents.items
-		.filter((i) => i.status !== 'archive')
+	const shown = selectContextIntents(
+		intents.items,
+		intents.selectedId,
+		intents.recentIds,
+		DEFAULT_INTENT_CONTEXT_LIMIT,
+		intents.contextItemsById
+	)
+	const rows = shown
 		.map(
 			(i) =>
-				`- ${i.id}: "${i.title}" (${i.type}, ${i.status})` +
-				(i.routingSummary ? ` — ${i.routingSummary}` : '')
+				`- ${i.id}: "${shortIndexText(i.title, 160)}" (${i.type}, ${i.status})` +
+				(i.routingSummary ? ` — ${i.routingSummary.slice(0, 160)}` : '')
 		)
 		.join('\n')
-	// The on-screen intent's files, one bounded line each: the model always
-	// sees WHAT is in the conversation without any file bytes entering context.
+	// The on-screen intent's recent files, one bounded line each. Older metadata
+	// stays behind artifact_list, and no file bytes enter default context.
 	const artifactContext = artifactManifest(on?.artifacts ?? [], (artifactId) => {
 		const live = chatActor.core.artifactInfo(artifactId)
 		if (!live) return undefined
@@ -1600,11 +1805,12 @@ chatActor.core.context = () => {
 		}
 	})
 	return (
-		`INTENTS right now:\n${rows}\n` +
+		`RECENT INTENTS (${shown.length} shown; workspace_search includes unloaded records):\n${rows || '- none'}\n` +
 		`ON SCREEN: ${on ? `${on.id} — "${on.title}"` : 'none'}.\n` +
-		'If the request is about one of the other intents, call intent_switch with it ' +
-		'as your FIRST action, then answer. If it starts something that is none of ' +
-		'these, intent_create first.' +
+		'If the request names another intent, call intent_switch with it first. ' +
+		'If the user refers to older work or says the information should already exist, ' +
+		'use workspace_search with kind intent, then workspace_read with kind intent before answering. ' +
+		'For new work that matches no existing intent, call intent_create first.' +
 		(artifactContext === '' ? '' : `\n\n${artifactContext}`)
 	)
 }

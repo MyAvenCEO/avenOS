@@ -5,14 +5,16 @@ import { onMount, untrack } from 'svelte'
 import { dev } from '$app/environment'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
+import { bus } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import { anonymousSpeakerPayload } from '$lib/chat/anonymous-speaker'
+import { ResearchRecord } from '$lib/chat/research'
 import { voiceController } from '$lib/voice/controller.svelte'
 import '$lib/actors/windows'
-import ArtifactsPage from '$lib/artifacts/ArtifactsPage.svelte'
+import ArtifactWorkspacePage from '$lib/artifacts/ArtifactWorkspacePage.svelte'
 import {
 	documentExecutionPreference,
 	ingestDroppedFiles,
@@ -23,6 +25,7 @@ import {
 import { composer } from '$lib/intents/composer.svelte'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
 import { intents } from '$lib/intents/intents.svelte'
+import { readStoredSource } from '$lib/intents/stored-source'
 import { shell } from '$lib/intents/talk.svelte'
 import SkillsPlatform from '$lib/skills/SkillsPlatform.svelte'
 
@@ -99,6 +102,81 @@ async function importE2eFixture() {
 	if (e2eFixture) await ingestFile(e2eFixture, e2ePlacement)
 }
 
+let e2eSourceProof = $state('')
+async function checkE2eSource() {
+	if (!e2eFixture) return
+	try {
+		const source = intents.items
+			.find((i) => i.id === intents.selectedId)
+			?.artifacts.find((a) => a.typeKey === 'core.file')
+		if (!source?.artifactId) throw Error('No imported source selected')
+		const scope = await invoke<string>('artifact_search_scope')
+		const text = await readStoredSource(source.artifactId, (command, args) => invoke(command, args))
+		let bounded = false
+		try {
+			await invoke('artifact_content_get', { artifactId: source.artifactId, maxBytes: 1 })
+		} catch (error) {
+			bounded = String(error).includes('preview limit')
+		}
+		e2eSourceProof = JSON.stringify({
+			scope,
+			content: text.content,
+			complete: text.complete,
+			bounded
+		})
+	} catch (error) {
+		e2eSourceProof = JSON.stringify({ error: String(error) })
+	}
+}
+
+let e2eMessageProof = $state('')
+async function checkE2eMessages() {
+	if (!e2eFixture) return
+	try {
+		const search = await bus.dispatch('chat', 'workspace_search', {
+			kind: 'message',
+			query: 'Hello from Tauri E2E'
+		})
+		const found = JSON.parse(search.record).messages.find((m: { content: string }) =>
+			m.content.includes('Hello from Tauri E2E')
+		)
+		if (!found) throw Error('Persisted message was not found')
+		const read = await bus.dispatch('chat', 'workspace_read', { kind: 'message', id: found.id })
+		const data = JSON.parse(read.record)
+		const evidence = new ResearchRecord()
+		evidence.observe('workspace_read', read.record)
+		const checked = evidence.run('research_record', {
+			items: [
+				{
+					requirement: 'Read the persisted greeting',
+					finding: data.content,
+					status: 'supported',
+					sources: [{ sourceId: data.sourceId, quote: 'Hello from Tauri E2E' }]
+				}
+			]
+		})
+		const lookupNames = bus
+			.toolSpecs()
+			.map((t) => t.name)
+			.filter((name) =>
+				/^(workspace_(search|read)|intent_(list|detail|messages)|message_detail|artifact_(list|search|detail))$/.test(
+					name
+				)
+			)
+			.sort()
+		e2eMessageProof = JSON.stringify({
+			content: data.content,
+			sourceId: data.sourceId,
+			createdAt: data.createdAt,
+			evidenceAccepted: checked.ok,
+			hasGenericSend: bus.toolSpecs().some((t) => t.name === 'send'),
+			lookupNames
+		})
+	} catch (error) {
+		e2eMessageProof = JSON.stringify({ error: String(error) })
+	}
+}
+
 let e2eDuplexSession: string | null = null
 
 async function beginE2eNarration() {
@@ -171,7 +249,7 @@ onMount(() => {
 	let contributionPersistence = Promise.resolve()
 	const webview = getCurrentWebview()
 	void loadPersistentIntents().catch((error) => {
-		chat.failure = `Could not load persistent intents: ${String(error)}`
+		if (!disposed) chat.failure = `Could not load persistent intents: ${String(error)}`
 	})
 	chat.onExchange = (session, user, assistant) => {
 		if (!intents.items.find((intent) => intent.id === session)?.persistent) return
@@ -491,6 +569,14 @@ function onGlobalKeydown(event: KeyboardEvent) {
 
 {#if e2eFixture}
 	<div class="fixed right-2 bottom-2 z-[200] flex gap-2">
+		<button type="button" data-testid="e2e-check-source" onclick={checkE2eSource}>
+			Check source
+		</button>
+		<output data-testid="e2e-source-state" data-result={e2eSourceProof}></output>
+		<button type="button" data-testid="e2e-check-messages" onclick={checkE2eMessages}>
+			Check messages
+		</button>
+		<output data-testid="e2e-message-state" data-result={e2eMessageProof}></output>
 		<button
 			type="button"
 			data-testid="e2e-import-fixture"
@@ -567,15 +653,14 @@ function onGlobalKeydown(event: KeyboardEvent) {
 			<IntentsPlaceholder />
 		</div>
 	{:else if shell.tab === 'skills'}
-		<!-- The skills platform: a skill is a collection of composable
-		     workflows; the canvas draws them n8n-style, every wire derived. -->
+		<!-- The shared Skill Studio: explore artifacts, compose programs and inspect runs. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
 			<SkillsPlatform />
 		</div>
 	{:else if shell.tab === 'artifacts'}
-		<!-- Artifact Store debugger plus the retained local-download shelf. -->
+		<!-- Document library plus the retained Artifact Store history and local-download shelf. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
-			<ArtifactsPage />
+			<ArtifactWorkspacePage />
 		</div>
 	{/if}
 

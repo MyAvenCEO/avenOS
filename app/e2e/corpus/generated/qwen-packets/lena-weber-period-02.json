@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-01-18",
+        "intentId": "lena-weber:father-clinic",
+        "kind": "transport-ticket",
+        "user": "Papa hat den Termin am 20. Bitte check die Barrierefreiheit für die Hinfahrt. Ist das Ticket raus?",
+        "assistant": "Ja, gebucht. DB Fernverkehr, 1. Klasse, Rollstuhlplatz reserviert. Referenz DB-2026-01-18-9921. Abfahrt 09:15 ab Berlin Hbf.",
+        "artifact": {
+          "title": "Fahrkartenbestätigung Deutsche Bahn",
+          "from": "noreply@bahn.de.test",
+          "to": "lena.weber@weber-keramik.test",
+          "language": "de",
+          "body": "Vielen Dank für Ihre Buchung bei der Deutschen Bahn.\n\nReisedaten:\nDatum: 20.01.2026\nStrecke: Berlin Hbf -> Potsdam Hbf\nZug: ICE 1234\nAbfahrt: 09:15 Uhr\nAnkunft: 09:45 Uhr\nReisender: Klaus Weber\nKlasse: 1. Klasse\nSitzplatz: Rollstuhlplatz, Wagen 4\nBarrierefreiheit: Bordbistro mit Zugang, Aufzug am Gleis bestätigt.\n\nPreis: 42,50 EUR\nZahlungsmethode: Visa Debit ****4821\nBuchungsnummer: DB-2026-01-18-9921\n\nBitte drucken Sie die Fahrkarte aus oder zeigen Sie den QR-Code im DB Navigator vor. Bei Verspätungen ab 20 Minuten erhalten Sie eine Entschädigung."
+        },
+        "probe": {
+          "question": "Welche Buchungsnummer hat das Ticket für Papas Fahrt?",
+          "answer": "DB-2026-01-18-9921"
+        }
+      },
+      {
+        "date": "2026-01-21",
+        "intentId": "lena-weber:father-clinic",
+        "kind": "event-ticket",
+        "user": "Kann Papa am 22. zur Führung im Museum? Ist das barrierefrei und passt das zeitlich nach der Praxis?",
+        "assistant": "Ja, Führung um 14:00 Uhr. Ticket ist da. Eingang ist ebenerdig, Aufzug vorhanden. Passt gut nach dem Arzttermin.",
+        "artifact": {
+          "title": "Eintrittskarte Museum für Kommunikation",
+          "from": "tickets@museum-kommunikation.test",
+          "to": "lena.weber@weber-keramik.test",
+          "language": "de",
+          "body": "Ihre Eintrittskarte für die Sonderausstellung 'Post und Papier'.\n\nVeranstaltung: Führung 'Papiergeschichte'\nDatum: 22.01.2026\nUhrzeit: 14:00 - 15:30 Uhr\nOrt: Museum für Kommunikation, Berlin\nInhaber: Klaus Weber\nKategorie: Ermäßigt (Schwerbehindertenausweis)\nPreis: 4,00 EUR\nTicket-ID: MK-2026-01-21-4455\n\nHinweis zur Barrierefreiheit: Der Haupteingang ist stufenlos. Ein Aufzug bringt Sie zu allen Ausstellungsebenen. Bitte halten Sie den Schwerbehindertenausweis bereit."
+        },
+        "probe": {
+          "question": "Wie lautet die Ticket-ID für die Museumsführung?",
+          "answer": "MK-2026-01-21-4455"
+        }
+      },
+      {
+        "date": "2026-01-24",
+        "intentId": "lena-weber:bike",
+        "kind": "voucher",
+        "user": "Britta, danke für den Tipp mit der Werkstatt. Hab nen Gutschein bekommen. Kannst du den mal checken? Verfallt der bald?",
+        "assistant": "Guck mal in die Mail. 25 Euro für Bremsen. Läuft bis Ende März. Reicht für die neue Beläge.",
+        "artifact": {
+          "title": "Gutschein Fahrradwerkstatt Prenzlberg",
+          "from": "info@radwerk-prenzlberg.test",
+          "to": "lena.weber@weber-keramik.test",
+          "language": "de",
+          "body": "Vielen Dank für Ihren Einkauf bei Radwerk Prenzlberg.\n\nGutschein-Nr.: RW-2026-01-24-7788\nWert: 25,00 EUR\nGültig bis: 31.03.2026\nEinlösbar für: Wartungsarbeiten, Ersatzteile und Zubehör.\nNicht einlösbar für: Leihfahrräder und Geschenkgutscheine.\n\nBitte zeigen Sie diesen Code an der Kasse vor. Der Gutschein ist nicht übertragbar und wird nicht in bar ausgezahlt."
+        },
+        "probe": {
+          "question": "Bis wann ist der Werkstattgutschein gültig?",
+          "answer": "31.03.2026"
+        }
+      },
+      {
+        "date": "2026-01-27",
+        "intentId": "lena-weber:family-weekend",
+        "kind": "booking",
+        "user": "Mira, die Unterkunft in Stralsund ist bestätigt. Aufzug ist da. Passt das für uns alle? Ich hab die Anzahlung gemacht.",
+        "assistant": "Super. Ich hab die Bestätigung gespeichert. Storno bis 7 Tage vorher kostenlos. Passt zeitlich mit den Kursen.",
+        "artifact": {
+          "title": "Buchungsbestätigung Hotel am Hafen Stralsund",
+          "from": "reservations@hotel-am-hafen.test",
+          "to": "lena.weber@weber-keramik.test",
+          "language": "de",
+          "body": "Sehr geehrte Frau Weber,\n\nwir freuen uns, Ihre Buchung bestätigen zu können.\n\nGastgeber: Lena Weber, Mira, Klaus Weber\nAnreise: 24.01.2026, ab 15:00 Uhr\nAbreise: 26.01.2026, bis 11:00 Uhr\nZimmer: 2x Doppelzimmer, barrierefrei\nPreis: 380,00 EUR (Gesamt)\nAnzahlung: 100,00 EUR (bezahlt am 27.01.2026)\nRestbetrag: 280,00 EUR (bei Anreise)\nBuchungsnummer: HA-2026-01-27-1122\n\nStornierungsbedingungen: Kostenlose Stornierung bis 7 Tage vor Anreise. Danach werden 50% des Gesamtpreises berechnet."
+        },
+        "probe": {
+          "question": "Wie hoch war die geleistete Anzahlung für das Hotel?",
+          "answer": "100,00 EUR"
+        }
+      },
+      {
+        "date": "2026-01-28",
+        "intentId": "lena-weber:home-budget",
+        "kind": "transaction",
+        "user": "Hab die Rücklage für den Umzug überwiesen. Ist das bei dir auch gebucht? Und der Dauerauftrag für die Miete?",
+        "assistant": "Ja, 500 Euro sind da. Dauerauftrag läuft auch. Passt alles für den Sommer.",
+        "artifact": {
+          "title": "Kontoauszug Sparkasse Berlin",
+          "from": "noreply@sparkasse-berlin.test",
+          "to": "lena.weber@weber-keramik.test",
+          "language": "de",
+          "body": "Kontoauszug für den Zeitraum 25.01.2026 - 28.01.2026\nKontonummer: ****4821\n\nBuchungen:\n28.01.2026 | SEPA-Überweisung | Umzugsrücklage Weber | 500,00 EUR | Soll\n28.01.2026 | Dauerauftrag | Hausverwaltung Berlin | 850,00 EUR | Soll\n27.01.2026 | SEPA-Eingang | Weber Keramik GmbH | 1.200,00 EUR | Haben\n\nSaldo am 28.01.2026: 4.215,50 EUR\n\nHinweis: Die Überweisung an die Umzugsrücklage wurde am 28.01.2026 ausgeführt."
+        },
+        "probe": {
+          "question": "Wie hoch war der Saldo auf dem Konto am 28. Januar?",
+          "answer": "4.215,50 EUR"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit delayed until Feb 10 (Nora Wells). Flat move plan v1.2 awaiting Mira's final sign-off on helper schedule. Family weekend DB ticket booking pending (due Jan 13). Closed: DHL shipment to Amira Yilmaz completed and paid (Jan 15). New: DB ticket for Klaus booked (Jan 18). Museum ticket for Klaus booked (Jan 21). Bike repair voucher received (Jan 24). Hotel in Stralsund booked with deposit paid (Jan 27). Move reserve transfer posted (Jan 28)."
+  }
+}

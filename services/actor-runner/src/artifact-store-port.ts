@@ -37,6 +37,8 @@ export interface ArtifactStoreRuntimePortOptions {
 	initiator: { kind: 'user' | 'service'; id: string }
 	schemas: readonly ArtifactStoreSchemaBinding[]
 	procedures: readonly ArtifactStoreProcedureBinding[]
+	/** Immutable causal context supplied by the admitted Skill activation. */
+	causalInputs?: readonly { role: string; artifactId: string }[]
 }
 
 /**
@@ -53,6 +55,7 @@ export class ArtifactStoreRuntimePort implements RuntimeArtifactResolver, Runtim
 	readonly #initiator: ArtifactStoreRuntimePortOptions['initiator']
 	readonly #schemas: readonly ArtifactStoreSchemaBinding[]
 	readonly #procedures: readonly ArtifactStoreProcedureBinding[]
+	readonly #causalInputs: readonly { role: string; artifactId: string }[]
 
 	constructor(options: ArtifactStoreRuntimePortOptions) {
 		this.#client = options.client
@@ -60,6 +63,10 @@ export class ArtifactStoreRuntimePort implements RuntimeArtifactResolver, Runtim
 		this.#initiator = structuredClone(options.initiator)
 		this.#schemas = [...options.schemas]
 		this.#procedures = [...options.procedures]
+		this.#causalInputs = (options.causalInputs ?? []).map(({ role, artifactId }) => ({
+			role,
+			artifactId: assertUuid(artifactId, `${role} causal artifact ID`)
+		}))
 	}
 
 	async resolve(artifactId: string, expectedPredicate: Predicate): Promise<RuntimeArtifact | null> {
@@ -139,16 +146,26 @@ export class ArtifactStoreRuntimePort implements RuntimeArtifactResolver, Runtim
 						procedureVersion: procedure.procedureVersion,
 						initiator: this.#initiator,
 						executor: procedure.executor,
-						inputs: publication.inputs.map((input) => {
+						inputs: [
+							...this.#causalInputs,
+							...publication.inputs.map((input) => ({
+								role: input.role,
+								artifactId: assertUuid(input.artifact.artifactId, 'input artifact ID')
+							}))
+						].map((input) => {
 							const ordinal = inputOrdinals.get(input.role) ?? 0
 							inputOrdinals.set(input.role, ordinal + 1)
 							return {
 								role: input.role,
 								ordinal,
-								artifactId: assertUuid(input.artifact.artifactId, 'input artifact ID')
+								artifactId: input.artifactId
 							}
 						}),
-						parameters: {},
+						parameters: {
+							logicalRunId: publication.runId,
+							invocationStepId: publication.stepId,
+							capabilityId: publication.capabilityId
+						},
 						implementation: procedure.implementation,
 						receipt: { outcome: 'succeeded' }
 					},
@@ -166,29 +183,42 @@ export class ArtifactStoreRuntimePort implements RuntimeArtifactResolver, Runtim
 		if (!Array.isArray(published) || published.length !== outputs.length) {
 			throw new Error('Artifact Store returned an invalid output mapping')
 		}
-		return outputs.map((output) => {
-			const mapped = record(
-				published.find(
-					(value) =>
-						typeof value === 'object' &&
-						value !== null &&
-						(value as Record<string, unknown>).localKey === output.draft.slot
-				),
-				`published output ${output.draft.slot}`
-			)
-			return {
-				artifactId: assertUuid(
+		return Promise.all(
+			outputs.map(async (output) => {
+				const mapped = record(
+					published.find(
+						(value) =>
+							typeof value === 'object' &&
+							value !== null &&
+							(value as Record<string, unknown>).localKey === output.draft.slot
+					),
+					`published output ${output.draft.slot}`
+				)
+				const artifactId = assertUuid(
 					stringField(mapped, 'artifactId', 'published output'),
 					'published artifact ID'
-				),
-				predicate: output.draft.predicate,
-				schema: output.binding.schema,
-				typeKey: output.binding.typeKey,
-				schemaVersion: output.binding.typeVersion,
-				contentDigest: payloadDigest(output.draft.value as ArtifactJson),
-				value: structuredClone(output.draft.value)
-			}
-		})
+				)
+				const envelope = record(
+					await this.#client.artifact(this.#scopeId, artifactId),
+					'published artifact'
+				)
+				const payload = artifactJsonField(envelope, 'payload')
+				const predicate = output.binding
+					.project(payload, artifactId)
+					.find((candidate) => unifiable(candidate, output.draft.predicate))
+				if (!predicate)
+					throw new Error(`published ${output.draft.slot} does not prove its planned predicate`)
+				return {
+					artifactId,
+					predicate,
+					schema: output.binding.schema,
+					typeKey: output.binding.typeKey,
+					schemaVersion: output.binding.typeVersion,
+					contentDigest: payloadDigest(payload),
+					value: structuredClone(payload)
+				}
+			})
+		)
 	}
 }
 

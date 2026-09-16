@@ -57,7 +57,29 @@ const detail: IntentDetail = {
 function store() {
 	return {
 		ready: vi.fn(async () => {}),
-		list: vi.fn(async () => [detail]),
+		page: vi.fn(async () => ({
+			intents: [detail],
+			hasMore: false,
+			nextCursor: null,
+			matchMode: 'recent'
+		})),
+		messages: vi.fn(async () => ({
+			messages: [],
+			hasMore: false,
+			nextCursor: null,
+			matchMode: 'recent',
+			notice: ''
+		})),
+		message: vi.fn(async () => ({
+			id: contributionId,
+			intentId,
+			createdAt: '2026-06-11T10:00:00Z',
+			role: 'user',
+			content: 'hello',
+			offset: 0,
+			totalChars: 5,
+			nextOffset: null
+		})),
 		detail: vi.fn(async () => detail),
 		create: vi.fn(async () => detail),
 		append: vi.fn(async (_subject: string, _intent: string, input: ContributionInput) => ({
@@ -118,9 +140,9 @@ function handler(repository = store()) {
 describe('Intent Service split boundary', () => {
 	test('requires the private facade credential before touching storage', async () => {
 		const { fetch, repository } = handler()
-		const response = await fetch(new Request('http://intent/api/intents'))
+		const response = await fetch(new Request('http://intent/api/intents/search'))
 		expect(response.status).toBe(401)
-		expect(repository.list).not.toHaveBeenCalled()
+		expect(repository.page).not.toHaveBeenCalled()
 	})
 
 	test('rejects a forged facade identity projection', async () => {
@@ -133,16 +155,16 @@ describe('Intent Service split boundary', () => {
 			})
 		)
 		expect(response.status).toBe(401)
-		expect(repository.list).not.toHaveBeenCalled()
+		expect(repository.page).not.toHaveBeenCalled()
 	})
 
-	test('scopes list and create operations to the independently verified subject', async () => {
+	test('scopes search and create operations to the independently verified subject', async () => {
 		const { fetch, repository } = handler()
 		const listed = await fetch(
-			new Request('http://intent/api/intents/', { headers: await headers() })
+			new Request('http://intent/api/intents/search', { headers: await headers() })
 		)
 		expect(listed.status).toBe(200)
-		expect(repository.list).toHaveBeenCalledWith(subject)
+		expect(repository.page).toHaveBeenCalledWith(subject, {})
 
 		const created = await fetch(
 			new Request('http://intent/api/intents', {
@@ -208,4 +230,43 @@ describe('Intent Service split boundary', () => {
 		expect(response.status).toBe(400)
 		expect(repository.append).not.toHaveBeenCalled()
 	})
+})
+
+test('retrieval routes authorize the subject and validate bounded inputs before storage', async () => {
+	const { fetch, repository } = handler()
+	for (const path of [
+		'/api/intents/search?query=buro&limit=2',
+		'/api/intents/messages?query=old'
+	]) {
+		const response = await fetch(new Request(`http://intent${path}`, { headers: await headers() }))
+		expect(response.status).toBe(200)
+	}
+	expect(repository.page).toHaveBeenCalledWith(subject, { query: 'buro', limit: 2 })
+	expect(repository.messages).toHaveBeenCalledWith(subject, { query: 'old' })
+	const full = await fetch(
+		new Request(`http://intent/api/intents/messages/${contributionId}?offset=2`, {
+			headers: await headers()
+		})
+	)
+	expect(full.status).toBe(200)
+	expect(repository.message).toHaveBeenCalledWith(subject, contributionId, 2)
+	for (const path of [
+		'/api/intents/search?limit=100000',
+		'/api/intents/messages?intent=bad',
+		'/api/intents/search?unknown=true',
+		`/api/intents/messages/${contributionId}?offset=-1`
+	])
+		expect(
+			(await fetch(new Request(`http://intent${path}`, { headers: await headers() }))).status
+		).toBe(400)
+	expect((await fetch(new Request('http://intent/api/intents/search'))).status).toBe(401)
+})
+
+test('intent enumeration requires the bounded search route', async () => {
+	const { fetch, repository } = handler()
+	const response = await fetch(
+		new Request('http://intent/api/intents', { headers: await headers() })
+	)
+	expect(response.status).toBe(404)
+	expect(repository.page).not.toHaveBeenCalled()
 })

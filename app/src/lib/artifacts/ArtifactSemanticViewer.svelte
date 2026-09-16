@@ -245,9 +245,7 @@ function title(): string {
 				</div>
 			{/if}
 			{#if evidence.length > 0}
-				<footer
-					class="border-border border-t bg-info-surface/70 px-6 py-3 text-info-ink text-xs"
-				>
+				<footer class="border-border border-t bg-info-surface/70 px-6 py-3 text-info-ink text-xs">
 					▣ {evidence.length} belegte {evidence.length === 1 ? 'Fundstelle' : 'Fundstellen'} · Feld
 					anklicken, um die Quelle zu markieren
 				</footer>

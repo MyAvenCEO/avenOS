@@ -136,9 +136,7 @@ const statusLabel: Record<Site['status'], string> = {
 	</div>
 
 	{#if !isTauri()}
-		<p
-			class="surface surface--raised text-xs opacity-60"
-		>
+		<p class="surface surface--raised text-xs opacity-60">
 			Hosting wird nur in der installierten aven.ceo App verwaltet.
 		</p>
 	{:else if loading}
@@ -147,9 +145,7 @@ const statusLabel: Record<Site['status'], string> = {
 		{#if sites.length}
 			<ul class="flex flex-col gap-2">
 				{#each sites as site (site.id)}
-					<li
-						class="flex flex-col gap-3 surface surface--raised"
-					>
+					<li class="flex flex-col gap-3 surface surface--raised">
 						<div class="flex items-start justify-between gap-3">
 							<div class="min-w-0">
 								<p class="truncate font-mono text-sm">{site.hostname}</p>
@@ -194,10 +190,7 @@ const statusLabel: Record<Site['status'], string> = {
 			</ul>
 		{/if}
 
-		<form
-			onsubmit={save}
-			class="flex flex-col gap-3 surface surface--raised"
-		>
+		<form onsubmit={save} class="flex flex-col gap-3 surface surface--raised">
 			<div class="flex items-center justify-between gap-3">
 				<p class="text-sm">{editing ? 'Site bearbeiten' : 'Site hinzufügen'}</p>
 				{#if editing}

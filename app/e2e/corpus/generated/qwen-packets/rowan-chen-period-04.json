@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-02-18",
+        "intentId": "rowan-chen:garden",
+        "kind": "payment",
+        "user": "Asha, paid for the seedlings. Did you get the confirmation? Need to know if the voucher covered it.",
+        "assistant": "Yes, payment went through. The £15 voucher was applied automatically at checkout. You only paid the balance.",
+        "artifact": {
+          "title": "Payment Confirmation: Bristol Community Garden Trust",
+          "from": "Bristol Community Garden Trust",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Transaction ID: BCGT-PAY-2026-0218-04\nDate: 2026-02-18\nMerchant: Bristol Community Garden Trust\nDescription: Spring Seedling Order (Volunteer Discount Applied)\nVoucher Code: CGT-SPRING-26\nVoucher Value: £15.00 GBP\nOrder Total: £42.00 GBP\nAmount Paid: £27.00 GBP\nPayment Method: Monzo Debit ending 5526\nStatus: Completed\nReference: BCGT-ORD-2026-0218\nNote: Voucher CGT-SPRING-26 has been fully redeemed and is no longer valid."
+        },
+        "probe": {
+          "question": "How much did I actually pay for the seedlings after using the voucher?",
+          "answer": "Amount Paid: £27.00 GBP"
+        }
+      },
+      {
+        "date": "2026-02-21",
+        "intentId": "rowan-chen:migration",
+        "kind": "card-statement",
+        "user": "Checking the company card for the migration project. Did the software license renew? And what's the total due?",
+        "assistant": "License renewed on the 19th. Total due is £145.00. Sam's access request is still pending until the DPA is signed.",
+        "artifact": {
+          "title": "Company Mastercard Statement: Feb 2026",
+          "from": "Bank Provider",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Account: Company Mastercard ending 3074\nStatement Period: 2026-02-01 to 2026-02-21\nOpening Balance: £0.00\n\nTransactions:\n2026-02-03 | DataSync Cloud Ltd | £45.00 | Software Subscription\n2026-02-10 | GWR Rail | £62.50 | Travel (Bristol-London)\n2026-02-19 | DataSync Cloud Ltd | £37.50 | License Renewal (Pro Tier)\n\nTotal Due: £145.00 GBP\nPayment Due Date: 2026-03-05\nStatus: Pending"
+        },
+        "probe": {
+          "question": "What was the cost of the DataSync license renewal on the 19th?",
+          "answer": "£37.50"
+        }
+      },
+      {
+        "date": "2026-02-24",
+        "intentId": "rowan-chen:invoices",
+        "kind": "bank-statement",
+        "user": "Reconciling cashflow. Did Atlas pay the Feb invoice yet? And check if the GWR delay repay came in.",
+        "assistant": "Atlas hasn't paid the Feb invoice. The GWR refund of £25.00 is in. Sam's invoice is pending approval.",
+        "artifact": {
+          "title": "Business Current Account Statement: Feb 2026",
+          "from": "Bank Provider",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Account: Business Current Account\nPeriod: 2026-02-01 to 2026-02-24\nOpening Balance: £1,200.00 GBP\n\nEntries:\n2026-02-05 | Out | HMRC VAT Payment | £400.00\n2026-02-12 | In | Atlas Ltd (INV-2026-02-001) | £2,320.00\n2026-02-15 | Out | Morgan Joinery (Deposit) | £500.00\n2026-02-20 | In | GWR Delay Repay (GWR-DR-2026-0209-773) | £25.00\n\nClosing Balance: £2,645.00 GBP\nNote: Invoice INV-2026-02-002 (Feb Work) remains unpaid."
+        },
+        "probe": {
+          "question": "How much was the GWR delay repay credit?",
+          "answer": "£25.00"
+        }
+      },
+      {
+        "date": "2026-02-27",
+        "intentId": "rowan-chen:atlas-contract",
+        "kind": "email",
+        "user": "Priya, Malik sent the signed renewal. Can you confirm the rebate for the Feb invoice is now 5%?",
+        "assistant": "Thanks Rowan. Malik countersigned v2.0 yesterday. We will apply the 5% rebate to the next invoice. The Jan invoice stands at 4%.",
+        "artifact": {
+          "title": "RE: Atlas Renewal Agreement v2.0 - Signed",
+          "from": "Priya Shah",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Hi Rowan,\n\nMalik Ahmed has countersigned the Atlas Consultancy Renewal Agreement v2.0 as of 2026-02-26. The 5% rebate term is now active for the 2026 contract year.\n\nPlease note that the January invoice (INV-2026-02-001) was processed under the previous 4% term and will not be adjusted. Future invoices should reflect the new rate.\n\nBest,\nPriya"
+        },
+        "probe": {
+          "question": "When did Malik countersign the renewal agreement?",
+          "answer": "2026-02-26"
+        }
+      },
+      {
+        "date": "2026-02-28",
+        "intentId": "rowan-chen:garden",
+        "kind": "document",
+        "user": "Asha, here's the updated rota for March. Did you note the locker label for the tool handoff?",
+        "assistant": "Got it. Label is GREEN-806. I'll check the count before passing the key to the closing shift.",
+        "artifact": {
+          "title": "Community Garden Volunteer Rota & Handoff Notes",
+          "from": "Rowan Chen",
+          "to": "Asha Green",
+          "language": "en",
+          "body": "Version: 3.1\nDate: 2026-02-28\nStatus: Active for March 2026\n\nShift Schedule:\n- Sat 07 Mar: Open 09:00 (Rowan), Close 13:00 (Asha)\n- Sat 14 Mar: Open 09:00 (Asha), Close 13:00 (Rowan)\n\nHandoff Protocol:\n1. Opening volunteer checks tool count against checklist.\n2. Shed locker label: GREEN-806.\n3. Key passed to closing volunteer only after count verification.\n4. Log any missing tools in the shed notebook."
+        },
+        "probe": {
+          "question": "What is the shed locker label for the tool handoff?",
+          "answer": "GREEN-806"
+        }
+      }
+    ],
+    "continuity": "Open: DPA-42 v3.0 awaiting countersignature from Malik Ahmed (Atlas Legal); production data exchange blocked. Open: Sam Patel access pending DPA signature. Resolved: Atlas Renewal Agreement v2.0 signed 2026-02-26; 5% rebate active for future invoices. Resolved: GWR Delay Repay claim (Ref: GWR-DR-2026-0209-773) paid £25.00. Resolved: Garden voucher CGT-SPRING-26 fully redeemed. Resolved: Shed locker label confirmed as GREEN-806."
+  }
+}

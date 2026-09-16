@@ -10,7 +10,8 @@ testing acquisition without the avenOS stack.
 ## Use the Tauri client
 
 Start the worktree's client against the [local stack](local-stack.md#start-the-rust-client),
-then open **Settings → Email**. Python 3.11 or newer must be available as `python3`
+select the customer environment in the left rail, then open **Settings → Email**.
+Python 3.11 or newer must be available as `python3`
 on the desktop's PATH. The native command embeds the connector source in the client
 binary and invokes it directly; no script installation or terminal interaction is
 needed. This prototype supports Linux and macOS, not mobile or the macOS App Store
@@ -70,18 +71,20 @@ error and pause immediately. Message extraction or upload failures are listed an
 mailbox import; **Retry failed PDFs** applies to PDFs that reached the upload step.
 
 Cache directories live under the app's OS cache directory in `imap-prototype/`,
-partitioned by a hash of the authenticated Aven user ID and API origin. The current
-customer route must still resolve to exactly one ready customer environment, as with
-ordinary document upload. The job binds to the signed-in account before its first
-connection, including retries. The native bridge discards results if the session changes,
-and Intent creation and PDF upload reject imports bound to a different account.
+partitioned by a hash of the authenticated Aven user ID and API origin plus the
+selected customer environment ID. The job binds to that environment before its first
+connection, including retries. A rail switch cancels the prior mailbox job, clears
+its progress and pending document queue, and the native bridge discards a scan result
+if the session or environment changed. Intent creation and PDF upload reject an import
+bound to another environment. An active document run must finish before the rail can
+switch so it cannot continue under the next customer session.
 Source emails and extracted PDFs remain locally after sign-out; there is no cache
 cleanup control in this prototype.
 
 Each attachment and processing placement has stable UUID-v5 Intent/publication IDs,
 accepted by the Artifact Store’s declaration schema. Early prototype UUID-v8 declarations
 were rejected; retrying those PDFs creates valid IDs. The earlier failed Intents are
-retained in the workspace. Repeating the import with the same account, source, and placement replays the existing publication;
+retained in the workspace. Repeating the import with the same account, customer environment, source, and placement replays the existing publication;
 changing placement creates a separate import. The first observation timestamp is
 retained with the cached message and normalized to UTC with a `Z` suffix before upload.
 This also repairs cached timestamps that the artifact API rejected with

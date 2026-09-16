@@ -82,11 +82,15 @@ export class IdentityProvisioningClient {
 		private readonly secret: string,
 		private readonly fetcher: typeof fetch = fetch
 	) {}
-	async provisionVerifiedAccount(email: string, source: string): Promise<ProvisionedAccount> {
+	async provisionVerifiedAccount(
+		email: string,
+		source: string,
+		browserLanguage?: string
+	): Promise<ProvisionedAccount> {
 		const response = await this.fetcher(`${this.baseUrl.replace(/\/$/, '')}/internal/v1/accounts`, {
 			method: 'POST',
 			headers: { authorization: `Bearer ${this.secret}`, 'content-type': 'application/json' },
-			body: JSON.stringify({ email, source })
+			body: JSON.stringify({ email, source, browserLanguage })
 		})
 		if (!response.ok) throw new Error(`Identity provisioning failed (${response.status}).`)
 		return response.json() as Promise<ProvisionedAccount>

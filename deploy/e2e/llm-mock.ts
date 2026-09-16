@@ -1,6 +1,9 @@
 import { GoldenInvoiceModel } from '../../services/actor-runner/tests/support/golden-document-model'
 
 const encoder = new TextEncoder()
+// Release unfinished narration when the next request arrives. This proves late
+// output is discarded after barge-in without racing a fixed two-second deadline.
+const pendingNarrations = new Set<() => void>()
 
 Bun.serve({
 	port: 8090,
@@ -100,10 +103,12 @@ Bun.serve({
 				usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 }
 			})
 		}
+		for (const release of [...pendingNarrations]) release()
 		if (body.stream) {
 			const lastUser = body.messages?.findLast((message) => message.role === 'user')?.content
 			if (lastUser === 'Start E2E narrated answer') {
 				let tail: ReturnType<typeof setTimeout> | undefined
+				let release: () => void
 				const stream = new ReadableStream<Uint8Array>({
 					start(controller) {
 						controller.enqueue(
@@ -111,18 +116,23 @@ Bun.serve({
 								`data: ${JSON.stringify({ id: 'chat-e2e-slow', model: body.model, choices: [{ delta: { content: 'E2E narration begins. ' }, finish_reason: null }] })}\n\n`
 							)
 						)
-						tail = setTimeout(() => {
+						release = () => {
+							pendingNarrations.delete(release)
+							clearTimeout(tail)
 							controller.enqueue(
 								encoder.encode(
-									`data: ${JSON.stringify({ id: 'chat-e2e-slow', model: body.model, choices: [{ delta: { content: 'E2E narration tail must be cancelled.' }, finish_reason: null }] })}\n\n`
+									`data: ${JSON.stringify({ id: 'chat-e2e-slow', model: body.model, choices: [{ delta: { content: 'E2E narration tail must be cancelled.' }, finish_reason: 'stop' }] })}\n\n`
 								)
 							)
 							controller.enqueue(encoder.encode('data: [DONE]\n\n'))
 							controller.close()
-						}, 2_000)
+						}
+						pendingNarrations.add(release)
+						tail = setTimeout(release, 20_000)
 					},
 					cancel() {
 						if (tail) clearTimeout(tail)
+						pendingNarrations.delete(release)
 					}
 				})
 				return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
@@ -131,7 +141,7 @@ Bun.serve({
 				start(controller) {
 					controller.enqueue(
 						encoder.encode(
-							`data: ${JSON.stringify({ id: 'chat-e2e', model: body.model, choices: [{ delta: { content: 'E2E chat reply.' }, finish_reason: null }] })}\n\n`
+							`data: ${JSON.stringify({ id: 'chat-e2e', model: body.model, choices: [{ delta: { content: 'E2E chat reply.' }, finish_reason: 'stop' }] })}\n\n`
 						)
 					)
 					controller.enqueue(encoder.encode('data: [DONE]\n\n'))

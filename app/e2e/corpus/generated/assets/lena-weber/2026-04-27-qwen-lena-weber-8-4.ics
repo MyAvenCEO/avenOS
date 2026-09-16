@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//avenOS//Synthetic Corpus//EN
+BEGIN:VEVENT
+UID:qwen-lena-weber-8-4@synthetic.test
+DTSTAMP:20260427T180200Z
+DTSTART;TZID=Europe/Berlin:20260502T100000
+DTEND;TZID=Europe/Berlin:20260502T140000
+SUMMARY:Kalendereintrag: Samstagskurs Deckung
+DESCRIPTION:Event: Samstagskurs Deckung\nDatum: 2026-05-02\nStart: 10:00\nEnde: 14:00\nOrt: Weber Keramik Studio\nStatus: Bestätigt\nTeilnehmer: Lena Weber\, Eva Richter\n\nNotiz: Eva übernimmt den Kurs am 02.05. Jonas ist verhindert. Kursliste: 8 Teilnehmer\, 2 Plätze frei. Nordton Glasurpreis aktualisiert auf 4\,65 EUR pro Kilo.
+X-SYNTHETIC-TEST-RECORD:TRUE
+END:VEVENT
+END:VCALENDAR

@@ -85,68 +85,67 @@ export function normalizeInvoiceOpenItem(
 	}
 }
 
+export const OPEN_ITEM_NORMALIZER_MANIFEST = manifest(
+	'open-item-normalizer',
+	'Invoice open-item normalizer',
+	'Normalizes validated invoice extraction into a reconciliation-ready open item.',
+	'document_normalize_open_item',
+	[
+		'ceo.aven.bookkeeping.invoice_candidate(F, I)',
+		'ceo.aven.bookkeeping.invoice_details(F, D)',
+		'ceo.aven.bookkeeping.invoice_validation(I, V)'
+	],
+	['ceo.aven.bookkeeping.open_item(I, O)']
+)
+
 export function createOpenItemNormalizerActor(): Actor {
-	return new Actor(
-		manifest(
-			'open-item-normalizer',
-			'Invoice open-item normalizer',
-			'Normalizes validated invoice extraction into a reconciliation-ready open item.',
-			'document_normalize_open_item',
-			[
-				'ceo.aven.bookkeeping.invoice_candidate(F, I)',
-				'ceo.aven.bookkeeping.invoice_details(F, D)',
-				'ceo.aven.bookkeeping.invoice_validation(I, V)'
-			],
-			['ceo.aven.bookkeeping.open_item(I, O)']
-		),
-		{
-			document_normalize_open_item: (payload) => {
-				try {
-					const openItem = normalizeInvoiceOpenItem(
-						object(payload.candidate, 'invoice candidate'),
-						object(payload.details, 'invoice details'),
-						object(payload.validation, 'invoice validation')
-					)
-					return success(
-						{
-							ok: true,
-							procedureKey: 'client.normalize-invoice-open-item',
-							artifacts: [
-								artifact('open-item', 'bookkeeping.open-item', { ...openItem }, 'open-item')
-							],
-							evidence: [
-								{
-									ordinal: 0,
-									outputLocalKey: 'open-item',
-									outputLocator: wholeArtifact(),
-									inputRole: 'candidate',
-									inputOrdinal: 0,
-									inputLocator: wholeArtifact()
-								},
-								{
-									ordinal: 1,
-									outputLocalKey: 'open-item',
-									outputLocator: wholeArtifact(),
-									inputRole: 'details',
-									inputOrdinal: 0,
-									inputLocator: wholeArtifact()
-								},
-								{
-									ordinal: 2,
-									outputLocalKey: 'open-item',
-									outputLocator: { kind: 'json-pointer', pointer: '/validationStatus' },
-									inputRole: 'validation',
-									inputOrdinal: 0,
-									inputLocator: { kind: 'json-pointer', pointer: '/status' }
-								}
-							]
-						},
-						'Normalized the invoice into an open item.'
-					)
-				} catch (error) {
-					return failure(error)
-				}
+	return new Actor(structuredClone(OPEN_ITEM_NORMALIZER_MANIFEST), {
+		document_normalize_open_item: (payload) => {
+			try {
+				const openItem = normalizeInvoiceOpenItem(
+					object(payload.candidate, 'invoice candidate'),
+					object(payload.details, 'invoice details'),
+					object(payload.validation, 'invoice validation')
+				)
+				return success(
+					{
+						ok: true,
+						procedureKey: 'client.normalize-invoice-open-item',
+						artifacts: [
+							artifact('open-item', 'bookkeeping.open-item', { ...openItem }, 'open-item')
+						],
+						evidence: [
+							{
+								ordinal: 0,
+								outputLocalKey: 'open-item',
+								outputLocator: wholeArtifact(),
+								inputRole: 'candidate',
+								inputOrdinal: 0,
+								inputLocator: wholeArtifact()
+							},
+							{
+								ordinal: 1,
+								outputLocalKey: 'open-item',
+								outputLocator: wholeArtifact(),
+								inputRole: 'details',
+								inputOrdinal: 0,
+								inputLocator: wholeArtifact()
+							},
+							{
+								ordinal: 2,
+								outputLocalKey: 'open-item',
+								outputLocator: { kind: 'json-pointer', pointer: '/validationStatus' },
+								inputRole: 'validation',
+								inputOrdinal: 0,
+								inputLocator: { kind: 'json-pointer', pointer: '/status' }
+							}
+						]
+					},
+					'Normalized the invoice into an open item.'
+				)
+			} catch (error) {
+				return failure(error)
 			}
 		}
-	)
+	})
 }

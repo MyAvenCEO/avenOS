@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-03-03",
+        "intentId": "sofia-morales:cold-room",
+        "kind": "calendar",
+        "user": "Alba, gracias por la visita. Mario dice que la temp subió a 6°C esta noche. ¿Confirmas que el recambio llega mañana? Necesito saber si puedo meter las peonías de Oliver.",
+        "assistant": "El recambio llega mañana a las 10:00. No metas las peonías hasta que yo confirme la estabilización a 4°C. Mantén la zona seca activa.",
+        "artifact": {
+          "title": "Calendar: Technical Maintenance & Inspection",
+          "from": "Alba Pérez (Taller Alba)",
+          "to": "Sofía Morales",
+          "language": "en",
+          "body": "Event: Cold Room Compressor Replacement & Calibration\nDate: 2026-03-04\nTime: 10:00 - 11:30\nLocation: Estudio Morales, Valencia\nAttendees: Alba Pérez (Technician), Mario Costa (Staff)\nStatus: Confirmed\nNotes: Technician will install new compressor unit. Calibration required before floral storage. Current internal temperature fluctuating between 5.5°C and 6.2°C. Do not store delicate flowers (peonies, ranunculus) until post-maintenance temperature log confirms stability at 4.0°C ± 0.5°C for 2 hours. Reference Case: TA-2026-0303-ALB."
+        },
+        "probe": {
+          "question": "What is the required stable temperature for storing delicate flowers after the maintenance?",
+          "answer": "4.0°C ± 0.5°C"
+        }
+      },
+      {
+        "date": "2026-03-06",
+        "intentId": "sofia-morales:porto-visit",
+        "kind": "todo",
+        "user": "Tomás, necesito cerrar lo de Oporto. ¿Puedes confirmar que te quedas con Nico del 20 al 23? Y avisa a mamá que ese finde no la llevo al médico, que se lo diga a su hija.",
+        "assistant": "Vale, me quedo con Nico. Confirmo la recogida de Beatriz. Le digo a mamá que busque taxi para el 21.",
+        "artifact": {
+          "title": "Task: Finalize Porto Trip Logistics",
+          "from": "Sofía Morales",
+          "to": null,
+          "language": "es",
+          "body": "Tarea: Cerrar logística viaje Oporto (20-23 Marzo)\nEstado: Pendiente de confirmación final\nResponsable: Sofía Morales\nColaboradores: Tomás Vidal, Beatriz Almeida\n\nAcciones:\n1. Confirmar custodia de Nico con Tomás para el 20-23/03. (Pendiente confirmación escrita)\n2. Reservar alojamiento en Oporto (Hotel Porto Central). (Pendiente pago Visa 6418)\n3. Coordinar transporte local con Beatriz Almeida.\n4. Ajustar agenda de Pilar Morales: La cita del 21/03 requiere taxi adaptado, no puede ser acompañada por Sofía.\n\nNotas: Verificar horarios de trenes Renfe/CP. Evitar solapamiento con montaje boda Clara Beltrán (28/02 ya cerrado, pero revisar stock para marzo)."
+        },
+        "probe": {
+          "question": "Who is responsible for arranging Pilar's transport on March 21st?",
+          "answer": "Pilar Morales"
+        }
+      },
+      {
+        "date": "2026-03-09",
+        "intentId": "sofia-morales:valencia-wedding",
+        "kind": "receipt",
+        "user": "Mateo, gracias por confirmar la puerta de carga. Aquí tienes el comprobante del pago del alquiler de la furgoneta refrigerada para el día 14. ¿Te lo paso por Bizum o lo facturo aparte?",
+        "assistant": "Factúralo aparte, por favor. Así cuadra con la factura final. Gracias.",
+        "artifact": {
+          "title": "Receipt: Van Hire Payment",
+          "from": "Rent-a-Car Valencia",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "RECIBO DE PAGO\n\nComercio: Rent-a-Car Valencia\nFecha: 09/03/2026\nHora: 14:30\nMétodo de pago: Visa terminada en 6418\nReferencia de transacción: RCV-20260309-882\n\nConcepto:\nAlquiler Furgoneta Refrigerada (Mercedes Sprinter) - 24h\nFecha de uso: 14/03/2026\nImporte: 145,00 EUR\nIVA (21%): 30,45 EUR\nTotal: 175,45 EUR\n\nEstado: Completado\nNota: Incluye seguro a todo riesgo y combustible básico. Entrega en Calle de la Madera, Valencia."
+        },
+        "probe": {
+          "question": "What was the total amount paid for the refrigerated van hire?",
+          "answer": "175,45 EUR"
+        }
+      },
+      {
+        "date": "2026-03-12",
+        "intentId": "sofia-morales:running",
+        "kind": "transport-ticket",
+        "user": "Inés, no puedo correr el domingo por la mañana, tengo entrega de flores. ¿Te vale el tren de las 8:00 a Sagunto para hacer la tirada larga allí? Así volvemos a comer.",
+        "assistant": "Vale, me apunto. Compro yo los billetes por la app de Renfe. Avísame si llevas dorsal o solo entrenamos.",
+        "artifact": {
+          "title": "Renfe Ticket Confirmation",
+          "from": "Renfe",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "CONFIRMACIÓN DE BILLETE\n\nOperador: Renfe Cercanías\nViajero: Sofía Morales\nFecha de viaje: 15/03/2026\nTrayecto: Valencia Nord - Sagunt\nHora de salida: 08:00\nHora de llegada: 08:35\nTarifa: 2,40 EUR\nClase: Turista\nAsiento: No asignado (Cercanías)\nReferencia de reserva: REN-20260312-4419\n\nEstado: Emitido\nNota: Billete válido para el día indicado. Presentar código QR en el validador."
+        },
+        "probe": {
+          "question": "What is the departure time for the train to Sagunt?",
+          "answer": "08:00"
+        }
+      },
+      {
+        "date": "2026-03-15",
+        "intentId": "sofia-morales:running",
+        "kind": "event-ticket",
+        "user": "Inés, mira esto. Me he apuntado a la carrera popular del barrio para hacer series. Es el domingo 22. ¿Te apuntas? Así no hago la tirada larga sola y luego vamos a desayunar.",
+        "assistant": "Uy, el domingo tengo el turno de la abuela pero si es por la mañana temprano me apunto. ¿Cuánto cuesta? Y avísame si hay que llevar dorsal impreso.",
+        "artifact": {
+          "title": "Event Ticket: Carrera Popular Barrio del Carmen",
+          "from": "Deportes Run Valencia",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "CONFIRMACIÓN DE INSCRIPCIÓN\n\nEvento: Carrera Popular Barrio del Carmen\nLugar: Salida desde Plaza de la Virgen, Valencia\nTitular: Sofía Morales\nFecha y hora: 22 de marzo de 2026, 09:00\nCategoría: 5K Popular\nPrecio: 12,00 EUR\nReferencia de ticket: CPV-2026-0991\n\nInstrucciones: Presentar este código QR en la bolsa de salida para recoger el dorsal. Recogida de dorsales el sábado 21 de 10:00 a 14:00 en Deportes Run Valencia."
+        },
+        "probe": {
+          "question": "What is the price of the race registration?",
+          "answer": "12,00 EUR"
+        }
+      }
+    ],
+    "continuity": "Open: Legal contract v2.0 for Clara Beltrán pending client review/signature (Feb 12). Final invoice INV-2026-0215 issued Feb 15, payment due Feb 18. Return RA-2026-0206 for damaged peonies collected Feb 7, refund pending inspection. Resolved: Order MA-2026-0203 dispatched Feb 3. Staff shift adjustment for Lucía Ferrer confirmed Feb 9. Venue access confirmed with Mateo Serra for Feb 20. New: Taxi payment for Pilar confirmed Feb 18 (BZM-20260218-442). Bank statement Feb 24 shows Clara's 500 EUR deposit received via Stripe, but legal adenda unsigned. Wedding access confirmed for Feb 28 (SOL-983). Next clinic appointment scheduled for Mar 5. Cold room maintenance scheduled Mar 4 (Case TA-2026-0303-ALB). Porto trip logistics pending final confirmation with Tomás (Task Mar 6). Van hire for Mar 14 paid via Visa 6418 (Ref RCV-20260309-882). Running train ticket to Sagunt booked for Mar 15 (Ref REN-20260312-4419). Race registration for Mar 22 confirmed (Ref CPV-2026-0991)."
+  }
+}

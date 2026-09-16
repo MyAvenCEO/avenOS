@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-01-03",
+        "intentId": "rowan-chen:security-audit",
+        "kind": "email",
+        "user": "Lucía sent the test batch notes. Did she mention the DPA status for the Atlas migration?",
+        "assistant": "No, Lucía's email only covers the technical handoff for the test batch. The DPA status is separate; we are still waiting for Malik to countersign DPA-42 before any production data moves.",
+        "artifact": {
+          "title": "Handoff de lote de prueba - Proyecto Atlas",
+          "from": "Lucía Ortega <l.ortega@iberia-retail.test>",
+          "to": "Rowan Chen <rowan@chen-consultancy.test>",
+          "language": "es",
+          "body": "Hola Rowan,\n\nAquí están las notas del lote de prueba v1.2 para la migración de Atlas. Los campos de cliente se mapean correctamente en el entorno de staging.\n\nNota importante: No podemos ejecutar la carga en producción hasta que el DPA esté firmado. El equipo legal de Atlas aún no ha devuelto la versión final.\n\nReferencia de prueba: TEST-ATLAS-001\n\nSaludos,\nLucía"
+        },
+        "probe": {
+          "question": "What is the reference for the test batch mentioned in Lucía's email?",
+          "answer": "TEST-ATLAS-001"
+        }
+      },
+      {
+        "date": "2026-01-06",
+        "intentId": "rowan-chen:foster-dog",
+        "kind": "document",
+        "user": "Update the care plan for Pip. Jo said vet advice changed?",
+        "assistant": "Updated. Jo advised switching to the sensitive diet immediately. Bea is confirmed for Saturday cover, but Jo needs to approve the handoff by Friday 5pm.",
+        "artifact": {
+          "title": "Pip Foster Care Plan - Updated Jan 2026",
+          "from": "Rowan Chen",
+          "to": "Ellis Chen",
+          "language": "en",
+          "body": "Version: 2.1\nStatus: Active\n\n1. Feeding: Switch to 'Sensitive Stomach' kibble immediately per Jo's advice (06 Jan). Old food to be returned to foster group.\n2. Walks: 30 mins AM, 45 mins PM. No off-lead in park due to recent recall issues.\n3. Weekend Cover: Bea Fox confirmed for Sat 10 Jan. \n   - Action: Jo Harding must approve Bea's handoff consent by Fri 09 Jan, 17:00.\n   - Note: Bea needs advance notice; she has confirmed availability but requires the official consent form signed by Jo.\n4. Vet: Next check-up scheduled for 20 Jan. Bring weight log."
+        },
+        "probe": {
+          "question": "By when does Jo need to approve Bea's handoff consent?",
+          "answer": "Fri 09 Jan, 17:00"
+        }
+      },
+      {
+        "date": "2026-01-09",
+        "intentId": "rowan-chen:security-audit",
+        "kind": "calendar",
+        "user": "Check the calendar for the DPA review. Is Malik attending?",
+        "assistant": "Yes, Malik Ahmed is listed as an attendee for the DPA-42 review call. It's scheduled for 14:00. No production data will be shared during this call.",
+        "artifact": {
+          "title": "DPA-42 Review Call - Atlas",
+          "from": "Rowan Chen",
+          "to": "Malik Ahmed; Mary Evans; Rowan Chen",
+          "language": "en",
+          "body": "Event: DPA-42 Review Call\nDate: 2026-01-09\nStart: 14:00\nEnd: 14:45\nLocation: Microsoft Teams (Link in invite)\nAttendees: Malik Ahmed (Atlas Legal), Mary Evans (Bristol Nonprofit), Rowan Chen (Consultancy)\nStatus: Confirmed\nAgenda:\n1. Review final clauses of DPA-42 v3.0.\n2. Confirm signature requirements for countersigning.\n3. Agree on data exchange protocol post-signature.\nNote: No production data to be exchanged during this meeting. Discussion limited to legal terms and technical safeguards."
+        },
+        "probe": {
+          "question": "What is the version of the DPA being reviewed?",
+          "answer": "DPA-42 v3.0"
+        }
+      },
+      {
+        "date": "2026-01-12",
+        "intentId": "rowan-chen:family-visit",
+        "kind": "todo",
+        "user": "Glasgow trip. Did we book the train? Need to check dog cover.",
+        "assistant": "Train booked for Jan 16. Bea has confirmed she can cover Pip, but Jo still needs to sign the consent form. I've added a reminder to chase Jo today.",
+        "artifact": {
+          "title": "Glasgow Trip Logistics",
+          "from": "Rowan Chen",
+          "to": "Ellis Chen",
+          "language": "en",
+          "body": "Task: Finalise Glasgow Visit Logistics\nOwner: Rowan Chen\nDue Date: 2026-01-12\nStatus: In Progress\n\nSub-tasks:\n1. Book train tickets: DONE. GWR Bristol Temple Meads to London Paddington, then Avanti West Coast to Glasgow Central. Departure 08:15, Arrival 15:45. Ref: GWR-9921-ATLAS.\n2. Confirm dog cover: Bea Fox available. \n3. Chase Jo Harding for Bea's handoff consent: PENDING. Jo needs to sign the form by 17:00 today.\n4. Pack for Jamie's dinner: PENDING."
+        },
+        "probe": {
+          "question": "What is the booking reference for the train tickets?",
+          "answer": "GWR-9921-ATLAS"
+        }
+      },
+      {
+        "date": "2026-01-15",
+        "intentId": "rowan-chen:contractor",
+        "kind": "receipt",
+        "user": "Did the payment to Sam go through? Need to grant access.",
+        "assistant": "Yes, the £450 deposit to Sam Patel cleared on the company Mastercard. I'll send the access credentials now that the agreement is signed.",
+        "artifact": {
+          "title": "Payment Receipt - Sam Patel",
+          "from": "Monzo Business",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Transaction Receipt\nDate: 2026-01-15\nMerchant: Sam Patel (Contractor)\nAmount: £450.00 GBP\nMethod: Company Mastercard ending 3074\nStatus: Completed\nReference: INV-SP-2026-001\nDescription: Initial deposit for data migration support project. Agreement signed 2026-01-14. Access to staging environment to be granted upon receipt of this payment."
+        },
+        "probe": {
+          "question": "What is the invoice reference for the payment to Sam Patel?",
+          "answer": "INV-SP-2026-001"
+        }
+      }
+    ],
+    "continuity": "Open: DPA-42 v3.0 awaiting countersignature from Malik Ahmed (Atlas Legal); production data exchange blocked. Open: Jo Harding needs to approve Bea Fox's dog-sitting consent by Fri 09 Jan 17:00 for the Glasgow trip. Resolved: Train tickets booked (Ref: GWR-9921-ATLAS) for 16 Jan. Resolved: £450 deposit paid to Sam Patel (Ref: INV-SP-2026-001), enabling contractor onboarding. Open: Kitchen renovation reserve remains untouched; no new contractor invoices for Morgan Joinery yet."
+  }
+}

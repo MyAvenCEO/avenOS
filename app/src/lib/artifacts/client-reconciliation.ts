@@ -69,6 +69,9 @@ class ClientReconciliation {
 	#execute?: (openItemArtifactId?: string) => Promise<ReconciliationResult>
 	#reviews = new Map<string, ReconciliationReview>()
 	#result?: ReconciliationResult
+	#environmentEpoch = 0
+	#active = 0
+	#environmentTransition = false
 	readonly actor: Actor
 
 	constructor() {
@@ -109,9 +112,21 @@ class ClientReconciliation {
 			{
 				reconciliation_candidates: async (payload) => {
 					if (!this.#execute) throw new Error('Import a document to initialize reconciliation.')
-					const result = await this.#execute(
-						typeof payload.openItemArtifactId === 'string' ? payload.openItemArtifactId : undefined
-					)
+					if (this.#environmentTransition) throw new Error('The customer environment is changing.')
+					const epoch = this.#environmentEpoch
+					this.#active++
+					let result: ReconciliationResult
+					try {
+						result = await this.#execute(
+							typeof payload.openItemArtifactId === 'string'
+								? payload.openItemArtifactId
+								: undefined
+						)
+					} finally {
+						this.#active--
+					}
+					if (epoch !== this.#environmentEpoch)
+						throw new Error('The customer environment changed during reconciliation.')
 					this.#remember(result)
 					return ok(
 						result,
@@ -131,6 +146,25 @@ class ClientReconciliation {
 			}
 		)
 		bus.register(this.actor)
+	}
+
+	resetForEnvironment(): void {
+		this.#environmentEpoch++
+		this.#gateway = undefined
+		this.#execute = undefined
+		this.#running = undefined
+		this.#reviews.clear()
+		this.#result = undefined
+	}
+
+	suspendForEnvironmentSwitch(): boolean {
+		if (this.#active > 0) return false
+		this.#environmentTransition = true
+		return true
+	}
+
+	resumeAfterEnvironmentSwitch(): void {
+		this.#environmentTransition = false
 	}
 
 	configure(
@@ -153,6 +187,8 @@ class ClientReconciliation {
 		placement: ExecutionEnvironment,
 		runner: PlanRunnerClient
 	): Promise<ReconciliationResult> {
+		if (this.#environmentTransition) throw new Error('The customer environment is changing.')
+		const epoch = this.#environmentEpoch
 		const execute = this.configure(publications, placement, runner)
 		// An import arriving during another reconciliation must observe the newer
 		// snapshot afterwards, rather than silently reusing the older run's results.
@@ -160,8 +196,11 @@ class ClientReconciliation {
 			.catch(() => undefined)
 			.then(() => execute())
 		this.#running = pending
+		this.#active++
 		try {
 			const result = await pending
+			if (epoch !== this.#environmentEpoch)
+				throw new Error('The customer environment changed during reconciliation.')
 			this.#remember(result)
 			const shown = new Set<string>()
 			for (const review of result.reviews)
@@ -171,6 +210,7 @@ class ClientReconciliation {
 				}
 			return result
 		} finally {
+			this.#active--
 			if (this.#running === pending) this.#running = undefined
 		}
 	}
@@ -181,6 +221,7 @@ class ClientReconciliation {
 	}
 
 	#hold(review: ReconciliationReview) {
+		const epoch = this.#environmentEpoch
 		const selectedGateway = this.#gateway
 		if (!selectedGateway) throw new Error('Reconciliation is unavailable.')
 		bus.holdAction(
@@ -196,12 +237,17 @@ class ClientReconciliation {
 				preview: preview(review)
 			},
 			{
-				confirm: async () =>
-					ok(
+				confirm: async () => {
+					if (epoch !== this.#environmentEpoch)
+						throw new Error('The customer environment changed before review.')
+					return ok(
 						{ artifactId: await decideReconciliation(selectedGateway, review, 'accepted') },
 						'Invoice-to-booking relationship recorded. No money was allocated or transferred.'
-					),
+					)
+				},
 				reject: async () => {
+					if (epoch !== this.#environmentEpoch)
+						throw new Error('The customer environment changed before review.')
 					await decideReconciliation(selectedGateway, review, 'rejected')
 					const next = this.#result?.reviews.find(
 						(item) =>

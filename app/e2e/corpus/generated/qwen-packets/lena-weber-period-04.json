@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-02-18",
+        "intentId": "lena-weber:bike",
+        "kind": "payment",
+        "user": "Britta, Gutschein eingelöst. Bremsen sind neu. Kannst du die Route für den Umzug checken? Ist die sicher bei Regen?",
+        "assistant": "Klar, guck ich mir an. Die neue Route ist flacher, aber der Radweg an der Karl-Marx-Allee ist schmal. Vielleicht nehmen wir die Nebenstraße?",
+        "artifact": {
+          "title": "Zahlungsbestätigung Radwerk Prenzlberg",
+          "from": "Radwerk Prenzlberg",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Vielen Dank für Ihren Einkauf bei Radwerk Prenzlberg.\n\nTransaktionsnummer: RW-2026-02-18-4421\nDatum: 18.02.2026\nArtikel: Bremsbeläge vorne/hinten, Montage\nBetrag: 25,00 EUR\nZahlungsmethode: Visa Debit ****4821\nStatus: Bezahlt\nHinweis: Gutschein RW-2026-01-24-7788 wurde vollständig verrechnet. Restwert 0,00 EUR."
+        },
+        "probe": {
+          "question": "Wie hoch war der Restwert des Gutscheins nach der Zahlung?",
+          "answer": "Restwert 0,00 EUR"
+        }
+      },
+      {
+        "date": "2026-02-21",
+        "intentId": "lena-weber:classes",
+        "kind": "card-statement",
+        "user": "Kontoauszug checken. Olivia hat sich beschwert, dass das Paket noch nicht da ist. Und Eva, hast du den Kurs am 28. bestätigt?",
+        "assistant": "Olivia bekommt heute eine Tracking-Update-Mail. Eva, bitte kurz bestätigen, ob du den Samstag machst. Jonas ist ja noch weg.",
+        "artifact": {
+          "title": "Kreditkartenabrechnung Februar 2026",
+          "from": "Visa Business",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Abrechnungszeitraum: 01.02.2026 - 20.02.2026\nKarte: Visa Business ****4821\n\nBuchungen:\n15.02.2026 | Nordton GmbH | Glaze Sample Kit | 45,00 EUR\n18.02.2026 | Radwerk Prenzlberg | Bremsen Service | 25,00 EUR\n20.02.2026 | DHL Express | Versand Olivia Grant | 12,50 EUR\n\nGesamtbetrag: 82,50 EUR\nFälligkeitsdatum: 05.03.2026"
+        },
+        "probe": {
+          "question": "Welcher Betrag wurde für den Versand an Olivia Grant abgebucht?",
+          "answer": "12,50 EUR"
+        }
+      },
+      {
+        "date": "2026-02-24",
+        "intentId": "lena-weber:cashflow",
+        "kind": "bank-statement",
+        "user": "Cashflow prüfen. Die PayPal-Rückerstattung für die Teller ist noch nicht da. Und die Rechnung von Eva muss raus.",
+        "assistant": "PayPal Case ist noch offen, Sara Lenz hat nachgefragt. Ich schick die Rechnung an Eva, damit sie das Geld vor dem 28. hat.",
+        "artifact": {
+          "title": "Kontoauszug Weber Keramik",
+          "from": "Sparkasse Berlin",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Konto: Weber Keramik Geschäftskonto ****4821\nZeitraum: 15.02.2026 - 24.02.2026\n\nBuchungen:\n18.02.2026 | SEPA-Lastschrift | Visa Business | -82,50 EUR\n20.02.2026 | Gutschrift | Stripe Payout | +120,00 EUR\n22.02.2026 | SEPA-Überweisung | Eva Richter | -350,00 EUR\n\nSaldo am Ende: 1.450,00 EUR"
+        },
+        "probe": {
+          "question": "Wie hoch war der Saldo auf dem Geschäftskonto am Ende des Zeitraums?",
+          "answer": "1.450,00 EUR"
+        }
+      },
+      {
+        "date": "2026-02-27",
+        "intentId": "lena-weber:studio-lease",
+        "kind": "email",
+        "user": "Frau Becker, haben Sie den Bericht B-17 erhalten? Paul hat ihn ja geschickt. Ich brauche die Freigabe für die Abendkurse.",
+        "assistant": "Sehr geehrte Frau Weber, wir haben den Bericht erhalten. Die Prüfung läuft noch. Bitte haben Sie noch 2 Tage Geduld.",
+        "artifact": {
+          "title": "Status Mietvertrag & Brandschutz",
+          "from": "Frau Becker (Berlin Hausverwaltung)",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Sehr geehrte Frau Weber,\n\nwir bestätigen den Erhalt des Brandschutzberichts B-17 vom 15.02.2026. Die interne Prüfung durch unsere Sicherheitsabteilung ist noch nicht abgeschlossen.\n\nStatus: In Prüfung\nNächster Schritt: Wir werden Sie bis zum 01.03.2026 über die Freigabe der Klausel § 4.2 (Abendkurse) informieren.\n\nMit freundlichen Grüßen\nFrau Becker\nBerlin Hausverwaltung"
+        },
+        "probe": {
+          "question": "Bis wann will die Hausverwaltung über die Freigabe informieren?",
+          "answer": "bis zum 01.03.2026"
+        }
+      },
+      {
+        "date": "2026-02-28",
+        "intentId": "lena-weber:bike",
+        "kind": "document",
+        "user": "Britta, hier mein Plan für die Umzugsfahrt. Passt das so? Ich will nicht im Regen stehen.",
+        "assistant": "Sieht gut aus. Aber nimm die Route über den Park, die ist sicherer. Die andere ist zu dunkel.",
+        "artifact": {
+          "title": "Umzugs-Fahrradroute Plan v1.0",
+          "from": "Lena Weber",
+          "to": "Britta Seidel",
+          "language": "de",
+          "body": "Plan für die Fahrradfahrt zum neuen Studio am 05.03.2026\n\nStatus: Entwurf\nDatum: 28.02.2026\n\n1. Start: Alte Wohnung (Prenzlauer Berg)\n2. Route A (Empfohlen): Über den Volkspark Friedrichshain. Vorteil: Beleuchtet, breite Wege. Nachteil: Umweg 15 Min.\n3. Route B (Kürzer): Durch die Karl-Marx-Allee. Vorteil: Direkt. Nachteil: Schmal, wenig Licht am Abend.\n4. Entscheidung: Route A bei Dunkelheit oder Regen.\n\nNotiz: Bremsen sind frisch gewartet (18.02.)."
+        },
+        "probe": {
+          "question": "Welche Route ist bei Dunkelheit oder Regen empfohlen?",
+          "answer": "Route A"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit delayed until Feb 10 (Nora Wells). Flat move plan v1.2 awaiting Mira's final sign-off on helper schedule. Family weekend DB ticket booking pending (due Jan 13). Closed: DHL shipment to Amira Yilmaz completed and paid (Jan 15). New: DB ticket for Klaus booked (Jan 18). Museum ticket for Klaus booked (Jan 21). Bike repair voucher received (Jan 24). Hotel in Stralsund booked with deposit paid (Jan 27). Move reserve transfer posted (Jan 28). Olivia Grant order shipped (Feb 3). Amira Yilmaz return initiated (Feb 6). DHL damage claim under review (Feb 9). Studio lease draft v2.1 pending fire-safety signature (Feb 12). Fire-safety invoice paid and report B-17 signed (Feb 15). Bike voucher redeemed and brakes serviced (Feb 18). Visa statement shows shipping cost for Olivia (Feb 21). Bank statement shows payout and instructor payment (Feb 24). Landlord confirms receipt of fire report, decision pending until Mar 1 (Feb 27). Bike route plan drafted, Route A recommended for bad weather (Feb 28)."
+  }
+}

@@ -19,6 +19,7 @@ bash -n \
   "$root/deploy/validate.sh" \
   "$root/deploy/operations/test-recovery.sh"
 sh -n "$root/deploy/runtime/db-init.sh"
+python3 "$root/deploy/database/storage-test.py"
 python3 "$root/deploy/runtime/prepare-test.py"
 python3 "$root/deploy/runtime/rollout-test.py"
 python3 "$root/deploy/runtime/host-test.py"

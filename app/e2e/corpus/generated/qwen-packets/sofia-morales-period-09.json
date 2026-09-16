@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-05-03",
+        "intentId": "sofia-morales:school",
+        "kind": "receipt",
+        "user": "Bea, aquí tienes el recibo de la excursión de Nico a la Serra da Estrela. Pagué con la Visa 6418. ¿Lo guardas por si Tomás pregunta?",
+        "assistant": "Recibido. Lo he archivado en 'Gastos Nico'. El importe coincide con lo que acordamos dividir.",
+        "artifact": {
+          "title": "Recibo de Excursión Escolar",
+          "from": "Colégio de Nico",
+          "to": "Sofía Morales",
+          "language": "pt",
+          "body": "RECIBO DE PAGAMENTO\n\nEstabelecimento: Colégio de Nico\nCliente: Sofía Morales\nData: 03/05/2026\n\nDescrição:\n1. Inscrição na Excursão à Serra da Estrela: 45,00 EUR\n2. Seguro de Viagem Escolar: 5,00 EUR\n\nTotal: 50,00 EUR\nMétodo de Pagamento: Visa terminada em 6418\nEstado: Pago\nReferência: ESC-2026-0503-PT\n\nNota: Este recibo confirma o pagamento integral da atividade extracurricular."
+        },
+        "probe": {
+          "question": "¿Cuánto costó el seguro de viaje de Nico?",
+          "answer": "5,00 EUR"
+        }
+      },
+      {
+        "date": "2026-05-06",
+        "intentId": "sofia-morales:running",
+        "kind": "transport-ticket",
+        "user": "Inés, ya tengo los billetes para el entreno del sábado. Renfe a Sagunto, ida y vuelta. ¿Te los paso?",
+        "assistant": "Perfecto. Así nos vemos en la estación a las 8:00. Llevo dorsal si quieres.",
+        "artifact": {
+          "title": "Confirmación de Billete Renfe",
+          "from": "Renfe",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "CONFIRMACIÓN DE BILLETE\n\nOperador: Renfe Cercanías\nViajero: Sofía Morales\nFecha de viaje: 09/05/2026\nTrayecto: Valencia Nord - Sagunt (Ida)\nHora de salida: 08:00\nHora de llegada: 08:35\nTarifa: 2,40 EUR\nClase: Turista\nAsiento: No asignado (Cercanías)\nReferencia de reserva: REN-20260506-7721\n\nEstado: Emitido\nNota: Válido solo para la fecha indicada."
+        },
+        "probe": {
+          "question": "¿A qué hora sale el tren de Valencia Nord?",
+          "answer": "08:00"
+        }
+      },
+      {
+        "date": "2026-05-09",
+        "intentId": "sofia-morales:running",
+        "kind": "event-ticket",
+        "user": "Inés, mira esto. Me he apuntado a la carrera popular del barrio para hacer series. Es el domingo 22. ¿Te apuntas? Así no hago la tirada larga sola y luego vamos a desayunar.",
+        "assistant": "Uy, el domingo tengo el turno de la abuela pero si es por la mañana temprano me apunto. ¿Cuánto cuesta? Y avísame si hay que llevar dorsal impreso.",
+        "artifact": {
+          "title": "Confirmación de Inscripción Carrera Popular",
+          "from": "Carrera Popular Barrio del Carmen",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "CONFIRMACIÓN DE INSCRIPCIÓN\n\nEvento: Carrera Popular Barrio del Carmen\nLugar: Salida desde Plaza de la Virgen, Valencia\nTitular: Sofía Morales\nFecha y hora: 22 de mayo de 2026, 09:00\nCategoría: 5K Popular\nPrecio: 12,00 EUR\nReferencia de ticket: CPV-2026-0991\n\nInstrucciones: Presentar este código QR en la recogida de dorsales el sábado 21 de 17:00 a 19:00 en la carpa oficial."
+        },
+        "probe": {
+          "question": "¿Cuánto cuesta la inscripción a la carrera?",
+          "answer": "12,00 EUR"
+        }
+      },
+      {
+        "date": "2026-05-12",
+        "intentId": "sofia-morales:home-budget",
+        "kind": "voucher",
+        "user": "Vera, revisa el caso de la disputa de Clara. Necesito saber si el voucher de compensación cubre la cuota del colegio de Nico que pagué con la misma tarjeta.",
+        "assistant": "Hola Sofía. El caso STR-2026-0318-CLARA sigue en revisión. El voucher de compensación por el error de cobro es de 45,00 EUR. Puede usarse para cualquier gasto, incluida la cuota escolar, hasta el 30/06/2026.",
+        "artifact": {
+          "title": "Voucher de Compensación Emitido",
+          "from": "Stripe",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Estimada Sofía,\n\nEn relación con el caso STR-2026-0318-CLARA, confirmamos que la disputa sobre el cargo duplicado ha sido resuelta a su favor. Como compensación por las molestias, hemos emitido un voucher de crédito.\n\nDetalles del Voucher:\n- Valor: 45,00 EUR\n- Moneda: EUR\n- Fecha de emisión: 12/05/2026\n- Caducidad: 30/06/2026\n- Referencia: VCH-2026-0512-45\n- Restricciones: Utilizable en pagos futuros con la tarjeta Visa terminada en 6418.\n\nAtentamente,\nVera Martín\nSoporte de Pagos Stripe"
+        },
+        "probe": {
+          "question": "¿Hasta cuándo es válido el voucher?",
+          "answer": "30/06/2026"
+        }
+      },
+      {
+        "date": "2026-05-15",
+        "intentId": "sofia-morales:porto-visit",
+        "kind": "booking",
+        "user": "Tomás, ya tengo la reserva de Oporto cerrada. Renfe a Madrid y luego conexión a Porto. ¿Confirmas que te quedas con Nico del 20 al 23? Mamá necesita taxi el 21.",
+        "assistant": "Vale, me quedo con Nico. He visto que el tramo Vigo-Valença tiene bus sustitutivo en abril, pero para mayo es tren normal. Confirma la hora de llegada para avisar a Beatriz.",
+        "artifact": {
+          "title": "Confirmación de Reserva de Viaje",
+          "from": "Renfe / CP Comboios de Portugal",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Estimada Sofía Morales,\n\nAdjuntamos su confirmación de reserva para el viaje Valencia - Porto.\n\nItinerario:\n1. Renfe: Valencia Joaquín Sorolla - Madrid Atocha. 20/05/2026, 07:30 - 09:00. Tarifa: 45,00 EUR.\n2. Renfe: Madrid Atocha - Vigo-Guixar. 20/05/2026, 10:15 - 14:30. Tarifa: 65,00 EUR.\n3. CP Celta: Vigo-Guixar - Porto Campanhã. 20/05/2026, 15:45 - 17:30. Tarifa: 25,00 EUR.\n\nTotal: 135,00 EUR\nEstado: Confirmado\nReferencia: VIA-2026-0515-PT\nNota: El tramo Vigo-Valença opera con tren normal en mayo. No se requiere bus sustitutivo."
+        },
+        "probe": {
+          "question": "¿Cuál es el precio total del viaje?",
+          "answer": "135,00 EUR"
+        }
+      }
+    ],
+    "continuity": "Open: Legal Addendum v2.1 for Clara Beltrán pending signature (Apr 6). Final invoice INV-2026-0427 payment still outstanding. Cold room invoice INV-2026-0409-ALBA issued Apr 9, due Apr 24. Resolved: Mar Azul refund of 180.00 EUR processed Apr 2, visible on card statement Apr 15. Bizum payment of 45.00 EUR to Tomás for school costs confirmed Apr 12. Stripe voucher VCH-2026-0318-45 applied to school fees. New: Wedding date changed to May 15, 2026, requiring 150.00 EUR transport surcharge. Venue access key SOL-983 remains valid for new date. Bank statement Apr 18 confirms 500 EUR deposit from Clara. Email Apr 21 confirms venue access with key SOL-983. Document Apr 24 updates clinic transport pickup to 09:45 for Apr 28. Calendar Apr 27 schedules flower delivery with ref ORANGE-64. Todo Apr 28 sets deadline Apr 30 for Porto custody confirmation. May 3: Paid 50.00 EUR for Nico's school trip (ESC-2026-0503-PT). May 6: Booked Renfe ticket REN-20260506-7721 for training. May 9: Registered for Carrera Popular (CPV-2026-0991). May 12: Received Stripe voucher VCH-2026-0512-45 (45.00 EUR, expires 30/06/2026). May 15: Confirmed Porto trip VIA-2026-0515-PT (135.00 EUR, May 20-23)."
+  }
+}

@@ -86,4 +86,34 @@ describe('identity boundary', () => {
 		expect(seen?.headers.get('authorization')).toBe(`Bearer ${'s'.repeat(32)}`)
 		expect(await seen?.json()).toEqual({ subjectIds: [subjectId] })
 	})
+
+	test('passes the declared browser language through account provisioning', async () => {
+		let seen: Request | undefined
+		const client = new IdentityProvisioningClient(
+			'https://aven.id',
+			's'.repeat(32),
+			async (input, init) => {
+				seen = new Request(input, init)
+				return new Response(
+					JSON.stringify({
+						account: {
+							id: '3f7b0f1e-7850-4902-a7b0-093f8604a0dd',
+							name: 'user',
+							email: 'user@example.test',
+							role: 'user'
+						},
+						setupUrl: null
+					}),
+					{ headers: { 'content-type': 'application/json' } }
+				)
+			}
+		)
+
+		await client.provisionVerifiedAccount('user@example.test', 'name-purchase', 'de-DE')
+		expect(await seen?.json()).toEqual({
+			email: 'user@example.test',
+			source: 'name-purchase',
+			browserLanguage: 'de-DE'
+		})
+	})
 })

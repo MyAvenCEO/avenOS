@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import pg from 'pg'
+import { InvalidRetrievalCursor, type RetrievalInput, retrievalPage } from './retrieval.js'
 
 pg.types.setTypeParser(20, Number)
 
@@ -72,6 +73,7 @@ export interface Contribution {
 
 export interface IntentDetail extends IntentSummary {
 	contributions: Contribution[]
+	contributionsHasMore?: boolean
 	artifacts: []
 	fileSkill: null
 }
@@ -160,23 +162,172 @@ async function insertContribution(
 export class IntentStore {
 	constructor(readonly pool: pg.Pool) {}
 
+	async page(subjectId: string, input: RetrievalInput) {
+		const searching = Boolean(input.query?.trim())
+		const page = retrievalPage(subjectId, input, searching ? 'intent-search' : 'intent-recent')
+		if (page.after && !searching && !page.after.updated)
+			throw new InvalidRetrievalCursor('Missing page timestamp')
+		const values: unknown[] = [subjectId]
+		const conditions = ['owner_subject_id=$1', "state NOT IN ('merged','deleted')"]
+		if (input.state === 'archive') conditions.push("state='archive'")
+		if (input.state === 'active') conditions.push("state<>'archive'")
+		if (searching) {
+			values.push(page.query)
+			conditions.push(
+				`search_vector @@ plainto_tsquery('simple',aven_intents.search_normalize($${values.length}))`
+			)
+		}
+		if (page.after) {
+			values.push(page.after.id)
+			if (searching) conditions.push(`id>$${values.length}::uuid`)
+			else {
+				values.push(page.after.updated)
+				conditions.push(
+					`(updated_at,id)<($${values.length}::timestamptz,$${values.length - 1}::uuid)`
+				)
+			}
+		}
+
+		if (searching) {
+			// An unordered bounded probe avoids PostgreSQL's optimistic ordered-index
+			// plan scanning the entire history for a rare/absent term under LIMIT.
+			const candidates = await this.pool.query(
+				`SELECT id FROM intents WHERE ${conditions.join(' AND ')} LIMIT 2001`,
+				values
+			)
+			if (candidates.rows.length <= 2000) {
+				values.push(candidates.rows.map((r) => r.id))
+				conditions.push(`id=ANY($${values.length}::uuid[])`)
+			}
+		}
+		values.push(page.size + 1)
+		const result = await this.pool.query(
+			`SELECT ${intentColumns},updated_at::text AS cursor_updated
+			FROM intents WHERE ${conditions.join(' AND ')} ORDER BY ${searching ? 'id' : 'updated_at DESC,id DESC'} LIMIT $${values.length}`,
+			values
+		)
+		const rows = result.rows.slice(0, page.size)
+		const last = rows.at(-1)
+		return {
+			intents: rows.map(summary),
+			hasMore: result.rows.length > page.size,
+			nextCursor:
+				result.rows.length > page.size && last
+					? page.cursor({ id: last.id, ...(!searching && { updated: last.cursor_updated }) })
+					: null,
+			matchMode: searching ? 'all-terms' : 'recent'
+		}
+	}
+
+	async messages(subjectId: string, input: RetrievalInput) {
+		const history = Boolean(input.intent) && !input.query?.trim()
+		const page = retrievalPage(
+			subjectId,
+			{ ...input, limit: Math.min(input.limit ?? 20, 20) },
+			history ? 'message-history' : 'message-search'
+		)
+		if (history && page.after && !page.after.sequence)
+			throw new InvalidRetrievalCursor('Missing message sequence')
+		const values: unknown[] = [subjectId]
+		const conditions = [
+			'c.owner_subject_id=$1',
+			'i.owner_subject_id=$1',
+			"i.state NOT IN ('merged','deleted')",
+			"c.contributor_kind IN ('human','agent')",
+			'c.text IS NOT NULL'
+		]
+		if (input.intent) {
+			values.push(input.intent)
+			conditions.push(`c.intent_id=$${values.length}::uuid`)
+		}
+		if (input.state === 'archive') conditions.push("i.state='archive'")
+		if (input.state === 'active') conditions.push("i.state<>'archive'")
+		let queryIndex = 0
+		if (page.query) {
+			values.push(page.query)
+			queryIndex = values.length
+			conditions.push(
+				`c.search_vector @@ plainto_tsquery('simple',aven_intents.search_normalize($${queryIndex}))`
+			)
+		}
+		if (page.after) {
+			values.push(history ? page.after.sequence : page.after.id)
+			conditions.push(history ? `c.sequence<$${values.length}` : `c.id>$${values.length}::uuid`)
+		}
+
+		if (page.query) {
+			const candidates = await this.pool.query(
+				`SELECT c.id FROM contributions c JOIN intents i ON i.id=c.intent_id WHERE ${conditions.join(' AND ')} LIMIT 2001`,
+				values
+			)
+			if (candidates.rows.length <= 2000) {
+				values.push(candidates.rows.map((r) => r.id))
+				conditions.push(`c.id=ANY($${values.length}::uuid[])`)
+			}
+		}
+		values.push(page.size + 1)
+		const excerpt = queryIndex
+			? `ts_headline('simple',c.text,plainto_tsquery('simple',aven_intents.search_normalize($${queryIndex})),'StartSel="", StopSel="", MaxWords=70, MinWords=20, MaxFragments=1')`
+			: 'c.text'
+		const result = await this.pool.query(
+			`SELECT c.id,c.intent_id,c.sequence,c.contributor_kind,c.created_at,
+			left(${excerpt},700) AS content,char_length(c.text) AS total_chars FROM contributions c JOIN intents i ON i.id=c.intent_id
+			WHERE ${conditions.join(' AND ')} ORDER BY ${history ? 'c.sequence DESC' : 'c.id'} LIMIT $${values.length}`,
+			values
+		)
+		const rows = result.rows.slice(0, page.size),
+			last = rows.at(-1)
+		return {
+			messages: rows.map((r) => ({
+				id: r.id,
+				intentId: r.intent_id,
+				sequence: r.sequence,
+				role: r.contributor_kind === 'human' ? 'user' : 'assistant',
+				content: r.content,
+				createdAt: timestamp(r.created_at),
+				hasMoreText: r.total_chars > 700
+			})),
+			hasMore: result.rows.length > page.size,
+			nextCursor:
+				result.rows.length > page.size && last
+					? page.cursor({ id: last.id, ...(history && { sequence: Number(last.sequence) }) })
+					: null,
+			matchMode: page.query ? 'all-terms' : history ? 'recent' : 'id-order',
+			notice:
+				'Use message_detail for complete original text. Search covers stored human and agent messages, including archived Intents.'
+		}
+	}
+
+	async message(subjectId: string, id: string, offset = 0) {
+		const result = await this.pool.query(
+			`SELECT c.id,c.intent_id,c.contributor_kind,c.created_at,substring(c.text FROM $3+1 FOR 12000) AS content,char_length(c.text) AS total_chars
+			FROM contributions c JOIN intents i ON i.id=c.intent_id WHERE c.id=$2 AND c.owner_subject_id=$1 AND i.owner_subject_id=$1
+			AND i.state NOT IN ('merged','deleted') AND c.contributor_kind IN ('human','agent') AND c.text IS NOT NULL`,
+			[subjectId, id, offset]
+		)
+		const row = result.rows[0]
+		if (!row) throw new IntentNotFoundError('Message not found')
+		if (offset > row.total_chars)
+			throw new InvalidRetrievalCursor('Message offset exceeds its length')
+		return {
+			id: row.id,
+			intentId: row.intent_id,
+			createdAt: timestamp(row.created_at),
+			role: row.contributor_kind === 'human' ? 'user' : 'assistant',
+			content: row.content,
+			offset,
+			totalChars: row.total_chars,
+			nextOffset: offset + 12000 < row.total_chars ? offset + 12000 : null
+		}
+	}
+
 	async ready(): Promise<void> {
 		const result = await this.pool.query(
 			`SELECT 1 FROM aven_platform.component_installations
 			 WHERE component_ref='ceo.aven:component:data:intents@1'
-			 AND schema_version>=1`
+			 AND schema_version=1`
 		)
 		if (result.rowCount !== 1) throw new Error('Intent Service migration is not applied.')
-	}
-
-	async list(subjectId: string): Promise<IntentSummary[]> {
-		const result = await this.pool.query(
-			`SELECT ${intentColumns} FROM intents
-			 WHERE owner_subject_id=$1 AND state NOT IN ('merged','deleted')
-			 ORDER BY updated_at DESC,id`,
-			[subjectId]
-		)
-		return result.rows.map(summary)
 	}
 
 	async detail(subjectId: string, intentId: string): Promise<IntentDetail> {
@@ -188,12 +339,13 @@ export class IntentStore {
 		if (!intent.rows[0]) throw new IntentNotFoundError('Intent not found.')
 		const contributions = await this.pool.query(
 			`SELECT id,sequence,contributor_kind,kind,text,payload,created_at
-			 FROM contributions WHERE intent_id=$1 ORDER BY sequence`,
+			 FROM contributions WHERE intent_id=$1 ORDER BY sequence DESC LIMIT 41`,
 			[intentId]
 		)
 		return {
 			...summary(intent.rows[0]),
-			contributions: contributions.rows.map(contribution),
+			contributions: contributions.rows.slice(0, 40).reverse().map(contribution),
+			contributionsHasMore: contributions.rows.length > 40,
 			artifacts: [],
 			fileSkill: null
 		}
@@ -449,12 +601,13 @@ export class IntentStore {
 		if (!intent.rows[0]) throw new IntentNotFoundError('Intent not found.')
 		const contributions = await client.query(
 			`SELECT id,sequence,contributor_kind,kind,text,payload,created_at
-			 FROM contributions WHERE intent_id=$1 ORDER BY sequence`,
+			 FROM contributions WHERE intent_id=$1 ORDER BY sequence DESC LIMIT 41`,
 			[intentId]
 		)
 		return {
 			...summary(intent.rows[0]),
-			contributions: contributions.rows.map(contribution),
+			contributions: contributions.rows.slice(0, 40).reverse().map(contribution),
+			contributionsHasMore: contributions.rows.length > 40,
 			artifacts: [],
 			fileSkill: null
 		}

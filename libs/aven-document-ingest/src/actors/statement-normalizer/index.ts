@@ -138,63 +138,62 @@ export async function normalizeStatement(
 	}
 }
 
+export const STATEMENT_NORMALIZER_MANIFEST = manifest(
+	'statement-normalizer',
+	'Statement transaction normalizer',
+	'Normalizes a validated statement into a canonical reconciliation source.',
+	'document_normalize_statement',
+	[
+		'ceo.aven.bookkeeping.statement_candidate(F, S)',
+		'ceo.aven.bookkeeping.statement_validation(S, V)'
+	],
+	['ceo.aven.banking.statement(S, N)']
+)
+
 export function createStatementNormalizerActor(): Actor {
-	return new Actor(
-		manifest(
-			'statement-normalizer',
-			'Statement transaction normalizer',
-			'Normalizes a validated statement into a canonical reconciliation source.',
-			'document_normalize_statement',
-			[
-				'ceo.aven.bookkeeping.statement_candidate(F, S)',
-				'ceo.aven.bookkeeping.statement_validation(S, V)'
-			],
-			['ceo.aven.banking.statement(S, N)']
-		),
-		{
-			document_normalize_statement: async (payload) => {
-				try {
-					const normalized = await normalizeStatement(
-						object(payload.candidate, 'statement candidate'),
-						object(payload.validation, 'statement validation')
-					)
-					return success(
-						{
-							ok: true,
-							procedureKey: 'client.normalize-statement',
-							artifacts: [
-								artifact(
-									'normalized-statement',
-									'banking.statement',
-									normalized.statement,
-									'statement'
-								)
-							],
-							evidence: [
-								{
-									ordinal: 0,
-									outputLocalKey: 'normalized-statement',
-									outputLocator: wholeArtifact(),
-									inputRole: 'candidate',
-									inputOrdinal: 0,
-									inputLocator: wholeArtifact()
-								},
-								{
-									ordinal: 1,
-									outputLocalKey: 'normalized-statement',
-									outputLocator: { kind: 'json-pointer', pointer: '/validationStatus' },
-									inputRole: 'validation',
-									inputOrdinal: 0,
-									inputLocator: { kind: 'json-pointer', pointer: '/status' }
-								}
-							]
-						},
-						`Normalized a statement containing ${normalized.transactions.length} transaction(s).`
-					)
-				} catch (error) {
-					return failure(error)
-				}
+	return new Actor(structuredClone(STATEMENT_NORMALIZER_MANIFEST), {
+		document_normalize_statement: async (payload) => {
+			try {
+				const normalized = await normalizeStatement(
+					object(payload.candidate, 'statement candidate'),
+					object(payload.validation, 'statement validation')
+				)
+				return success(
+					{
+						ok: true,
+						procedureKey: 'client.normalize-statement',
+						artifacts: [
+							artifact(
+								'normalized-statement',
+								'banking.statement',
+								normalized.statement,
+								'statement'
+							)
+						],
+						evidence: [
+							{
+								ordinal: 0,
+								outputLocalKey: 'normalized-statement',
+								outputLocator: wholeArtifact(),
+								inputRole: 'candidate',
+								inputOrdinal: 0,
+								inputLocator: wholeArtifact()
+							},
+							{
+								ordinal: 1,
+								outputLocalKey: 'normalized-statement',
+								outputLocator: { kind: 'json-pointer', pointer: '/validationStatus' },
+								inputRole: 'validation',
+								inputOrdinal: 0,
+								inputLocator: { kind: 'json-pointer', pointer: '/status' }
+							}
+						]
+					},
+					`Normalized a statement containing ${normalized.transactions.length} transaction(s).`
+				)
+			} catch (error) {
+				return failure(error)
 			}
 		}
-	)
+	})
 }

@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//avenOS//Synthetic Corpus//EN
+BEGIN:VEVENT
+UID:qwen-rowan-chen-1-3@synthetic.test
+DTSTAMP:20260109T180200Z
+DTSTART;TZID=Europe/London:20260109T140000
+DTEND;TZID=Europe/London:20260109T144500
+SUMMARY:DPA-42 Review Call - Atlas
+DESCRIPTION:Event: DPA-42 Review Call\nDate: 2026-01-09\nStart: 14:00\nEnd: 14:45\nLocation: Microsoft Teams (Link in invite)\nAttendees: Malik Ahmed (Atlas Legal)\, Mary Evans (Bristol Nonprofit)\, Rowan Chen (Consultancy)\nStatus: Confirmed\nAgenda:\n1. Review final clauses of DPA-42 v3.0.\n2. Confirm signature requirements for countersigning.\n3. Agree on data exchange protocol post-signature.\nNote: No production data to be exchanged during this meeting. Discussion limited to legal terms and technical safeguards.
+X-SYNTHETIC-TEST-RECORD:TRUE
+END:VEVENT
+END:VCALENDAR

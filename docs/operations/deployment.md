@@ -52,6 +52,13 @@ a failed role or migration job blocks startup. Retrying installation preserves t
 database and backup status. Private storage remains owner-only; only the public
 backup-health directory allows reads by the identity container.
 
+The database image uses PostgreSQL 18. Mount persistent storage at
+`/var/lib/postgresql`; the image stores cluster files under `18/docker` inside that
+mount. Database, movement, backup, and restore clients use the same pinned major
+version. A directory containing an older cluster is rejected by the image before
+initialization. This release provides no in-place major-version upgrade path; use
+a fresh installation or the verified logical-backup recovery procedure.
+
 ## Installation channels
 
 The maintenance repository manually selects a published release for next and promotes its

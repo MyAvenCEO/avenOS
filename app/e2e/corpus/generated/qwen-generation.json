@@ -1,0 +1,11 @@
+{
+  "synthetic": true,
+  "model": "qwen3.8-flash-next",
+  "baseUrl": "http://100.96.61.57:8000",
+  "promptVersion": 9,
+  "episodeCount": 180,
+  "dates": [
+    "2026-01-01",
+    "2026-06-29"
+  ]
+}

@@ -228,12 +228,17 @@ export async function executeObservedProgram(options: {
 	completion?: 'goal-only' | 'saturate'
 	port: ObservationExecutionPort
 	maxInvocations?: number
+	/** Independent ready invocations may run together; receipts enter the ledger in frontier order. */
+	maxParallelism?: number
 	/** Per-operation join budget, checked before materializing a Cartesian frontier. */
 	maxSearchAttempts?: number
 	allowEffects?: boolean
 	signal?: AbortSignal
 	onReceipt?: (receipt: SolverReceipt, invocation: SolverInvocation) => void
 }): Promise<ObservationRunResult> {
+	const maxParallelism = options.maxParallelism ?? 1
+	if (!Number.isInteger(maxParallelism) || maxParallelism < 1 || maxParallelism > 32)
+		throw new Error('observation parallelism must be between 1 and 32')
 	const operations = compileObservationOperations(options.operations).filter((operation) =>
 		operation.mode === 'effect'
 			? options.allowEffects === true
@@ -277,8 +282,8 @@ export async function executeObservedProgram(options: {
 			if (error instanceof RequirementSearchLimit) return result('limit')
 			throw error
 		}
-		const invocation = frontier.find((candidate) => !completed.has(candidate.id))
-		if (!invocation)
+		const ready = frontier.filter((candidate) => !completed.has(candidate.id))
+		if (!ready.length)
 			return result(
 				!goalsSatisfied()
 					? 'no-route'
@@ -286,34 +291,49 @@ export async function executeObservedProgram(options: {
 						? 'partial'
 						: 'complete'
 			)
-		if (receipts.length >= (options.maxInvocations ?? 1024)) return result('limit')
-		const operation = operations.find((candidate) => candidate.id === invocation.operation)!
-		const receipt =
-			(await options.port.lookup(invocation)) ?? (await options.port.invoke(invocation))
-		if (
-			receipt.invocationId !== invocation.id ||
-			receipt.operation !== invocation.operation ||
-			!['succeeded', 'failed'].includes(receipt.state)
-		) {
-			throw new Error('receipt does not belong to the admitted invocation')
-		}
-		const declared =
-			receipt.state === 'failed' ? (operation.failureProduces ?? []) : operation.produces
-		for (const fact of receipt.facts) {
+		const remaining = (options.maxInvocations ?? 1024) - receipts.length
+		if (remaining <= 0) return result('limit')
+		const batch = ready.slice(0, Math.min(maxParallelism, remaining))
+		// Wait for every invocation before admitting any receipt. A failed publication
+		// must not leave sibling invocations changing the ledger after this run exits.
+		const settled = await Promise.allSettled(
+			batch.map(
+				async (invocation) =>
+					(await options.port.lookup(invocation)) ?? (await options.port.invoke(invocation))
+			)
+		)
+		const rejected = settled.find((item) => item.status === 'rejected')
+		if (rejected?.status === 'rejected') throw rejected.reason
+		for (const [index, invocation] of batch.entries()) {
+			const item = settled[index]
+			if (!item || item.status !== 'fulfilled') throw new Error('observation batch did not settle')
+			const receipt = item.value
+			const operation = operations.find((candidate) => candidate.id === invocation.operation)!
 			if (
-				!declared.some(
-					(predicate) =>
-						matchRequirements([substitute(predicate, invocation.bindings)], [planValue(fact)])
-							.length > 0
-				)
+				receipt.invocationId !== invocation.id ||
+				receipt.operation !== invocation.operation ||
+				!['succeeded', 'failed'].includes(receipt.state)
 			) {
-				throw new Error(`${operation.id} published an undeclared observation: ${fact.predicate}`)
+				throw new Error('receipt does not belong to the admitted invocation')
 			}
+			const declared =
+				receipt.state === 'failed' ? (operation.failureProduces ?? []) : operation.produces
+			for (const fact of receipt.facts) {
+				if (
+					!declared.some(
+						(predicate) =>
+							matchRequirements([substitute(predicate, invocation.bindings)], [planValue(fact)])
+								.length > 0
+					)
+				) {
+					throw new Error(`${operation.id} published an undeclared observation: ${fact.predicate}`)
+				}
+			}
+			for (const fact of receipt.facts) admit(fact)
+			completed.add(invocation.id)
+			receipts.push(receipt)
+			options.onReceipt?.(receipt, invocation)
 		}
-		for (const fact of receipt.facts) admit(fact)
-		completed.add(invocation.id)
-		receipts.push(receipt)
-		options.onReceipt?.(receipt, invocation)
 	}
 }
 

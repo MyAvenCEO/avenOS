@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//avenOS//Synthetic Corpus//EN
+BEGIN:VEVENT
+UID:qwen-sofia-morales-1-3@synthetic.test
+DTSTAMP:20260109T180200Z
+DTSTART;TZID=Europe/Madrid:20260109T160000
+DTEND;TZID=Europe/Madrid:20260109T173000
+SUMMARY:Visita Técnica: Diagnóstico Cámara Fría
+DESCRIPTION:EVENTO: Visita Técnica - Taller Alba\nFECHA: Viernes\, 09 de Enero de 2026\nHORA: 16:00 - 17:30\nLUGAR: Estudio Morales - Zona de Almacén/Cámara Fría\nASISTENTES: Sofía Morales (Propietaria)\, Alba Pérez (Técnico Taller Alba)\, Mario Costa (Florista/Logística)\nESTADO: Confirmado\n\nDETALLES:\n- Objetivo: Diagnóstico de la avería recurrente en el compresor de la cámara fría.\n- Preparación: Mario Costa ha trasladado las peonías de la orden MA-EXP-2026-014 a la zona de carga seca (temperatura ambiente controlada) para evitar daño térmico durante la intervención.\n- Requerimientos: Acceso libre al panel de control. Registro de temperaturas de las últimas 48 horas.\n- Resultado esperado: Informe de estado y confirmación de si la temperatura se estabiliza por debajo de 4°C antes de la próxima entrega.
+X-SYNTHETIC-TEST-RECORD:TRUE
+END:VEVENT
+END:VCALENDAR

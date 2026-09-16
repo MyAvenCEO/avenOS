@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-05-18",
+        "intentId": "sofia-morales:porto-visit",
+        "kind": "transaction",
+        "user": "Tomás, ya he pagado mi parte del hotel en Oporto para los días 20-23. Te paso el justificante. ¿Confirmas que te quedas con Nico del 20 al 23? Mamá tiene cita el jueves a las 19:00 y necesito saber si puedo llevarla yo o hay que coordinar taxi.",
+        "assistant": "Recibido. Gracias por el aviso. Confirmo que me quedo con Nico del 20 al 23. Sobre Pilar, si te vas el 20, coordina el taxi para el jueves 21 por la tarde, no el 22. Yo puedo llevarla si me avisas con tiempo, pero mejor deja el taxi reservado para asegurar la hora de las 19:00.",
+        "artifact": {
+          "title": "Extracto de Cuenta Comercial Estudio Morales",
+          "from": "Banco Santander",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "EXTRACTO DE CUENTA COMERCIAL\n\nTitular: Estudio Morales (Sofía Morales)\nCuenta: ES**...6418 (Etiqueta: Estudio Morales)\nPeriodo: 15/05/2026 - 18/05/2026\nSaldo Inicial: 1.240,00 EUR\n\nMovimientos:\n1. 16/05/2026 - Pago Nómina Lucía Ferrer - 450,00 EUR (Cargo)\n2. 17/05/2026 - Alquiler Furgoneta Refrigerada - 120,00 EUR (Cargo)\n3. 18/05/2026 - Pago Hotel Porto Central (Visa) - 120,00 EUR (Cargo)\n   Referencia: HPC-20260518-99\n   Estado: Completado\n\nSaldo Final: 550,00 EUR"
+        },
+        "probe": {
+          "question": "¿Cuánto costó el pago del hotel en Oporto según el extracto?",
+          "answer": "120,00 EUR"
+        }
+      },
+      {
+        "date": "2026-05-21",
+        "intentId": "sofia-morales:valencia-wedding",
+        "kind": "order",
+        "user": "Mateo, te paso la confirmación de la compra de los centros de mesa extra para la boda de Clara. La puerta de carga se abre a las 07:00 con la clave SOL-983. Lucía irá a montar. ¿Está todo listo para el 15?",
+        "assistant": "Recibido Sofía. Confirmo que la puerta de carga estará libre a las 07:00 del 15/05/2026. La clave SOL-983 es válida. Lucía puede acceder con su equipo. Por favor, asegúrate de que la factura final incluya el recargo de transporte de 150 EUR que acordamos en la adenda.",
+        "artifact": {
+          "title": "Confirmación de Pedido - Centros de Mesa Extra",
+          "from": "Estudio Morales",
+          "to": "Clara Beltrán",
+          "language": "es",
+          "body": "CONFIRMACIÓN DE PEDIDO\n\nNº Pedido: ORD-2026-0521-WED\nFecha: 21/05/2026\nCliente: Clara Beltrán\nEvento: Boda Valencia - 15/05/2026\n\nArtículos:\n1. Centros de mesa adicionales (5 uds): 300,00 EUR\n2. Transporte y montaje extra: 150,00 EUR\n\nSubtotal: 450,00 EUR\nIVA (21%): 94,50 EUR\nTotal: 544,50 EUR\n\nMétodo de Pago: Stripe (Pendiente de cobro tras firma adenda)\nEstado: Confirmado\nVentana de Entrega: 15/05/2026, 07:00 - 09:00\nLugar: Valencia Event Venue (Puerta de carga, clave SOL-983)"
+        },
+        "probe": {
+          "question": "¿Cuál es el total del pedido de centros de mesa extra?",
+          "answer": "544,50 EUR"
+        }
+      },
+      {
+        "date": "2026-05-24",
+        "intentId": "sofia-morales:flower-supplier",
+        "kind": "return",
+        "user": "Isabel, las peonías de la caja 2 tienen los tallos muy débiles y no aguantan el montaje. Necesito la autorización de devolución para cambiarlas antes del viernes. La referencia del envío era ORANGE-64.",
+        "assistant": "Sofía, recibido. Autorización de devolución RA-2026-0524 emitida. Motivo: Calidad de tallos insuficiente. Recogida programada para el 25/05/2026 entre 08:00 y 10:00. El reembolso se procesará a la Visa terminada en 6418 tras la inspección. Guarda la hoja de relevo con la referencia ORANGE-64.",
+        "artifact": {
+          "title": "Autorización de Devolución (RMA)",
+          "from": "Mar Azul",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "AUTORIZACIÓN DE DEVOLUCIÓN (RMA)\n\nEstimada Sofía,\n\nHemos procesado su solicitud. Aquí tiene la autorización de devolución.\n\nReferencia Original: MA-2026-0510\nReferencia Devolución: RA-2026-0524\nMotivo: Calidad de tallos insuficiente (caja 2).\nEstado: Pendiente de recogida.\nFecha Recogida: 25/05/2026 (08:00-10:00).\nDestino Reembolso: Visa terminada en 6418.\n\nNota: Incluir referencia de envío ORANGE-64 en la hoja de relevo."
+        },
+        "probe": {
+          "question": "¿Cuál es la referencia de la devolución autorizada?",
+          "answer": "RA-2026-0524"
+        }
+      },
+      {
+        "date": "2026-05-27",
+        "intentId": "sofia-morales:flower-supplier",
+        "kind": "support",
+        "user": "Oliver, regarding the peony substitution for order MA-2026-0510. The RMA RA-2026-0524 was collected yesterday. Has the refund hit the card yet? I need to clear the invoice for Isabel.",
+        "assistant": "Hello Sofía. I have checked the status of your refund request linked to case MA-EXP-2026-0527. The physical return of the damaged stems (Ref: RA-2026-0524) was logged by our warehouse team on 2026-05-25. The financial credit of 180.00 EUR has been processed and applied to your original payment method, the Visa ending in 6418. Please allow 3-5 business days for the funds to appear in your statement. We appreciate your patience.",
+        "artifact": {
+          "title": "Refund Status Update - Case MA-EXP-2026-0527",
+          "from": "Oliver Kent",
+          "to": "Sofía Morales",
+          "language": "en",
+          "body": "Dear Sofía,\n\nThank you for contacting Mar Azul Export Support.\n\nCase Reference: MA-EXP-2026-0527\nOriginal Order: MA-2026-0510\nReturn Authorization: RA-2026-0524\n\nStatus: Refund Processed\n\nWe confirm that the return of the damaged peonies was received and inspected at our Valencia warehouse on 2026-05-25. The financial credit of 180.00 EUR has been processed and applied to your original payment method, the Visa ending in 6418. Please allow 3-5 business days for the funds to appear in your statement. We appreciate your patience."
+        },
+        "probe": {
+          "question": "¿Cuánto dinero se reembolsó por la devolución de las peonías?",
+          "answer": "180.00 EUR"
+        }
+      },
+      {
+        "date": "2026-05-28",
+        "intentId": "sofia-morales:quotes",
+        "kind": "legal",
+        "user": "Elena, Clara wants to move the wedding to May 15th. She's worried about the deposit. Can you draft the addendum to Contract v2.0? We need to confirm if the 500 EUR covers the new transport date.",
+        "assistant": "Sofía, I have prepared Addendum v2.1 to the Floral Services Contract. It explicitly states that the existing 500.00 EUR deposit is retained but does not cover the additional transport surcharge of 150.00 EUR for the new date (15/05/2026). The document is currently in 'Draft' status. Please send this to Clara for signature before we lock the venue slot with Mateo.",
+        "artifact": {
+          "title": "Addendum v2.1 to Floral Services Contract - Clara Beltrán",
+          "from": "Elena Soler",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "ADENDA AL CONTRATO DE SERVICIOS FLORALES\n\nPartes: Estudio Morales (Sofía Morales) y Clara Beltrán.\nVersión: 2.1\nFecha: 28/05/2026\nEstado: Borrador - Pendiente de firma\n\nCláusula Adicional 4.2.1 (Cambio de Fecha):\nEl Cliente solicita el cambio de la fecha del evento del 20/04/2026 al 15/05/2026.\n\n1. Depósito: El depósito inicial de 500,00 EUR se mantiene como anticipo válido para la nueva fecha.\n2. Recargo de Transporte: Se aplica un recargo adicional de 150,00 EUR por el cambio de fecha y logística, que no está cubierto por el depósito inicial.\n3. Anticipo Total: El anticipo total requerido para confirmar la reserva es de 650,00 EUR (500,00 EUR depósito + 150,00 EUR recargo).\n\nFirma Cliente: ___________________\nFirma Proveedor: ___________________"
+        },
+        "probe": {
+          "question": "¿Cuál es el estado actual de la adenda del contrato?",
+          "answer": "Borrador - Pendiente de firma"
+        }
+      }
+    ],
+    "continuity": "Open: Legal Addendum v2.1 for Clara Beltrán pending signature (May 28). Final invoice INV-2026-0427 payment still outstanding. Cold room invoice INV-2026-0409-ALBA issued Apr 9, due Apr 24. Resolved: Mar Azul refund of 180.00 EUR processed May 25, visible on card statement May 27. Bizum payment of 45.00 EUR to Tomás for school costs confirmed Apr 12. Stripe voucher VCH-2026-0318-45 applied to school fees. New: Wedding date changed to May 15, 2026, requiring 150.00 EUR transport surcharge. Venue access key SOL-983 remains valid for new date. Bank statement May 18 confirms 120 EUR payment to Hotel Porto Central. Email May 21 confirms venue access with key SOL-983. Document May 24 updates clinic transport pickup to 09:45 for Apr 28. Calendar Apr 27 schedules flower delivery with ref ORANGE-64. Todo Apr 28 sets deadline Apr 30 for Porto custody confirmation. May 3: Paid 50.00 EUR for Nico's school trip (ESC-2026-0503-PT). May 6: Booked Renfe ticket REN-20260506-7721 for training. May 9: Registered for Carrera Popular (CPV-2026-0991). May 12: Received Stripe voucher VCH-2026-0512-45 (45.00 EUR, expires 30/06/2026). May 15: Confirmed Porto trip VIA-2026-0515-PT (135.00 EUR, May 20-23)."
+  }
+}

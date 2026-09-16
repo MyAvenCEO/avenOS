@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-02-18",
+        "intentId": "sofia-morales:mother-clinic",
+        "kind": "payment",
+        "user": "Confirmar pago taxi mamá. ¿Ya está cerrado?",
+        "assistant": "Sí, el pago de 25€ por el transporte adaptado de Pilar se completó hoy. Referencia BZM-20260218-442.",
+        "artifact": {
+          "title": "Confirmación de pago Bizum - Taxi Adaptado Valencia",
+          "from": "Sofía Morales",
+          "to": "Pilar Morales",
+          "language": "es",
+          "body": "Concepto: Transporte adaptado Centro de Rehabilitación\nFecha: 18/02/2026\nHora: 10:00\nImporte: 25,00 EUR\nMétodo: Bizum\nEstado: Completado\nReferencia: BZM-20260218-442\nReceptor: Taxi Adaptado Valencia\nNota: Servicio puerta a puerta para cita médica."
+        },
+        "probe": {
+          "question": "¿Cuánto costó el transporte de mamá hoy?",
+          "answer": "25,00 EUR"
+        }
+      },
+      {
+        "date": "2026-02-21",
+        "intentId": "sofia-morales:flower-supplier",
+        "kind": "card-statement",
+        "user": "Necesito ver los cargos de Mar Azul en la visa. ¿El reembolso de las peonías ya entró?",
+        "assistant": "El extracto muestra el cargo original y el reembolso pendiente de procesar por Mar Azul tras la inspección.",
+        "artifact": {
+          "title": "Extracto Visa Estudio Morales - Feb 2026",
+          "from": "Banco Santander",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Titular: Sofía Morales\nTarjeta: Visa terminada en 6418\nPeriodo: 01/02/2026 - 20/02/2026\n\n1. 03/02/2026 - Mar Azul Importación - 450,00 EUR (Cargo)\n2. 07/02/2026 - Taller Alba Refrigeración - 120,00 EUR (Cargo)\n3. 15/02/2026 - Renfe Viajes - 85,50 EUR (Cargo)\n4. 18/02/2026 - Mar Azul Reembolso Parcial - 150,00 EUR (Abono Pendiente)\n\nTotal Pendiente: 505,50 EUR\nFecha de Cobro: 25/02/2026"
+        },
+        "probe": {
+          "question": "¿Qué importe está pendiente de reembolso de Mar Azul?",
+          "answer": "150,00 EUR"
+        }
+      },
+      {
+        "date": "2026-02-24",
+        "intentId": "sofia-morales:quotes",
+        "kind": "bank-statement",
+        "user": "Revisar si Clara ha pagado el anticipo nuevo. Elena dice que no facture hasta firma.",
+        "assistant": "No veo el ingreso de Clara en el extracto. Solo está el pago de Isabel de Mar Azul. Esperamos la adenda firmada.",
+        "artifact": {
+          "title": "Extracto Cuenta Comercial Estudio Morales",
+          "from": "Banco Santander",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Cuenta: ES**...6418 (Etiqueta: Estudio Morales)\nPeriodo: 20/02/2026 - 24/02/2026\nSaldo Inicial: 2.450,00 EUR\n\n1. 20/02/2026 - Pago Boda Clara Beltrán (Stripe) - 500,00 EUR (Ingreso)\n2. 22/02/2026 - Factura Mar Azul MA-2026-0218 - 320,00 EUR (Cargo)\n3. 23/02/2026 - Nómina Lucía Ferrer - 450,00 EUR (Cargo)\n\nSaldo Final: 2.180,00 EUR"
+        },
+        "probe": {
+          "question": "¿Cuánto ingresó Clara Beltrán por Stripe?",
+          "answer": "500,00 EUR"
+        }
+      },
+      {
+        "date": "2026-02-27",
+        "intentId": "sofia-morales:valencia-wedding",
+        "kind": "email",
+        "user": "Mateo, confirmando acceso para el montaje del sábado. Clave SOL-983.",
+        "assistant": "Recibido Sofía. Confirmo la puerta de carga para el 28/02 a las 07:00 con la clave SOL-983. Lucía tiene el relevo.",
+        "artifact": {
+          "title": "Re: Confirmación acceso montaje boda 28/02",
+          "from": "Mateo Serra",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Hola Sofía,\n\nConfirmo la disponibilidad de la puerta de carga para el sábado 28 de febrero de 2026 a las 07:00. El acceso será con la clave SOL-983. He avisado a seguridad.\n\nPor favor, asegúrate de que Lucía Ferrer lleve la hoja de relevo firmada. Cualquier cambio de última hora, avísame antes de las 06:00.\n\nUn saludo,\nMateo Serra\nManager de Eventos\nValencia Event Venue"
+        },
+        "probe": {
+          "question": "¿A qué hora abre la puerta de carga el sábado?",
+          "answer": "07:00"
+        }
+      },
+      {
+        "date": "2026-02-28",
+        "intentId": "sofia-morales:mother-clinic",
+        "kind": "document",
+        "user": "Preparar hoja de ruta para la próxima cita de mamá. ¿Qué preguntas llevar?",
+        "assistant": "He creado el documento v1.2 con la hora de la próxima cita y las dudas sobre la rehabilitación.",
+        "artifact": {
+          "title": "Hoja de Ruta Citas Médicas - Pilar Morales",
+          "from": "Sofía Morales",
+          "to": "Pilar Morales",
+          "language": "es",
+          "body": "Versión: 1.2\nEstado: Borrador para revisión\n\n1. Próxima Cita:\n   - Fecha: 05/03/2026\n   - Hora: 10:30\n   - Centro: Rehabilitación Valencia\n   - Transporte: Taxi Adaptado (Reserva BZM-20260228-112)\n\n2. Preguntas para el doctor:\n   - ¿Es necesario cambiar la frecuencia de las sesiones?\n   - ¿Hay ejercicios nuevos para casa?\n\n3. Notas:\n   - Llevar informe de febrero.\n   - Confirmar si necesita ayuda para vestirse antes de salir."
+        },
+        "probe": {
+          "question": "¿Cuál es la fecha de la próxima cita de mamá?",
+          "answer": "05/03/2026"
+        }
+      }
+    ],
+    "continuity": "Open: Legal contract v2.0 for Clara Beltrán pending client review/signature (Feb 12). Final invoice INV-2026-0215 issued Feb 15, payment due Feb 18. Return RA-2026-0206 for damaged peonies collected Feb 7, refund pending inspection. Resolved: Order MA-2026-0203 dispatched Feb 3. Staff shift adjustment for Lucía Ferrer confirmed Feb 9. Venue access confirmed with Mateo Serra for Feb 20. New: Taxi payment for Pilar confirmed Feb 18 (BZM-20260218-442). Bank statement Feb 24 shows Clara's 500 EUR deposit received via Stripe, but legal adenda unsigned. Wedding access confirmed for Feb 28 (SOL-983). Next clinic appointment scheduled for Mar 5."
+  }
+}

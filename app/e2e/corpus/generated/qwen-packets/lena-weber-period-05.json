@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-03-03",
+        "intentId": "lena-weber:orders",
+        "kind": "calendar",
+        "user": "Nora hat den Sample Kit bestätigt. Jonas, bitte den Versand für Amira vorbereiten, bevor wir die neue Glasur testen.",
+        "assistant": "Alles klar. Ich markiere die Bestellung als 'versendet' und aktualisiere den Status im Shop. DHL Nummer folgt gleich.",
+        "artifact": {
+          "title": "Calendar Invite: Nordton Sample Kit Review & Shipping Prep",
+          "from": "Nora Wells",
+          "to": "Lena Weber",
+          "language": "en",
+          "body": "Subject: Meeting Invitation: Nordton Sample Kit Review & Shipping Prep\n\nHi Lena,\n\nI am scheduling a brief call to confirm the release of the Spring Glaze Sample Kit (Ref: NK-2026-SPR-09). We need to ensure the batch meets the quality standards before you proceed with the new classes.\n\nDate: Tuesday, March 3, 2026\nTime: 14:00 - 14:30 CET\nLocation: Zoom Link (sent separately)\nAttendees: Lena Weber (Weber Keramik), Nora Wells (Nordton Export Desk)\n\nAgenda:\n1. Confirm shipment status of Sample Kit NK-2026-SPR-09.\n2. Review packaging requirements for fragile ceramics.\n3. Next steps for bulk order pricing.\n\nPlease confirm your availability. We aim to finalize the sample release by end of day.\n\nBest regards,\nNora Wells\nQuality Support Employee\nNordton Export Desk"
+        },
+        "probe": {
+          "question": "What is the reference number for the sample kit discussed in the meeting?",
+          "answer": "Ref: NK-2026-SPR-09"
+        }
+      },
+      {
+        "date": "2026-03-06",
+        "intentId": "lena-weber:home-budget",
+        "kind": "todo",
+        "user": "Mira, ich hab die Ostsee-Kosten reingeworfen. Bitte check die Rücklage, bevor wir die Umzugskartons bestellen.",
+        "assistant": "Okay, ich prüfe den Kontostand. Wenn die Rücklage über 2.000 Euro ist, geben wir die Kartons frei.",
+        "artifact": {
+          "title": "Task: Verify Move Reserve Balance",
+          "from": "Lena Weber",
+          "to": "Mira",
+          "language": "de",
+          "body": "Aufgabe: Überprüfung der Umzugsrücklage\n\nBeschreibung: Die Kosten für die Ostsee-Fahrt (Hotel Stralsund, DB Tickets) wurden aus der gemeinsamen Rücklage entnommen. Bitte den aktuellen Kontostand des Sparkassen-Kontos ****4821 prüfen, um sicherzustellen, dass die verbleibende Summe für die Kaution der neuen Wohnung und die Umzugskartons ausreicht.\n\nFälligkeit: 08.03.2026\nStatus: Offen\nZugehöriges Thema: Haushaltsbudget und Rücklage\n\nHinweis: Wenn der Stand unter 1.800 EUR fällt, müssen wir die Bestellung der Kartons verschieben."
+        },
+        "probe": {
+          "question": "What is the deadline for verifying the move reserve balance?",
+          "answer": "08.03.2026"
+        }
+      },
+      {
+        "date": "2026-03-09",
+        "intentId": "lena-weber:studio-lease",
+        "kind": "receipt",
+        "user": "Frau Becker, hier ist der Nachweis für die Brandschutzgebühr. Bitte bestätigen Sie, dass § 4.2 damit freigegeben ist.",
+        "assistant": "Danke Lena. Wir haben die Zahlung erhalten. Die Freigabe der Abendkurse wird nun finalisiert.",
+        "artifact": {
+          "title": "Payment Receipt: Fire Safety Report Fee",
+          "from": "Neumann Brandschutz",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Zahlungsbestätigung\n\nZahlungsempfänger: Neumann Brandschutz\nZahler: Lena Weber (Weber Keramik)\nDatum: 09.03.2026\nBetrag: 535,50 EUR\nWährung: EUR\nZahlungsmethode: Visa Debit ****4821\nStatus: Bezahlt\nReferenz: NB-2026-0215-001\n\nVerwendungszweck: Brandschutzprüfung Werkstatt (Bericht B-17)\n\nHinweis: Diese Zahlung bestätigt den Abschluss der Prüfung. Die Unterschrift auf Bericht B-17 ist gültig."
+        },
+        "probe": {
+          "question": "What is the total amount paid for the fire safety report?",
+          "answer": "535,50 EUR"
+        }
+      },
+      {
+        "date": "2026-03-12",
+        "intentId": "lena-weber:father-clinic",
+        "kind": "transport-ticket",
+        "user": "Papa, dein Termin ist bestätigt. Ich hab das Ticket für den 14. gebucht. Barrierefreier Zugang am Nord-Eingang.",
+        "assistant": "Danke, Lena. Ich treffe dich am Nord-Eingang. Der Shuttle sollte dort stehen.",
+        "artifact": {
+          "title": "DB Ticket Confirmation: Berlin Hbf to Potsdam Hbf",
+          "from": "Deutsche Bahn",
+          "to": "Klaus Weber",
+          "language": "de",
+          "body": "Fahrkartenbestätigung\n\nReisedaten:\nDatum: 14.03.2026\nStrecke: Berlin Hbf -> Potsdam Hbf\nZug: RE 1\nAbfahrt: 09:30 Uhr\nAnkunft: 10:00 Uhr\nReisender: Klaus Weber\nKlasse: 2. Klasse\nSitzplatz: Rollstuhlplatz, Wagen 2\nBarrierefreiheit: Aufzug am Gleis verfügbar, barrierefreier Zugang\n\nBuchungsreferenz: DB-2026-03-12-4451\nPreis: 12,40 EUR\nStatus: Bezahlt\n\nHinweis: Bitte nutzen Sie den Aufzug am Gleis 1. Der barrierefreie Shuttle hält am Nord-Eingang des Bahnhofs."
+        },
+        "probe": {
+          "question": "What is the booking reference for Klaus's train ticket?",
+          "answer": "DB-2026-03-12-4451"
+        }
+      },
+      {
+        "date": "2026-03-15",
+        "intentId": "lena-weber:flat-move",
+        "kind": "event-ticket",
+        "user": "Britta, danke für die Hilfe bei den Kartons. Hier ist der Eintritt für die Besichtigung der neuen Wohnung.",
+        "assistant": "Cool, danke! Ich bin da. Mal sehen, ob die Küche wirklich so groß ist wie auf den Fotos.",
+        "artifact": {
+          "title": "Event Ticket: Open House Viewing - Prenzlauer Berg",
+          "from": "Berlin Hausverwaltung",
+          "to": "Britta Seidel",
+          "language": "de",
+          "body": "Eintrittskarte\n\nVeranstaltung: Besichtigungstermin Wohnung Prenzlauer Berg\nDatum: 17.03.2026\nUhrzeit: 15:00 - 15:30 Uhr\nOrt: Prenzlauer Berg, Berlin\nInhaber: Britta Seidel\nKategorie: Gast\nPreis: 0,00 EUR\nTicket-ID: BHV-2026-03-15-VIEW-09\n\nHinweis: Bitte pünktlich erscheinen. Der Zugang erfolgt über den Hinterhof."
+        },
+        "probe": {
+          "question": "What is the ticket ID for the apartment viewing?",
+          "answer": "BHV-2026-03-15-VIEW-09"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit NK-2026-SPR-09 confirmed for release (Mar 3). Move reserve balance check due Mar 8 (Mira). Fire safety fee paid, lease § 4.2 approval pending final confirmation (Mar 9). Klaus's clinic ticket booked for Mar 14 (DB-2026-03-12-4451). Apartment viewing scheduled for Mar 17 with Britta. Closed: DHL damage claim for Amira resolved (implied by shipping prep context). Studio lease fire-safety report B-17 signed and paid (Mar 9). Bike route plan finalized (Feb 28)."
+  }
+}

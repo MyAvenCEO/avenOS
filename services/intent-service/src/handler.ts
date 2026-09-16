@@ -4,6 +4,7 @@ import type { IdentityVerifier } from '@avenos/aven-identity'
 import { BodyLimitError, readBoundedText } from '@avenos/http-boundary'
 import { z } from 'zod'
 import type { IntentServiceConfig } from './config.js'
+import { InvalidRetrievalCursor } from './retrieval.js'
 import {
 	IntentConflictError,
 	IntentNotFoundError,
@@ -14,6 +15,15 @@ import {
 } from './store.js'
 
 const uuid = z.uuid()
+const retrievalSchema = z
+	.object({
+		query: z.string().max(500).optional(),
+		cursor: z.string().max(2048).optional(),
+		limit: z.coerce.number().int().min(1).max(50).optional(),
+		intent: uuid.optional(),
+		state: z.enum(['all', 'active', 'archive']).optional()
+	})
+	.strict()
 const createSchema = z
 	.object({
 		id: uuid,
@@ -76,7 +86,9 @@ type Store = Pick<
 	| 'archiveOrRestore'
 	| 'create'
 	| 'detail'
-	| 'list'
+	| 'page'
+	| 'messages'
+	| 'message'
 	| 'merge'
 	| 'ready'
 	| 'tombstone'
@@ -144,8 +156,29 @@ export function createIntentHandler(
 			const claims = admitted.identity
 			const store = await stores.forGrant(admitted.tenant)
 			await store.ready()
+			if (
+				request.method === 'GET' &&
+				(pathname === '/api/intents/search' || pathname === '/api/intents/messages')
+			) {
+				const input = retrievalSchema.parse(Object.fromEntries(url.searchParams))
+				return json(
+					200,
+					pathname.endsWith('/search')
+						? await store.page(claims.sub, input)
+						: await store.messages(claims.sub, input)
+				)
+			}
+			const message = pathname.match(/^\/api\/intents\/messages\/([0-9a-f-]+)$/i)
+			if (request.method === 'GET' && message) {
+				const offset = z.coerce
+					.number()
+					.int()
+					.min(0)
+					.max(100000)
+					.parse(url.searchParams.get('offset') ?? 0)
+				return json(200, await store.message(claims.sub, uuid.parse(message[1]), offset))
+			}
 			if (pathname === '/api/intents') {
-				if (request.method === 'GET') return json(200, await store.list(claims.sub))
 				if (request.method === 'POST') {
 					const input = createSchema.parse(await requestJson(request))
 					return json(201, await store.create(claims.sub, input))
@@ -194,7 +227,11 @@ export function createIntentHandler(
 				return problem(404, 'INTENT_NOT_FOUND', 'The requested intent does not exist.')
 			if (error instanceof IntentConflictError)
 				return problem(409, 'INTENT_VERSION_CONFLICT', error.message)
-			if (error instanceof IntentInputError || error instanceof z.ZodError)
+			if (
+				error instanceof IntentInputError ||
+				error instanceof InvalidRetrievalCursor ||
+				error instanceof z.ZodError
+			)
 				return problem(400, 'INTENT_INPUT_INVALID', 'The intent request is invalid.')
 			logError(error)
 			return problem(500, 'INTENT_UNAVAILABLE', 'Intent state is unavailable.')

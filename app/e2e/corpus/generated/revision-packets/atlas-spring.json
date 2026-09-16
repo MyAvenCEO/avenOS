@@ -1,0 +1,37 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-rowan-chen-7-2",
+      "user": "Malik sent the v2.1 draft. Is the 5% still active for April billing?",
+      "assistant": "Yes. The v2.1 draft is unsigned, so the 5% interim rate from v2.0 remains active for April invoices.",
+      "artifact": {
+        "title": "Atlas Consultancy Renewal Appendix v2.1 (Draft)",
+        "from": "Malik Ahmed",
+        "to": "Rowan Chen",
+        "language": "en",
+        "body": "DOCUMENT: Atlas Consultancy Renewal Appendix\nVERSION: v2.1 (Draft)\nDATE: 2026-04-06\nPARTIES: Atlas Ltd and Rowan Chen Consultancy\n\nSTATUS: PENDING SIGNATURE\n\nTERMS:\n1. Rebate Structure: This draft proposes a revised rebate rate for the period commencing 2026-05-01. The specific numerical rate is currently under negotiation and is not fixed in this draft.\n2. Current Effective Rate: Until this appendix is countersigned, the 5% rebate established in Renewal Agreement v2.0 (signed 2026-02-26) remains active for all invoicing in March and April 2026.\n3. Data Processing: Production data exchange remains blocked until DPA-42 v3.0 is countersigned.\n\nNOTE: Do not apply any new rate to April invoices. The 5% term is binding until superseded by a signed document."
+      },
+      "probe": {
+        "question": "Is the 5% rebate active for April?",
+        "answer": "the 5% rebate established in Renewal Agreement v2.0 (signed 2026-02-26) remains active for all invoicing in March and April 2026"
+      }
+    },
+    {
+      "id": "qwen-rowan-chen-8-2",
+      "user": "Priya, checking the rebate for the April invoice. Is it still 5%?",
+      "assistant": "Yes, 5% is still active. The v2.1 draft is pending signature, so no new rate applies yet.",
+      "artifact": {
+        "title": "RE: Atlas Renewal Appendix v2.1 Status",
+        "from": "Priya Shah",
+        "to": "Rowan Chen",
+        "language": "en",
+        "body": "Hi Rowan,\n\nRegarding the Atlas Renewal Appendix v2.1: The document is currently pending signature. Malik Ahmed has not yet countersigned the draft.\n\nTherefore, the 5% rebate term from the signed Renewal Agreement v2.0 remains active for all invoices issued in April 2026. Please ensure the April invoice reflects the 5% deduction.\n\nAny changes to the rebate rate will only take effect once the new appendix is fully executed. We are aiming to finalize the signature by 21 April, but until then, the 5% rate stands.\n\nBest,\nPriya"
+      },
+      "probe": {
+        "question": "What is the active rebate rate for April?",
+        "answer": "the 5% rebate term from the signed Renewal Agreement v2.0 remains active for all invoices issued in April 2026"
+      }
+    }
+  ]
+}

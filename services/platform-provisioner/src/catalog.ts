@@ -118,11 +118,12 @@ export async function loadCatalog(): Promise<Map<string, ComponentCatalogEntry>>
 			componentRef: 'ceo.aven:component:data:artifacts@1',
 			schema: 'artifact_store',
 			ownerRoleSuffix: 'art_owner',
-			targetSchemaVersion: 3,
+			targetSchemaVersion: 4,
 			migrationFiles: [
 				artifactMigration('0001_core'),
 				artifactMigration('0002_upload_cleanup'),
-				artifactMigration('0003_intent_declaration_catalog')
+				artifactMigration('0003_intent_declaration_catalog'),
+				artifactMigration('0004_library_indexes')
 			],
 			externalProvisioner: 'artifact-store',
 			verifyTable: 'store_state',
@@ -149,6 +150,11 @@ export async function loadCatalog(): Promise<Map<string, ComponentCatalogEntry>>
 		}),
 		entry({
 			folder: 'actor-runs',
+			targetSchemaVersion: 2,
+			migrationFiles: ['0001_actor_runs', '0002_studio'].map((id) => ({
+				id,
+				candidates: [resolve(process.cwd(), 'components', 'actor-runs', `${id}.sql`)]
+			})),
 			componentRef: 'os.aven:component:actors:run-repository@1',
 			schema: 'aven_actor_runs',
 			ownerRoleSuffix: 'act_owner',
@@ -156,7 +162,9 @@ export async function loadCatalog(): Promise<Map<string, ComponentCatalogEntry>>
 				{
 					kind: 'os.aven:db-role:actors:api@1',
 					roleSuffix: 'act_api',
-					tables: [{ name: 'runs', privileges: ['SELECT', 'INSERT', 'UPDATE'] }]
+					tables: ['runs', 'studio_drafts', 'studio_connections', 'studio_deliveries'].map(
+						(name) => ({ name, privileges: ['SELECT', 'INSERT', 'UPDATE'] })
+					)
 				},
 				{
 					kind: 'os.aven:db-role:actors:worker@1',

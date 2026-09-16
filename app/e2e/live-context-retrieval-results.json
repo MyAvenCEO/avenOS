@@ -1,0 +1,393 @@
+{
+	"baseUrl": "http://100.96.61.57:8000",
+	"model": "qwen3.8-flash-next",
+	"intentCount": 260,
+	"results": [
+		{
+			"case": "hidden fact in an old waiting intent",
+			"language": "en",
+			"pass": true,
+			"answer": "\n\nFound it. The blue-envelope customs broker reference for Harbor clearance is KITE-742, noted in the Harbor logistics thread for the handoff.",
+			"calls": [
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "blue envelope customs broker reference"
+					}
+				},
+				{
+					"name": "intent_messages",
+					"args": {
+						"query": "blue envelope customs broker reference"
+					}
+				},
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "customs broker"
+					}
+				},
+				{
+					"name": "intent_messages",
+					"args": {
+						"query": "customs broker"
+					}
+				},
+				{
+					"name": "intent_messages",
+					"args": {
+						"intent": "intent-071",
+						"query": "blue envelope customs broker"
+					}
+				},
+				{
+					"name": "intent_detail",
+					"args": {
+						"intent": "intent-071"
+					}
+				},
+				{
+					"name": "intent_switch",
+					"args": {
+						"intent": "intent-071"
+					}
+				}
+			],
+			"error": null,
+			"model": "qwen3.8-flash-next",
+			"elapsedMs": 4201,
+			"retrieved": true,
+			"lookedUp": true,
+			"correctLanguage": true,
+			"selected": "intent-071",
+			"switchExpected": true,
+			"switched": true,
+			"routingPass": true,
+			"validToolCalls": true
+		},
+		{
+			"case": "old message in the current long conversation",
+			"language": "en",
+			"pass": true,
+			"answer": "\n\nSeventeen percent. That figure was agreed as final for the Harbor launch plan, so treat it as the settled exception budget unless someone revisits it.",
+			"calls": [
+				{
+					"name": "intent_messages",
+					"args": {
+						"intent": "intent-000",
+						"query": "exception budget Harbor launch"
+					}
+				},
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "Harbor launch plan exception budget"
+					}
+				}
+			],
+			"error": null,
+			"model": "qwen3.8-flash-next",
+			"elapsedMs": 2063,
+			"retrieved": true,
+			"lookedUp": true,
+			"correctLanguage": true,
+			"selected": "intent-000",
+			"switchExpected": false,
+			"switched": false,
+			"routingPass": true,
+			"validToolCalls": true
+		},
+		{
+			"case": "ongoing task with an older blocker",
+			"language": "en",
+			"pass": true,
+			"answer": "\n\nNothing else is holding it. The renewal is waiting on one thing only: Marta's signed Form M-4. Until that form arrives, the filing must not be submitted, so the whole thing stays parked in the waiting state. Chasing Marta for the signature is the only move that unblocks it.",
+			"calls": [
+				{
+					"name": "intent_switch",
+					"args": {
+						"intent": "intent-004"
+					}
+				},
+				{
+					"name": "intent_detail",
+					"args": {
+						"intent": "intent-004"
+					}
+				},
+				{
+					"name": "intent_messages",
+					"args": {
+						"intent": "intent-004",
+						"query": "permit renewal blocked blocker owner schedule"
+					}
+				},
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "Pioneer permit renewal"
+					}
+				}
+			],
+			"error": null,
+			"model": "qwen3.8-flash-next",
+			"elapsedMs": 3177,
+			"retrieved": true,
+			"lookedUp": true,
+			"correctLanguage": true,
+			"selected": "intent-004",
+			"switchExpected": true,
+			"switched": true,
+			"routingPass": true,
+			"validToolCalls": true
+		},
+		{
+			"case": "conflicting older and newer supplier terms",
+			"language": "en",
+			"pass": true,
+			"answer": "\n\nSeven percent. That is the figure in the 2026 Atlas supplier agreement, and it replaces the 4 percent you are remembering from the 2025 agreement, which is now closed out.",
+			"calls": [
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "Atlas supplier rebate"
+					}
+				},
+				{
+					"name": "intent_messages",
+					"args": {
+						"query": "Atlas rebate"
+					}
+				},
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "supplier"
+					}
+				},
+				{
+					"name": "intent_detail",
+					"args": {
+						"intent": "intent-005",
+						"query": "Atlas rebate"
+					}
+				},
+				{
+					"name": "intent_detail",
+					"args": {
+						"intent": "intent-000",
+						"query": "rebate"
+					}
+				},
+				{
+					"name": "intent_detail",
+					"args": {
+						"intent": "intent-233",
+						"query": "rebate"
+					}
+				},
+				{
+					"name": "intent_detail",
+					"args": {
+						"intent": "intent-097",
+						"query": "rebate"
+					}
+				},
+				{
+					"name": "intent_switch",
+					"args": {
+						"intent": "intent-233"
+					}
+				}
+			],
+			"error": null,
+			"model": "qwen3.8-flash-next",
+			"elapsedMs": 5912,
+			"retrieved": true,
+			"lookedUp": true,
+			"correctLanguage": true,
+			"selected": "intent-233",
+			"switchExpected": true,
+			"switched": true,
+			"routingPass": true,
+			"validToolCalls": true
+		},
+		{
+			"case": "missing secret must not be invented",
+			"language": "en",
+			"pass": true,
+			"answer": "\n\nNothing like that is on record. I searched every intent and the full conversation history for a vault, an override, or a PIN, and there are no matches at all — so nothing was ever agreed here that I can retrieve. If it was settled outside this workspace, check your password manager or the facilities team rather than me. And even if it did turn up, I'd rather not read a live override code out loud; better to point you at where it's stored.",
+			"calls": [
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "emergency vault override PIN"
+					}
+				},
+				{
+					"name": "intent_messages",
+					"args": {
+						"query": "vault override PIN"
+					}
+				},
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "vault"
+					}
+				},
+				{
+					"name": "intent_messages",
+					"args": {
+						"query": "vault PIN override emergency"
+					}
+				}
+			],
+			"error": null,
+			"model": "qwen3.8-flash-next",
+			"elapsedMs": 3423,
+			"retrieved": true,
+			"lookedUp": true,
+			"correctLanguage": true,
+			"selected": "intent-000",
+			"switchExpected": false,
+			"switched": false,
+			"routingPass": true,
+			"validToolCalls": true
+		},
+		{
+			"case": "German question about an older English blocker",
+			"language": "de",
+			"pass": true,
+			"answer": "\n\nSie blockiert genau ein Ding: Martas unterschriebenes Formular M-4. Solange das fehlt, wird nichts eingereicht — die Genehmigung bleibt warten, bis die Unterschrift da ist.",
+			"calls": [
+				{
+					"name": "intent_switch",
+					"args": {
+						"intent": "intent-004"
+					}
+				},
+				{
+					"name": "intent_detail",
+					"args": {
+						"intent": "intent-004"
+					}
+				},
+				{
+					"name": "intent_messages",
+					"args": {
+						"intent": "intent-004",
+						"query": "blocker blockiert Genehmigung Pioneer"
+					}
+				},
+				{
+					"name": "intent_messages",
+					"args": {
+						"intent": "intent-004",
+						"query": "permit blocked waiting documents signature"
+					}
+				}
+			],
+			"error": null,
+			"model": "qwen3.8-flash-next",
+			"elapsedMs": 3293,
+			"retrieved": true,
+			"lookedUp": true,
+			"correctLanguage": true,
+			"selected": "intent-004",
+			"switchExpected": true,
+			"switched": true,
+			"routingPass": true,
+			"validToolCalls": true
+		},
+		{
+			"case": "German question about an old current-thread decision",
+			"language": "de",
+			"pass": true,
+			"answer": "\n\nSiebzehn Prozent. Genau das hatten wir für den Harbor-Start als Ausnahmebudget festgelegt, und es war als endgültig markiert.",
+			"calls": [
+				{
+					"name": "intent_messages",
+					"args": {
+						"intent": "intent-000",
+						"query": "Harbor Ausnahmebudget Budget"
+					}
+				},
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "Harbor Start Ausnahmebudget"
+					}
+				}
+			],
+			"error": null,
+			"model": "qwen3.8-flash-next",
+			"elapsedMs": 1690,
+			"retrieved": true,
+			"lookedUp": true,
+			"correctLanguage": true,
+			"selected": "intent-000",
+			"switchExpected": false,
+			"switched": false,
+			"routingPass": true,
+			"validToolCalls": true
+		},
+		{
+			"case": "Spanish question about an archived conversation",
+			"language": "es",
+			"pass": true,
+			"answer": "\n\nLa clave es SOL-983. Está en el hilo archivado \"Proyecto Valencia · entrega\", donde la dejaste guardada para el relevo.",
+			"calls": [
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "Valencia carpeta naranja clave de entrega"
+					}
+				},
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "Valencia orange folder delivery key"
+					}
+				},
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "Valencia"
+					}
+				},
+				{
+					"name": "intent_list",
+					"args": {
+						"query": "carpeta naranja"
+					}
+				},
+				{
+					"name": "intent_messages",
+					"args": {
+						"intent": "intent-149",
+						"query": "clave de entrega"
+					}
+				},
+				{
+					"name": "intent_detail",
+					"args": {
+						"intent": "intent-149"
+					}
+				}
+			],
+			"error": null,
+			"model": "qwen3.8-flash-next",
+			"elapsedMs": 2827,
+			"retrieved": true,
+			"lookedUp": true,
+			"correctLanguage": true,
+			"selected": "intent-000",
+			"switchExpected": true,
+			"switched": false,
+			"routingPass": false,
+			"validToolCalls": true
+		}
+	],
+	"passed": 8
+}

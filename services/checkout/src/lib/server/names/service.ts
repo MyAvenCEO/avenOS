@@ -5,9 +5,8 @@
 // Policy: requesting a name does NOT reserve it — several people may request
 // the same name and each gets a claim email. The name is reserved (for
 // NAME_RESERVATION_TTL_MINUTES, default 5) only when a claim link is clicked,
-// i.e. once the email is confirmed. ONE name per account for now — additional
-// names will be sold through the app; the web flow refuses a second purchase
-// before payment is reachable. Refunds revoke AND lock the name.
+// i.e. once the email is confirmed. A subject may own several distinct names;
+// each paid name provisions its own customer environment. Refunds revoke AND lock the name.
 import { randomUUID } from 'node:crypto'
 import type { ProvisionedAccount } from '@avenos/aven-identity'
 import type pg from 'pg'
@@ -17,11 +16,15 @@ import { writeAudit } from '../audit.js'
 import type { PaymentEvent, PaymentProvider } from '../billing/provider.js'
 import type { NameServiceConfig } from '../config.js'
 import { isBearerToken, randomToken, sha256Hex } from '../crypto.js'
-import { type Queryable, withTransaction } from '../db.js'
+import { withTransaction } from '../db.js'
 import { AppError } from '../errors.js'
 import type { Notifier } from '../notifications.js'
 
-export type AccountProvisioner = (email: string, source: string) => Promise<ProvisionedAccount>
+export type AccountProvisioner = (
+	email: string,
+	source: string,
+	browserLanguage?: string
+) => Promise<ProvisionedAccount>
 
 // Injected from the approval-queue module: follow-up work triggered by a
 // completed purchase (e.g. provisioning the customer database), enqueued in
@@ -44,6 +47,7 @@ interface HoldRow {
 	email_confirmed_at: Date | null
 	reserved_until: Date | null
 	expires_at: Date
+	browser_language: string
 }
 
 export class NameService {
@@ -112,25 +116,6 @@ export class NameService {
 		await client.query("SELECT pg_advisory_xact_lock(hashtext('name:' || $1))", [name])
 	}
 
-	// One name per account (for now): true when the email already owns one.
-	private async emailOwnsName(connection: Queryable, email: string): Promise<boolean> {
-		const customer = (
-			await connection.query<{ subject_id: string }>(
-				'SELECT subject_id FROM checkout_customers WHERE lower(email)=lower($1)',
-				[email]
-			)
-		).rows[0]
-		if (!customer) return false
-		return Boolean(
-			(
-				await connection.query(
-					"SELECT 1 FROM names WHERE owner_user_id=$1 AND status='owned' LIMIT 1",
-					[customer.subject_id]
-				)
-			).rows[0]
-		)
-	}
-
 	// Registers a purchase request and emails the unique claim link. Nothing is
 	// reserved yet — the click is both the email confirmation and the start of
 	// the short reservation window. Re-requesting rotates the token (the latest
@@ -140,8 +125,6 @@ export class NameService {
 		const check = await this.availability(name)
 		if (!check.available && check.reason !== 'NAME_HELD')
 			throw new AppError(409, check.reason ?? 'NAME_UNAVAILABLE', 'That name is not available.')
-		if (await this.emailOwnsName(this.pool, email))
-			throw new AppError(409, 'NAME_LIMIT_REACHED', 'This email already owns a name.')
 		// An active reservation by someone else doesn't forbid requesting: if
 		// they don't pay, the window lapses and this claim link still works.
 
@@ -161,7 +144,8 @@ export class NameService {
 					`UPDATE name_holds SET claim_token_hash=$1,
 					   tier = COALESCE(NULLIF($4, ''), tier),
 					   salutation = COALESCE(NULLIF($5, ''), salutation),
-					   idea = COALESCE(NULLIF($6, ''), idea)
+					   idea = COALESCE(NULLIF($6, ''), idea),
+					   browser_language = COALESCE(NULLIF($7, ''), browser_language)
 					 WHERE name=$2 AND lower(email)=lower($3) AND expires_at >= now() RETURNING expires_at`,
 					[
 						sha256Hex(token),
@@ -169,7 +153,8 @@ export class NameService {
 						email,
 						origin.tier ?? '',
 						origin.salutation ?? '',
-						origin.idea ?? ''
+						origin.idea ?? '',
+						origin.browserLanguage ?? ''
 					]
 				)
 			).rows[0] as { expires_at: Date } | undefined
@@ -178,8 +163,8 @@ export class NameService {
 				expiresAt = new Date(Date.now() + this.config.NAME_HOLD_TTL_HOURS * 3_600_000)
 				const holdId = randomUUID()
 				await client.query(
-					`INSERT INTO name_holds (id,name,email,claim_token_hash,created_at,expires_at,tier,salutation,idea)
-					 VALUES ($1,$2,$3,$4,now(),$5,$6,$7,$8)`,
+					`INSERT INTO name_holds (id,name,email,claim_token_hash,created_at,expires_at,tier,salutation,idea,browser_language)
+					 VALUES ($1,$2,$3,$4,now(),$5,$6,$7,$8,$9)`,
 					[
 						holdId,
 						name,
@@ -188,7 +173,8 @@ export class NameService {
 						expiresAt,
 						origin.tier ?? '',
 						origin.salutation ?? '',
-						origin.idea ?? ''
+						origin.idea ?? '',
+						origin.browserLanguage ?? ''
 					]
 				)
 				await writeAudit(client, {
@@ -243,9 +229,6 @@ export class NameService {
 			const owned = (await client.query('SELECT 1 FROM names WHERE name=$1', [hold.name])).rows[0]
 			if (owned)
 				throw new AppError(410, 'NAME_UNAVAILABLE', 'This name has been purchased in the meantime.')
-			// One name per account: refuse before payment is reachable.
-			if (await this.emailOwnsName(client, hold.email))
-				throw new AppError(410, 'NAME_LIMIT_REACHED', 'This email already owns a name.')
 			const otherReservation = (
 				await client.query(
 					'SELECT 1 FROM name_holds WHERE name=$1 AND id<>$2 AND reserved_until >= now()',
@@ -321,8 +304,8 @@ export class NameService {
 			).rows[0] as { status: string; checkout_id: string | null } | undefined
 			const hold = (
 				await client.query(
-					'SELECT * FROM name_holds WHERE id=$1 OR name=$2 ORDER BY (id=$1) DESC LIMIT 1',
-					[String(event.metadata.holdId ?? ''), name]
+					'SELECT * FROM name_holds WHERE id=$1 OR checkout_id=$2 ORDER BY (id=$1) DESC LIMIT 1',
+					[String(event.metadata.holdId ?? ''), event.checkoutId]
 				)
 			).rows[0] as HoldRow | undefined
 			if (existing) {
@@ -341,17 +324,32 @@ export class NameService {
 				}
 				return { granted: false }
 			}
-			const email = (event.email ?? hold?.email ?? '').toLowerCase()
-			if (!email)
+			if (!hold?.email_confirmed_at || hold.name !== name || hold.checkout_id !== event.checkoutId)
 				throw new AppError(
 					400,
-					'WEBHOOK_PAYLOAD_INVALID',
-					'The payment event carries no customer email.'
+					'EMAIL_NOT_CONFIRMED',
+					'The purchase is not linked to a confirmed email address.'
 				)
+			const email = hold.email.toLowerCase()
+			if (event.email && event.email.toLowerCase() !== email)
+				await writeAudit(client, {
+					eventType: 'name.checkout_email_mismatch',
+					metadata: {
+						name,
+						eventId: event.id,
+						checkoutId: event.checkoutId,
+						confirmedEmail: email,
+						checkoutEmail: event.email.toLowerCase()
+					}
+				})
 
-			// Account creation happens exactly here: the buyer proved control of
-			// the inbox by completing the emailed checkout.
-			const provisioned = await this.provisionAccount(email, 'name-purchase')
+			// Account creation happens exactly here: the checkout can only exist
+			// after the buyer opened its emailed claim link and confirmed the inbox.
+			const provisioned = await this.provisionAccount(
+				email,
+				'name-purchase',
+				hold.browser_language || undefined
+			)
 			const user = provisioned.account
 			await client.query(
 				`INSERT INTO checkout_customers(subject_id,email,created_at,updated_at) VALUES($1,$2,now(),now())

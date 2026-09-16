@@ -40,6 +40,11 @@ interface ArtifactContent {
 }
 
 const PUBLICATION_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const
+let activeDocumentRuns = 0
+
+export function clientDocumentRunsBusy(): boolean {
+	return activeDocumentRuns > 0
+}
 
 function publicationErrorMessage(error: unknown): string {
 	return transportError(error).message
@@ -52,9 +57,14 @@ const documentModelGateway = singleton(
 	'aven.document-model-gateway',
 	() => new LlmDocumentModelGateway()
 )
-const actors = singleton('aven.document-processing-actors', () =>
-	createDocumentActors(new BrowserDocumentDecoder(), documentModelGateway)
-)
+const decoder = singleton('aven.document-decoder', () => new BrowserDocumentDecoder())
+const createActors = () => createDocumentActors(decoder, documentModelGateway)
+const actors = singleton('aven.document-processing-actors', createActors)
+
+export async function clientDocumentParallelism(): Promise<number> {
+	const status = await documentModelGateway.status()
+	return status.available ? Math.min(32, Math.max(1, status.maxParallelism ?? 1)) : 1
+}
 
 class TauriClientArtifactGateway implements ClientArtifactGateway {
 	lookup(publicationId: string): Promise<CommittedClientRun | null> {
@@ -99,10 +109,13 @@ const documentSources = singleton(
 const localDocumentRuntime = singleton(
 	'aven.local-document-runtime',
 	() =>
-		new DocumentProcessingRuntime(actors, publicationGateway, () => documentModelGateway.status(), {
-			executionEnvironment: 'local',
-			runtimeHost: 'desktop'
-		})
+		new DocumentProcessingRuntime(
+			actors,
+			publicationGateway,
+			() => documentModelGateway.status(),
+			{ executionEnvironment: 'local', runtimeHost: 'desktop' },
+			createActors
+		)
 )
 class TauriPlanRunnerClient implements PlanRunnerClient {
 	start(command: PlanRunStartCommand): Promise<PlanRunHandle> {
@@ -179,6 +192,7 @@ export async function processClientDocument(
 	reconcile = true,
 	csvConfirmationArtifactId?: string
 ): Promise<void> {
+	activeDocumentRuns++
 	let request = documentRunStartRequest(
 		{ artifactId, originalName, ...(declaredMediaType && { declaredMediaType }) },
 		executionEnvironment
@@ -238,6 +252,8 @@ export async function processClientDocument(
 		}
 	} catch (error) {
 		clientDocumentRuntime.fail(request, new Error(transportError(error).message))
+	} finally {
+		activeDocumentRuns--
 	}
 }
 

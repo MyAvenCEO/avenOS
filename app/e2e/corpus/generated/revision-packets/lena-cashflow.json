@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-lena-weber-8-1",
+      "user": "Kannst du den April-Auszug abgleichen? PayPal hat Amira die 42,50 € erstattet, aber der Abgang vom Geschäftskonto fehlt mir noch. Evas Rechnung müsste auch drin sein.",
+      "assistant": "Der April-Auszug enthält Evas 350-EUR-Überweisung vom 15.04. PayPal bestätigte Amiras Kundenerstattung Ende März; der zugehörige Händlerabgang ist auf diesem Geschäftskonto bis 18.04. noch nicht verbucht. Ich markiere ihn als offenen Abstimmungsposten.",
+      "artifact": {
+        "title": "Kontoauszug Weber Keramik Geschäftskonto",
+        "from": "noreply@bank.test",
+        "to": null,
+        "language": "de",
+        "body": "Kontoauszug\nKonto: Weber Keramik Geschäftskonto ****5602\nZeitraum: 01.04.2026 - 18.04.2026\n\nSaldo am Anfang: 1.450,00 EUR\n\nBuchungen:\n05.04.2026 | Gutschrift | Stripe Payout | +210,00 EUR\n10.04.2026 | SEPA-Lastschrift | Nordton Glaze | -85,00 EUR\n15.04.2026 | SEPA-Überweisung | Eva Richter | -350,00 EUR\n\nSaldo am Ende: 1.225,00 EUR\n\nHinweis: PayPal-Kundenerstattung 42,50 EUR an Amira Yilmaz (REF-2026-0328-AY): am 31.03. vom Zahlungsdienst bestätigt. Der zugehörige Händlerabgang ist auf diesem Bankkonto bis 18.04. noch nicht verbucht; Abstimmungsposten PP-2026-0328-AY bleibt offen."
+      },
+      "probe": {
+        "question": "Was ist der Saldo am Ende des Zeitraums 01.04.2026 - 18.04.2026?",
+        "answer": "Saldo am Ende: 1.225,00 EUR"
+      }
+    }
+  ]
+}

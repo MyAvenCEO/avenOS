@@ -15,7 +15,10 @@ use std::sync::{
 use std::time::Duration;
 use tauri::Emitter;
 
-use crate::auth::{api_endpoint, service_access_token, session_token, AuthState};
+use crate::auth::{
+    api_endpoint, customer_session, customer_session_identity, service_access_token, session_token,
+    AuthState, CustomerSession,
+};
 
 const MAX_FILE_BYTES: u64 = 128 * 1024 * 1024;
 const HASH_BUFFER_BYTES: usize = 256 * 1024;
@@ -230,7 +233,7 @@ fn valid_artifact_id(value: &str) -> bool {
 }
 
 fn processing_status(
-    session: String,
+    session: CustomerSession,
     artifact_id: String,
 ) -> Result<ArtifactProcessingLookup, String> {
     if !valid_artifact_id(&artifact_id) {
@@ -284,12 +287,12 @@ fn customer_path(environment_id: &str, segment: &str, path: &str) -> Result<Stri
 }
 
 fn customer_access(
-    session: &str,
+    session: &CustomerSession,
     component_ref: &str,
     segment: &str,
     path: &str,
 ) -> Result<(String, String), String> {
-    let token = service_access_token(session)?;
+    let token = service_access_token(&session.token)?;
     let environments = api_json_with_timeout(
         token.clone(),
         "GET",
@@ -299,7 +302,6 @@ fn customer_access(
     )?;
     let environments: CustomerEnvironments = serde_json::from_value(environments)
         .map_err(|error| format!("Invalid customer environment list: {error}"))?;
-    let configured = option_env!("AVEN_ENVIRONMENT_ID");
     let eligible: Vec<&CustomerEnvironment> = environments
         .environments
         .iter()
@@ -308,7 +310,7 @@ fn customer_access(
                 && environment.components.iter().any(|component| {
                     component.component_ref == component_ref && component.observed_state == "ready"
                 })
-                && configured.is_none_or(|id| environment.id == id)
+                && environment.id == session.environment_id
         })
         .collect();
     let environment = match eligible.as_slice() {
@@ -328,7 +330,7 @@ fn customer_access(
 }
 
 fn customer_json(
-    session: String,
+    session: CustomerSession,
     component_ref: &str,
     segment: &str,
     method: &str,
@@ -340,7 +342,7 @@ fn customer_json(
 }
 
 fn intent_json(
-    session: String,
+    session: CustomerSession,
     method: &str,
     path: String,
     body: Option<String>,
@@ -348,12 +350,57 @@ fn intent_json(
     customer_json(session, INTENT_COMPONENT, "intents", method, path, body)
 }
 
+fn studio_path(operation: &str) -> Option<&'static str> {
+    if matches!(
+        operation,
+        "catalog" | "present" | "state" | "inspect" | "explore" | "preview" | "compare"
+    ) {
+        return Some("/api/actor-runs/studio/query");
+    }
+    if matches!(
+        operation,
+        "draft" | "publish" | "start" | "sample" | "connect" | "control" | "sync" | "run-control"
+    ) {
+        return Some("/api/actor-runs/studio/command");
+    }
+    None
+}
+
+#[tauri::command]
+pub async fn studio_request(
+    command: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let operation = command
+        .get("operation")
+        .and_then(|v| v.as_str())
+        .ok_or("A Studio operation is required.")?;
+    let path = studio_path(operation).ok_or("Unknown Studio operation.")?;
+    let body = serde_json::to_string(&command).map_err(|e| e.to_string())?;
+    if body.len() > 256 * 1024 {
+        return Err("The Studio request is too large.".into());
+    }
+    let token = customer_session(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        customer_json(
+            token,
+            ACTOR_RUN_COMPONENT,
+            "actor-runs",
+            "POST",
+            path.into(),
+            Some(body),
+        )
+    })
+    .await
+    .map_err(|e| format!("Studio request failed: {e}"))?
+}
+
 #[tauri::command]
 pub async fn actor_run_start(
     command: serde_json::Value,
     state: tauri::State<'_, AuthState>,
 ) -> Result<serde_json::Value, String> {
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     let body = serde_json::to_string(&command)
         .map_err(|error| format!("Invalid Actor Runner command: {error}"))?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -378,7 +425,7 @@ pub async fn actor_run_status(
     if !valid_artifact_id(&run_id) {
         return Err("The Actor Runner run ID is invalid.".to_string());
     }
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     tauri::async_runtime::spawn_blocking(move || {
         customer_json(
             token,
@@ -406,7 +453,7 @@ pub async fn actor_run_control(
     {
         return Err("Invalid run control request.".to_string());
     }
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     tauri::async_runtime::spawn_blocking(move || {
         customer_json(
             token,
@@ -422,7 +469,7 @@ pub async fn actor_run_control(
 }
 
 fn artifact_json(
-    session: String,
+    session: CustomerSession,
     method: &str,
     path: String,
     body: Option<String>,
@@ -505,7 +552,11 @@ fn api_json_with_timeout(
     serde_json::from_str(&body).map_err(|error| format!("Invalid intent state: {error}"))
 }
 
-fn artifact_content(session: String, artifact_id: String) -> Result<ArtifactContent, String> {
+fn artifact_content(
+    session: CustomerSession,
+    artifact_id: String,
+    maximum_bytes: u64,
+) -> Result<ArtifactContent, String> {
     let path = format!("/api/artifacts/{artifact_id}/content");
     let (token, path) = customer_access(&session, ARTIFACT_COMPONENT, "artifacts", &path)?;
     let response = ureq::AgentBuilder::new()
@@ -527,10 +578,10 @@ fn artifact_content(session: String, artifact_id: String) -> Result<ArtifactCont
     let mut bytes = Vec::new();
     response
         .into_reader()
-        .take(MAX_FILE_BYTES + 1)
+        .take(maximum_bytes + 1)
         .read_to_end(&mut bytes)
         .map_err(|error| format!("Could not read artifact content: {error}"))?;
-    if bytes.len() as u64 > MAX_FILE_BYTES {
+    if bytes.len() as u64 > maximum_bytes {
         return Err("Artifact content exceeds the desktop preview limit.".to_string());
     }
     Ok(ArtifactContent {
@@ -547,7 +598,7 @@ fn upload(
     observed_at: String,
     execution_environment: String,
     path: PathBuf,
-    session: String,
+    session: CustomerSession,
 ) -> Result<UploadedArtifact, String> {
     let metadata = path
         .metadata()
@@ -685,7 +736,7 @@ pub async fn artifact_processing_status(
     artifact_id: String,
     state: tauri::State<'_, AuthState>,
 ) -> Result<ArtifactProcessingLookup, String> {
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     tauri::async_runtime::spawn_blocking(move || processing_status(token, artifact_id))
         .await
         .map_err(|error| format!("Artifact processing status task failed: {error}"))?
@@ -904,7 +955,7 @@ pub async fn artifact_query(
     if let Some(cursor) = after {
         path.push_str(&format!("&after={cursor}"));
     }
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     tauri::async_runtime::spawn_blocking(move || artifact_json(token, "GET", path, None))
         .await
         .map_err(|error| format!("Artifact query task failed: {error}"))?
@@ -918,7 +969,7 @@ pub async fn artifact_client_run_get(
     if !valid_artifact_id(&publication_id) {
         return Err("The publication ID is invalid.".to_string());
     }
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     tauri::async_runtime::spawn_blocking(move || {
         artifact_json(
             token,
@@ -940,7 +991,7 @@ pub async fn artifact_client_run_publish(
     if !valid_artifact_id(&publication_id) {
         return Err("The publication ID is invalid.".to_string());
     }
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     let body = serde_json::to_string(&run)
         .map_err(|error| format!("Invalid client actor run: {error}"))?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -956,13 +1007,64 @@ pub async fn artifact_client_run_publish(
 }
 
 #[tauri::command]
-pub async fn intent_list(state: tauri::State<'_, AuthState>) -> Result<serde_json::Value, String> {
-    let token = session_token(&state)?;
-    tauri::async_runtime::spawn_blocking(move || {
-        intent_json(token, "GET", "/api/intents".into(), None)
-    })
-    .await
-    .map_err(|error| format!("Intent list task failed: {error}"))?
+pub async fn intent_search(
+    input: serde_json::Value,
+    messages: Option<bool>,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let path = {
+        let object = input.as_object().ok_or("Search input must be an object.")?;
+        let mut query_url: tauri::Url = "https://query.invalid"
+            .parse()
+            .map_err(|_| "Invalid query base")?;
+        let mut query = query_url.query_pairs_mut();
+        for (key, value) in object {
+            if !["query", "cursor", "limit", "intent", "state"].contains(&key.as_str()) {
+                return Err("Unknown search field.".into());
+            }
+            if value.is_null() {
+                continue;
+            }
+            let text = match value {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                _ => return Err("Invalid search value.".into()),
+            };
+            query.append_pair(key, &text);
+        }
+        format!(
+            "/api/intents/{}?{}",
+            if messages.unwrap_or(false) {
+                "messages"
+            } else {
+                "search"
+            },
+            query.finish().query().unwrap_or("")
+        )
+    };
+    let token = customer_session(&state)?;
+    tauri::async_runtime::spawn_blocking(move || intent_json(token, "GET", path, None))
+        .await
+        .map_err(|error| format!("Intent search task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn intent_message_get(
+    message_id: String,
+    offset: Option<u32>,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !valid_artifact_id(&message_id) {
+        return Err("Invalid message ID.".into());
+    }
+    let path = format!(
+        "/api/intents/messages/{message_id}?offset={}",
+        offset.unwrap_or(0)
+    );
+    let token = customer_session(&state)?;
+    tauri::async_runtime::spawn_blocking(move || intent_json(token, "GET", path, None))
+        .await
+        .map_err(|error| format!("Message read task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -973,7 +1075,7 @@ pub async fn intent_get(
     if !valid_artifact_id(&intent_id) {
         return Err("The intent ID is invalid.".to_string());
     }
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     tauri::async_runtime::spawn_blocking(move || {
         intent_json(token, "GET", format!("/api/intents/{intent_id}"), None)
     })
@@ -990,7 +1092,7 @@ pub async fn intent_append_contribution(
     if !valid_artifact_id(&intent_id) {
         return Err("The intent ID is invalid.".to_string());
     }
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     let body = serde_json::to_string(&contribution)
         .map_err(|error| format!("Invalid contribution: {error}"))?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -1062,7 +1164,7 @@ async fn intent_command(
     if !valid_artifact_id(&intent_id) {
         return Err("The intent ID is invalid.".to_string());
     }
-    let token = session_token(state)?;
+    let token = customer_session(state)?;
     let body = serde_json::to_string(&command)
         .map_err(|error| format!("Invalid intent command: {error}"))?;
     let suffix = action.map_or_else(String::new, |value| format!("/{value}"));
@@ -1078,18 +1180,47 @@ async fn intent_command(
     .map_err(|error| format!("Intent command task failed: {error}"))?
 }
 
+fn search_scope_key(endpoint: &str, subject: &str) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"aven-research-v2\0");
+    digest.update(endpoint.as_bytes());
+    digest.update(b"\0");
+    digest.update(subject.as_bytes());
+    format!("{:x}", digest.finalize())
+}
+
+/// Opaque namespace for rebuildable local search data. Never returns a token.
+#[tauri::command]
+pub async fn artifact_search_scope(state: tauri::State<'_, AuthState>) -> Result<String, String> {
+    let (session, subject) = customer_session_identity(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let (_, path) =
+            customer_access(&session, ARTIFACT_COMPONENT, "artifacts", "/api/artifacts")?;
+        Ok(search_scope_key(&api_endpoint(&path), &subject))
+    })
+    .await
+    .map_err(|error| format!("Search context task failed: {error}"))?
+}
+
 #[tauri::command]
 pub async fn artifact_content_get(
     artifact_id: String,
+    max_bytes: Option<u64>,
     state: tauri::State<'_, AuthState>,
 ) -> Result<ArtifactContent, String> {
     if !valid_artifact_id(&artifact_id) {
         return Err("The artifact ID is invalid.".to_string());
     }
-    let token = session_token(&state)?;
-    tauri::async_runtime::spawn_blocking(move || artifact_content(token, artifact_id))
-        .await
-        .map_err(|error| format!("Artifact content task failed: {error}"))?
+    let token = customer_session(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        artifact_content(
+            token,
+            artifact_id,
+            max_bytes.unwrap_or(MAX_FILE_BYTES).min(MAX_FILE_BYTES),
+        )
+    })
+    .await
+    .map_err(|error| format!("Artifact content task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -1100,7 +1231,7 @@ pub async fn artifact_get(
     if !valid_artifact_id(&artifact_id) {
         return Err("The artifact ID is invalid.".to_string());
     }
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     tauri::async_runtime::spawn_blocking(move || {
         artifact_json(token, "GET", format!("/api/artifacts/{artifact_id}"), None)
     })
@@ -1116,7 +1247,7 @@ pub async fn artifact_evidence_get(
     if !valid_artifact_id(&artifact_id) {
         return Err("The artifact ID is invalid.".to_string());
     }
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     tauri::async_runtime::spawn_blocking(move || {
         artifact_json(
             token,
@@ -1130,10 +1261,37 @@ pub async fn artifact_evidence_get(
 }
 
 #[tauri::command]
+pub async fn artifact_inventory_page(
+    cursor: Option<String>,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let path = {
+        let mut query_url: tauri::Url = "https://query.invalid"
+            .parse()
+            .map_err(|_| "Invalid query base")?;
+        let mut query = query_url.query_pairs_mut();
+        if let Some(value) = cursor {
+            if value.len() > 2048 {
+                return Err("Invalid cursor".into());
+            }
+            query.append_pair("cursor", &value);
+        }
+        format!(
+            "/api/artifacts/inventory?{}",
+            query.finish().query().unwrap_or("")
+        )
+    };
+    let token = customer_session(&state)?;
+    tauri::async_runtime::spawn_blocking(move || artifact_json(token, "GET", path, None))
+        .await
+        .map_err(|error| format!("Source inventory failed: {error}"))?
+}
+
+#[tauri::command]
 pub async fn artifact_store_list(
     state: tauri::State<'_, AuthState>,
 ) -> Result<serde_json::Value, String> {
-    let token = session_token(&state)?;
+    let token = customer_session(&state)?;
     tauri::async_runtime::spawn_blocking(move || {
         artifact_json(token, "GET", "/api/artifacts".into(), None)
     })
@@ -1141,9 +1299,92 @@ pub async fn artifact_store_list(
     .map_err(|error| format!("Artifact list task failed: {error}"))?
 }
 
+fn library_query_path(query: &serde_json::Value) -> Result<String, String> {
+    let values = query.as_object().ok_or("The library query is invalid.")?;
+    let mut endpoint = tauri::Url::parse("http://localhost/api/artifacts/library")
+        .map_err(|error| format!("Invalid library path: {error}"))?;
+    {
+        let mut parameters = endpoint.query_pairs_mut();
+        for (key, value) in values {
+            if value.is_null() {
+                continue;
+            }
+            if ![
+                "collection",
+                "category",
+                "search",
+                "sourceId",
+                "sort",
+                "direction",
+                "after",
+                "limit",
+            ]
+            .contains(&key.as_str())
+            {
+                return Err("The library query field is invalid.".into());
+            }
+            let text = value
+                .as_str()
+                .map_or_else(|| value.to_string(), str::to_owned);
+            if text.len() > 4096 {
+                return Err("The library query is too long.".into());
+            }
+            parameters.append_pair(key, &text);
+        }
+    }
+    Ok(format!(
+        "/api/artifacts/library?{}",
+        endpoint.query().unwrap_or("")
+    ))
+}
+
+#[tauri::command]
+pub async fn artifact_library(
+    query: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let path = library_query_path(&query)?;
+    let token = customer_session(&state)?;
+    tauri::async_runtime::spawn_blocking(move || artifact_json(token, "GET", path, None))
+        .await
+        .map_err(|error| format!("Library query task failed: {error}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_cache_namespace_separates_environment_and_user() {
+        let first = search_scope_key("https://a.test/db-one/artifacts", "user-one");
+        assert_eq!(
+            first,
+            search_scope_key("https://a.test/db-one/artifacts", "user-one")
+        );
+        assert_ne!(
+            first,
+            search_scope_key("https://a.test/db-two/artifacts", "user-one")
+        );
+        assert_ne!(
+            first,
+            search_scope_key("https://a.test/db-one/artifacts", "user-two")
+        );
+        assert_eq!(first.len(), 64);
+        assert!(!first.contains("user-one"));
+    }
+
+    #[test]
+    fn library_query_encodes_search_and_rejects_routing_fields() {
+        let path = library_query_path(&serde_json::json!({
+            "collection": "documents", "search": "a&scopeId=other + Ü", "limit": 50
+        }))
+        .unwrap();
+        let endpoint = tauri::Url::parse(&format!("http://localhost{path}")).unwrap();
+        let pairs: std::collections::HashMap<_, _> = endpoint.query_pairs().collect();
+        assert_eq!(pairs.get("search").unwrap(), "a&scopeId=other + Ü");
+        assert_eq!(pairs.len(), 3);
+        assert!(library_query_path(&serde_json::json!({"scopeId": "other"})).is_err());
+    }
 
     #[test]
     fn upload_retry_uses_structured_transport_classification() {
@@ -1218,6 +1459,20 @@ mod tests {
         assert_eq!(encoded["dependsOn"][0], "inspect");
         assert_eq!(encoded["procedureKey"], "docs.decompose-pages");
         assert_eq!(encoded["attemptCount"], 2);
+    }
+
+    #[test]
+    fn studio_routes_catalog_and_presentation_through_the_read_boundary() {
+        for operation in [
+            "catalog", "present", "state", "inspect", "explore", "preview", "compare",
+        ] {
+            assert_eq!(studio_path(operation), Some("/api/actor-runs/studio/query"));
+        }
+        assert_eq!(
+            studio_path("publish"),
+            Some("/api/actor-runs/studio/command")
+        );
+        assert_eq!(studio_path("caller-selected-path"), None);
     }
 }
 

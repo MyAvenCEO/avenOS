@@ -133,9 +133,10 @@ const configured = Boolean(baseUrl && bearerToken && scopeId)
 		const payloads: Record<string, unknown> = {}
 		let localInvoiceId = ''
 		const transactionIds: string[] = []
+		const fixtureTransactionId = `TX-${randomUUID()}`
 		for (const kind of ['invoice', 'bank-statement'] as const) {
 			const source = await publishSource(`${kind}-${randomUUID()}.jpg`)
-			const localModel = new GoldenInvoiceModel(kind)
+			const localModel = new GoldenInvoiceModel(kind, fixtureTransactionId)
 			const runtime = () =>
 				new DocumentProcessingRuntime(
 					createDocumentActors(new BrowserDocumentDecoder(), localModel),
@@ -155,7 +156,7 @@ const configured = Boolean(baseUrl && bearerToken && scopeId)
 			if (kind === 'invoice') localInvoiceId = localOutput.artifactId
 			else transactionIds.push(localOutput.artifactId)
 			payloads[typeKey] = (await gateway.artifact(localOutput.artifactId)).payload
-			const remoteModel = new GoldenInvoiceModel(kind)
+			const remoteModel = new GoldenInvoiceModel(kind, fixtureTransactionId)
 			const runner = new MemoryPlanRunner(
 				createDocumentSkillExecutor({ model: remoteModel, artifactsFor: () => route })
 			)
@@ -174,8 +175,11 @@ const configured = Boolean(baseUrl && bearerToken && scopeId)
 			expect(remoteModel.requests).toEqual(localModel.requests)
 		}
 		const local = await reconcileInvoices(gateway, { openItemArtifactId: localInvoiceId })
-		expect(local.reviews).toHaveLength(1)
-		const review = local.reviews[0]!
+		const ownReviews = local.reviews.filter((item) =>
+			transactionIds.includes(item.transactionArtifactId)
+		)
+		expect(ownReviews).toHaveLength(1)
+		const review = ownReviews[0]!
 		expect(review.candidate.amountDistanceMinor).toBe(0)
 		expect(review.candidate.blockers).toContain('statement-coverage-unverified')
 		const rankInputs = (await client.producerInputs(scopeId, review.candidateArtifactId)) as {
@@ -217,8 +221,10 @@ const configured = Boolean(baseUrl && bearerToken && scopeId)
 			transactionArtifactId: review.transactionArtifactId
 		})
 		expect(
-			(await reconcileInvoices(gateway, { openItemArtifactId: localInvoiceId })).reviews
-		).toEqual([])
+			(await reconcileInvoices(gateway, { openItemArtifactId: localInvoiceId })).reviews.some(
+				(item) => item.candidateArtifactId === review.candidateArtifactId
+			)
+		).toBe(false)
 		await expect(
 			client.queryArtifacts(randomUUID(), { typeKey: 'bookkeeping.open-item' })
 		).rejects.toThrow()

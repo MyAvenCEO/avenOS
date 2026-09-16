@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-04-03",
+        "intentId": "lena-weber:glaze-supplier",
+        "kind": "support",
+        "user": "Hi Nora, checking on the sample kit status. Timo mentioned a delay but didn't give a date. When can we expect the shipment?",
+        "assistant": "Thanks for the update. I'll note the Feb 10th date for our internal planning. Please send the tracking number once it's dispatched.",
+        "artifact": {
+          "title": "RE: Sample Kit Status - Nordton Export Desk",
+          "from": "Nora Wells <n.wells@nordton.test>",
+          "to": "Lena Weber <l.weber@weber-keramik.test>",
+          "language": "en",
+          "body": "Dear Ms. Weber,\n\nThank you for your inquiry regarding the sample kit for the Matte Series (Ref: NT-SMP-2026-04).\n\nStatus: The samples are currently undergoing final quality control checks at our Berlin warehouse. Due to a minor labeling adjustment, the release date has been shifted.\n\nNext Step: The kit is now scheduled for dispatch on February 10th. We will provide the DHL tracking number via email once the package leaves our facility. Please ensure someone is available to receive the delivery, as the samples are fragile.\n\nBest regards,\nNora Wells\nQuality Support Employee\nNordton Export Desk"
+        },
+        "probe": {
+          "question": "When is the sample kit scheduled for dispatch?",
+          "answer": "February 10th"
+        }
+      },
+      {
+        "date": "2026-04-06",
+        "intentId": "lena-weber:studio-lease",
+        "kind": "legal",
+        "user": "Frau Becker, haben Sie den Bericht B-17 erhalten? Paul hat ihn ja geschickt. Ich brauche die Freigabe für die Abendkurse.",
+        "assistant": "Sehr geehrte Frau Weber, wir haben den Bericht erhalten. Die Prüfung läuft noch. Bitte haben Sie noch 2 Tage Geduld.",
+        "artifact": {
+          "title": "Status Mietvertrag & Brandschutz",
+          "from": "Frau Becker <f.becker@berlin-hausverwaltung.test>",
+          "to": "Lena Weber <l.weber@weber-keramik.test>",
+          "language": "de",
+          "body": "Sehr geehrte Frau Weber,\n\nwir bestätigen den Erhalt des Brandschutzberichts B-17 vom 15.02.2026. Die interne Prüfung durch unsere Sicherheitsabteilung ist noch nicht abgeschlossen.\n\nStatus: In Prüfung\nNächster Schritt: Wir werden Sie bis zum 01.03.2026 über die Freigabe der Klausel § 4.2 (Abendkurse) informieren. Bitte sehen Sie von weiteren Nachfragen ab, bis die schriftliche Bestätigung vorliegt.\n\nMit freundlichen Grüßen\nFrau Becker\nBerlin Hausverwaltung"
+        },
+        "probe": {
+          "question": "What is the current status of the fire safety report B-17?",
+          "answer": "In Prüfung"
+        }
+      },
+      {
+        "date": "2026-04-09",
+        "intentId": "lena-weber:glaze-supplier",
+        "kind": "invoice",
+        "user": "Timo, hier die Rechnung für die Musterplatten. Bitte prüfen, ob die Preise stimmen.",
+        "assistant": "Rechnung erhalten. Preise stimmen mit der Frühjahrsstaffel überein. Zahlung per SEPA.",
+        "artifact": {
+          "title": "Rechnung Nr. NT-2026-04-09",
+          "from": "Nordton GmbH <rechnung@nordton.test>",
+          "to": "Weber Keramik <buchhaltung@weber-keramik.test>",
+          "language": "de",
+          "body": "Rechnungsnummer: NT-2026-04-09\nDatum: 09.04.2026\n\nLeistungen:\n1. Musterplatten Matte Serie (5 Stk.) - 45,00 EUR\n2. Versand & Verpackung - 5,90 EUR\n\nZwischensumme: 50,90 EUR\nUmsatzsteuer (19%): 9,67 EUR\nGesamtbetrag: 60,57 EUR\n\nZahlungsziel: 14 Tage\nZahlungsart: SEPA-Überweisung\nVerwendungszweck: NT-2026-04-09\n\nHinweis: Die Preise basieren auf der bestätigten Frühjahrsstaffel vom 15.01.2026."
+        },
+        "probe": {
+          "question": "What is the total amount due for the sample plates invoice?",
+          "answer": "60,57 EUR"
+        }
+      },
+      {
+        "date": "2026-04-12",
+        "intentId": "lena-weber:family-weekend",
+        "kind": "payment",
+        "user": "Mira, Fahrkarten sind gebucht. Papa, bitte den Nord-Eingang nicht vergessen.",
+        "assistant": "Alles klar. Ich hab die Zeiten gespeichert. Barrierefreier Zugang ist bestätigt.",
+        "artifact": {
+          "title": "DB Buchungsbestätigung",
+          "from": "Deutsche Bahn AG <buchung@bahn.test>",
+          "to": "Lena Weber <l.weber@weber-keramik.test>",
+          "language": "de",
+          "body": "Buchungsbestätigung\n\nReise: Berlin Hbf -> Stralsund Hbf\nDatum: 24.04.2026\nZug: IC 2110\nAbfahrt: 09:15 Uhr\nAnkunft: 12:45 Uhr\nReisende: Lena Weber, Mira, Klaus Weber\nKlasse: 2. Klasse\nSitzplatz: Barrierefreier Bereich, Wagen 4\nPreis: 120,00 EUR (nach Gutscheinabzug)\nZahlungsmethode: Visa Debit ****4821\nBuchungsnummer: DB-2026-03-21-9902\n\nHinweis: Bitte nutzen Sie den barrierefreien Zugang am Nord-Eingang des Bahnhofs Stralsund."
+        },
+        "probe": {
+          "question": "Which train was booked for the family weekend trip?",
+          "answer": "IC 2110"
+        }
+      },
+      {
+        "date": "2026-04-15",
+        "intentId": "lena-weber:cashflow",
+        "kind": "card-statement",
+        "user": "Cashflow prüfen. Die PayPal-Rückerstattung für die Teller ist noch nicht da. Und die Rechnung von Eva muss raus.",
+        "assistant": "PayPal Case ist noch offen, Sara Lenz hat nachgefragt. Ich schick die Rechnung an Eva, damit sie das Geld vor dem 28. hat.",
+        "artifact": {
+          "title": "Kontoauszug Weber Keramik",
+          "from": "Sparkasse Berlin <service@sparkasse-berlin.test>",
+          "to": "Lena Weber <l.weber@weber-keramik.test>",
+          "language": "de",
+          "body": "Konto: Weber Keramik Geschäftskonto ****4821\nZeitraum: 15.02.2026 - 24.02.2026\n\nBuchungen:\n18.02.2026 | SEPA-Lastschrift | Visa Business | -82,50 EUR\n20.02.2026 | Gutschrift | Stripe Payout | +120,00 EUR\n22.02.2026 | SEPA-Überweisung | Eva Richter | -350,00 EUR\n\nSaldo am Ende: 1.450,00 EUR\n\nHinweis: Die Zahlung an Eva Richter wurde am 22.02.2026 ausgeführt."
+        },
+        "probe": {
+          "question": "How much was paid to Eva Richter?",
+          "answer": "350,00 EUR"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit NT-SMP-2026-04 dispatch scheduled for Feb 10 (Apr 3). Fire safety report B-17 under review by Berlin Hausverwaltung (Apr 6). Nordton invoice NT-2026-04-09 issued for 60,57 EUR (Apr 9). Family weekend DB tickets booked for Apr 24 (DB-2026-03-21-9902) (Apr 12). PayPal refund case for Amira Yilmaz still pending investigation (Apr 15). Closed: Studio lease fire-safety fee paid (Mar 9). Klaus's clinic ticket booked for Mar 14 (Mar 12). Apartment viewing attended with Britta (Mar 17). Move reserve transfer completed (Mar 24). Lease signed and § 4.2 approved (Mar 27). DHL damage claim for Amira under review (CASE-2026-0328-DHL) (Mar 28)."
+  }
+}

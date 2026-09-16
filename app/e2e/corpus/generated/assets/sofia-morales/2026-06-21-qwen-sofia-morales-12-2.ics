@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//avenOS//Synthetic Corpus//EN
+BEGIN:VEVENT
+UID:qwen-sofia-morales-12-2@synthetic.test
+DTSTAMP:20260621T180200Z
+DTSTART;TZID=Europe/Madrid:20260621T070000
+DTEND;TZID=Europe/Madrid:20260621T150000
+SUMMARY:Turnos Confirmados - Boda Clara Beltrán (27/06/2026)
+DESCRIPTION:EVENTO: Boda Clara Beltrán\nFECHA: Sábado\, 27 de junio de 2026\nLUGAR: Valencia Event Venue (Puerta de carga lateral)\n\nLUCÍA FERRER:\n- Hora: 07:00 - 15:00\n- Tarea: Montaje floral en jardín y salón principal.\n- Acceso: Clave SOL-983.\n- Notas: Revisar sustitución de peonías (Ref ORANGE-64).\n\nMARIO COSTA:\n- Hora: 06:30 - 11:00\n- Tarea: Carga de material y descarga de flores. Verificación temperatura cámara fría antes de salida.\n- Vehículo: Furgoneta Estudio Morales.\n\nESTADO: Confirmado. Pendiente firma acuerdo confidencialidad v2.1 (Elena Soler).
+X-SYNTHETIC-TEST-RECORD:TRUE
+END:VEVENT
+END:VCALENDAR

@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-rowan-chen-8-5",
+      "user": "Ellis, did you check the Monzo balance? Need to know if we can pay Tess's stage 2 deposit this week or if we wait for the Atlas invoice.",
+      "assistant": "Balance is tight. We have £3,300 in the household account after the recent paint order. The renovation reserve is separate. I'll check the Atlas payment status before authorising the £1,200 deposit to Morgan Joinery.",
+      "artifact": {
+        "title": "Household Task: Renovation Cashflow Check",
+        "from": "Rowan Chen",
+        "to": null,
+        "language": "en",
+        "body": "TASK: Verify household liquidity for Kitchen Stage 2\nDATE: 2026-04-28\nOWNER: Rowan Chen\nSTATUS: Pending\n\nCHECKLIST:\n1. Confirm Monzo Household Debit (ending 5526) available balance covers £1,200 deposit.\n2. Verify Atlas Ltd invoice INV-2026-03-001 status. If unpaid, do not draw from renovation reserve.\n3. Confirm Tess Morgan's quote INV-MJ-2026-005 is still valid for Stage 2 cabinet manufacturing.\n4. Check if paint order KS-2026-0428-02 (SALT-312) has been dispatched to avoid double ordering.\n\nNOTE: Kitchen wall colour SALT-312 is confirmed. Do not alter cabinet finish until paint is tested on sample board."
+      },
+      "probe": {
+        "question": "What is the status of the Stage 2 cabinet deposit task?",
+        "answer": "Pending"
+      }
+    },
+    {
+      "id": "qwen-rowan-chen-9-2",
+      "user": "Jo, booked the train for the Glasgow trip next week. Need to make sure Pip is covered for the 22nd-24th. Alex Thorne is confirmed, right?",
+      "assistant": "Alex is confirmed for Pip from 22 to 24 May. Your rail itinerary leaves Bristol on the 21st and changes in London and Edinburgh before Glasgow; keep the foster-care pack with Alex.",
+      "artifact": {
+        "title": "Rail Ticket: Bristol to Glasgow",
+        "from": "National Rail",
+        "to": null,
+        "language": "en",
+        "body": "TICKET REFERENCE: NR-2026-0506-GLA-01\nPASSENGER: Rowan Chen\nDATE OF TRAVEL: 2026-05-21\nROUTE: Bristol Temple Meads to Glasgow Central\nOPERATORS: GWR (Bristol to London Paddington), LNER (London King's Cross to Edinburgh), ScotRail (Edinburgh to Glasgow Central)\nDEPARTURE: 17:45 from Bristol Temple Meads\nARRIVAL: 23:15 at Glasgow Central\nCLASS: Standard\nFARE: £145.00 GBP\nSTATUS: Confirmed\nNOTE: This journey also requires a cross-London transfer from Paddington to King’s Cross before the LNER leg, then a change at Edinburgh Waverley. Allow at least 45 minutes for the London transfer."
+      },
+      "probe": {
+        "question": "What is the arrival time at Glasgow Central?",
+        "answer": "23:15"
+      }
+    },
+    {
+      "id": "qwen-rowan-chen-9-3",
+      "user": "Asha, I'm coming in early Saturday for the garden open. Do I need to bring the key for locker GREEN-806 or is it already there?",
+      "assistant": "Key is in the main gate lockbox. Just need your signature on the rota sheet when you arrive. Bring the seedling trays if you have them.",
+      "artifact": {
+        "title": "Community Garden Volunteer Event Ticket",
+        "from": "Bristol Community Garden Trust",
+        "to": null,
+        "language": "en",
+        "body": "EVENT: Saturday Morning Shift - Shed Opening\nDATE: 2026-05-09\nTIME: 09:00 - 13:00\nVENUE: Bristol Community Garden, Main Gate\nHOLDER: Rowan Chen\nROLE: Opening Volunteer\nADMISSION: Free (Volunteer Access)\nREFERENCE: CG-EVT-2026-0509-RC\nINSTRUCTIONS:\n1. Collect key from gate lockbox (code shared via volunteer chat).\n2. Open shed locker GREEN-806.\n3. Count tools against checklist v3.2.\n4. Sign handoff sheet for Asha Green (closing shift).\nNOTE: Weather forecast is rain. Wear boots."
+      },
+      "probe": {
+        "question": "What is the reference number for the volunteer event?",
+        "answer": "CG-EVT-2026-0509-RC"
+      }
+    },
+    {
+      "id": "qwen-rowan-chen-12-5",
+      "user": "Ellis, booked the trip back from Glasgow on the 28th. Jamie's place is a bit far from Central, so I added a taxi voucher to get me to the station.",
+      "assistant": "Got it. The taxi voucher covers Jamie’s address to Glasgow Central before the 08:30 departure. The rail itinerary changes at Edinburgh and includes a cross-London transfer from King’s Cross to Paddington.",
+      "artifact": {
+        "title": "Rail Ticket: Glasgow to Bristol",
+        "from": "National Rail",
+        "to": null,
+        "language": "en",
+        "body": "TICKET REFERENCE: NR-2026-0628-BRI-02\nPASSENGER: Rowan Chen\nDATE OF TRAVEL: 2026-06-28\nROUTE: Glasgow Central to Bristol Temple Meads\nOPERATORS: ScotRail (Glasgow to Edinburgh), LNER (Edinburgh to London King's Cross), GWR (London Paddington to Bristol Temple Meads)\nDEPARTURE: 08:30 from Glasgow Central\nARRIVAL: 14:15 at Bristol Temple Meads\nCLASS: Standard\nFARE: £138.50 GBP\nSTATUS: Confirmed\nNOTE: Includes £15.00 taxi voucher from Jamie’s address to Glasgow Central (Ref: TAXI-GLA-2026-0628). Cross-London transfer from King’s Cross St Pancras to Paddington uses the Circle or Hammersmith & City line."
+      },
+      "probe": {
+        "question": "What is the total fare for the return ticket?",
+        "answer": "£138.50 GBP"
+      }
+    }
+  ]
+}

@@ -30,6 +30,14 @@ identity signing-key rows. Each platform has its own repository containing check
 raw verified Polar deliveries, platform control data, and that environment's customer
 databases, including Artifact, Intent, Actor, and future component schemas.
 
+Skill Studio's draft heads, connection cursors and pending deliveries are part of
+the customer Actor schema and must be restored together with its Artifact Store.
+Published Skill artifacts alone do not reconstruct this mutable state. A changed
+Artifact Store epoch stops an existing connection with a visible error; resuming
+the connection does not silently reset its cursor. After verifying the restored
+data, pause the old connection and explicitly create a new one for future arrivals.
+There is no Studio replay-window or unattended-source recovery tool in this slice.
+
 Identity, `next`, and production use separate Restic credentials or prefixes. A
 restore command cannot select a snapshot carrying a different environment label.
 Hetzner server backups are disabled because they do not form a complete or tested
@@ -167,7 +175,7 @@ bundled controller, with Bun, Docker and private
 network access or database tunnels to both already-prepared runtimes. Set the recovery
 URL SSL mode explicitly; the local tunnel fixture uses `sslmode=disable`, while dump
 tools otherwise require TLS. Remote certificate provisioning is not part of this command. The controller
-uses the checksum-pinned PostgreSQL 17 client image with host networking. It does not
+uses the checksum-pinned PostgreSQL 18 client image with host networking. It does not
 publish database ports. Source and destination must be separate clusters with the same
 installation target marker, created by the normal database initialization. Both running
 Actor services must implement the customer execution barrier in this release.

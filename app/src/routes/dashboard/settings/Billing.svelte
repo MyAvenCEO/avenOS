@@ -581,9 +581,7 @@ onDestroy(() => {
 				<!-- Held as many as the plan allows, but none of them standing:
 				     the limit is reached by a subscription in some other state,
 				     so booking would be refused rather than merely unavailable. -->
-				<p class="text-xs opacity-60">
-					Du hast {p.name} bereits gebucht — mehr als eines gibt es pro Konto nicht.
-				</p>
+				<p class="text-xs opacity-60">Du hast {p.name} bereits gebucht.</p>
 			{:else if s?.cancelAtPeriodEnd || s?.pauseAtPeriodEnd || s?.status === 'paused'}
 				<button
 					type="button"
@@ -656,19 +654,13 @@ onDestroy(() => {
 	<h2 class="text-sm">Abrechnung</h2>
 
 	{#if loading}
-		<p
-			class="surface surface--raised text-xs opacity-50"
-		>
-			Deine Abrechnung wird geladen …
-		</p>
+		<p class="surface surface--raised text-xs opacity-50">Deine Abrechnung wird geladen …</p>
 	{:else}
 		{#if SUBSCRIPTIONS_ENABLED && checkout}
 			<!-- Inline checkout: OUR iframe, right here in the card — no
 			     fullscreen overlay, hard-coded light, Polar's embed protocol
 			     spoken directly. -->
-			<div
-				class="flex flex-col gap-2 surface surface--raised"
-			>
+			<div class="flex flex-col gap-2 surface surface--raised">
 				<div class="flex items-baseline justify-between gap-2">
 					<p class="text text--eyebrow-quiet">
 						Checkout · {TIER_PLANS.find((p) => p.id === checkout?.tier)?.name ?? checkout.tier}
@@ -730,9 +722,7 @@ onDestroy(() => {
 		<div class="flex flex-col gap-2">
 			<p class="text text--eyebrow-quiet">Meine Bestellungen</p>
 			{#if orders.length}
-				<ul
-					class="flex flex-col divide-y divide-foreground/8 surface surface--raised"
-				>
+				<ul class="flex flex-col divide-y divide-foreground/8 surface surface--raised">
 					{#each orders as order (order.id)}
 						{@const plan = planOfOrder(order)}
 						<li class="flex flex-col">
@@ -809,9 +799,7 @@ onDestroy(() => {
 					{/each}
 				</ul>
 			{:else}
-				<p
-					class="surface surface--raised text-xs opacity-50"
-				>
+				<p class="surface surface--raised text-xs opacity-50">
 					Noch keine Bestellungen — sobald du etwas buchst, steht sie hier.
 				</p>
 			{/if}

@@ -16,95 +16,94 @@ import {
 	textGroundedExtractionEvidence
 } from '../../shared'
 
+export const INVOICE_EXTRACTOR_MANIFEST = manifest(
+	'invoice-extractor',
+	'Invoice extractor',
+	'Extracts a grounded compact invoice candidate and complete finance details.',
+	'document_extract_invoice',
+	['ceo.aven.docs.file(F)', 'ceo.aven.docs.document_classification(F, C)'],
+	['ceo.aven.bookkeeping.invoice_candidate(F, I)', 'ceo.aven.bookkeeping.invoice_details(F, D)']
+)
+
 export function createInvoiceExtractorActor(
 	model: DocumentModelGateway,
 	decoder?: DocumentDecoder
 ): Actor {
-	return new Actor(
-		manifest(
-			'invoice-extractor',
-			'Invoice extractor',
-			'Extracts a grounded compact invoice candidate and complete finance details.',
-			'document_extract_invoice',
-			['ceo.aven.docs.file(F)', 'ceo.aven.docs.document_classification(F, C)'],
-			['ceo.aven.bookkeeping.invoice_candidate(F, I)', 'ceo.aven.bookkeeping.invoice_details(F, D)']
-		),
-		{
-			document_extract_invoice: async (payload) => {
-				try {
-					if (Array.isArray(payload.parts)) {
-						const merged = mergeFinance(payload.parts as unknown as ChunkPart[], true)
-						return success(
-							{
-								ok: true,
-								procedureKey: 'client.merge-invoice-chunks',
-								artifacts: merged.artifacts,
-								evidence: merged.evidence
-							},
-							'Combined all invoice chunks.'
-						)
-					}
-					const document = await renderedDocument(
-						payload.document as unknown as DecodedDocument,
-						decoder,
-						payload.source as unknown as DocumentSource
-					)
-					const observedPages = payload.pages as unknown as ExtractedPage[]
-					const pages = document.pages.map((page) => {
-						const native = materializePage(page)
-						return native.text.trim()
-							? native
-							: (observedPages.find((observed) => observed.page === page.page) ?? native)
-					})
-					const expectedKind = stringValue(payload.expectedKind, 'expected invoice kind')
-					const documentText =
-						joinedText(pages) +
-						(typeof payload.context === 'string'
-							? `\n<surrounding_context>\n${payload.context}\n</surrounding_context>`
-							: '')
-					const completed = await model.complete(
-						modelRequest(
-							'extract-invoice',
-							document.pages.filter((page) => page.image).map(pageImage),
-							documentText,
-							expectedKind
-						)
-					)
-					const candidate = object(completed.structured.candidate, 'invoice candidate')
-					const details = object(completed.structured.details, 'invoice details')
-					normalizeInvoiceDates(details, documentText)
-					if (details.documentKind !== expectedKind) {
-						throw new Error(
-							`invoice extraction kind ${String(details.documentKind)} conflicts with ${expectedKind}`
-						)
-					}
-					const supplier =
-						details.supplier === null ? null : object(details.supplier, 'invoice supplier').name
-					if (typeof supplier === 'string' && supplier.trim()) candidate.supplier = supplier
-					const evidenceTargets = {
-						candidate: { outputLocalKey: 'invoice', value: candidate },
-						details: { outputLocalKey: 'details', value: details }
-					}
-					const modelEvidence = extractionEvidence(completed.structured, evidenceTargets)
+	return new Actor(structuredClone(INVOICE_EXTRACTOR_MANIFEST), {
+		document_extract_invoice: async (payload) => {
+			try {
+				if (Array.isArray(payload.parts)) {
+					const merged = mergeFinance(payload.parts as unknown as ChunkPart[], true)
 					return success(
 						{
 							ok: true,
-							procedureKey: 'client.extract-invoice-model',
-							artifacts: [
-								artifact('invoice', 'bookkeeping.invoice-candidate', candidate, 'candidate'),
-								artifact('details', 'bookkeeping.invoice-details', details, 'details')
-							],
-							evidence: textGroundedExtractionEvidence(pages, evidenceTargets, modelEvidence),
-							modelReceipt: completed.receipt
+							procedureKey: 'client.merge-invoice-chunks',
+							artifacts: merged.artifacts,
+							evidence: merged.evidence
 						},
-						'Extracted the invoice candidate and details.'
+						'Combined all invoice chunks.'
 					)
-				} catch (error) {
-					return failure(error)
 				}
+				const document = await renderedDocument(
+					payload.document as unknown as DecodedDocument,
+					decoder,
+					payload.source as unknown as DocumentSource
+				)
+				const observedPages = payload.pages as unknown as ExtractedPage[]
+				const pages = document.pages.map((page) => {
+					const native = materializePage(page)
+					return native.text.trim()
+						? native
+						: (observedPages.find((observed) => observed.page === page.page) ?? native)
+				})
+				const expectedKind = stringValue(payload.expectedKind, 'expected invoice kind')
+				const documentText =
+					joinedText(pages) +
+					(typeof payload.context === 'string'
+						? `\n<surrounding_context>\n${payload.context}\n</surrounding_context>`
+						: '')
+				const completed = await model.complete(
+					modelRequest(
+						'extract-invoice',
+						document.pages.filter((page) => page.image).map(pageImage),
+						documentText,
+						expectedKind
+					)
+				)
+				const candidate = object(completed.structured.candidate, 'invoice candidate')
+				const details = object(completed.structured.details, 'invoice details')
+				normalizeInvoiceDates(details, documentText)
+				if (details.documentKind !== expectedKind) {
+					throw new Error(
+						`invoice extraction kind ${String(details.documentKind)} conflicts with ${expectedKind}`
+					)
+				}
+				const supplier =
+					details.supplier === null ? null : object(details.supplier, 'invoice supplier').name
+				if (typeof supplier === 'string' && supplier.trim()) candidate.supplier = supplier
+				const evidenceTargets = {
+					candidate: { outputLocalKey: 'invoice', value: candidate },
+					details: { outputLocalKey: 'details', value: details }
+				}
+				const modelEvidence = extractionEvidence(completed.structured, evidenceTargets)
+				return success(
+					{
+						ok: true,
+						procedureKey: 'client.extract-invoice-model',
+						artifacts: [
+							artifact('invoice', 'bookkeeping.invoice-candidate', candidate, 'candidate'),
+							artifact('details', 'bookkeeping.invoice-details', details, 'details')
+						],
+						evidence: textGroundedExtractionEvidence(pages, evidenceTargets, modelEvidence),
+						modelReceipt: completed.receipt
+					},
+					'Extracted the invoice candidate and details.'
+				)
+			} catch (error) {
+				return failure(error)
 			}
 		}
-	)
+	})
 }
 
 /**

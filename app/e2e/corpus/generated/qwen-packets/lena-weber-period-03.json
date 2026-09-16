@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-02-03",
+        "intentId": "lena-weber:classes",
+        "kind": "order",
+        "user": "Olivia hat wegen der Lieferung gefragt. Ist das Paket raus? Und Eva, kannst du den Kurs am 14. übernehmen? Jonas ist da im Urlaub.",
+        "assistant": "Paket ist raus, Olivia hat die Tracking-Nummer. Eva, bitte bestätige den Kurs am 14.2. für Jonas. Ich aktualisiere den Plan.",
+        "artifact": {
+          "title": "Order Confirmation #WK-2026-0203-OG",
+          "from": "Weber Keramik Shop",
+          "to": "Olivia Grant",
+          "language": "en",
+          "body": "Dear Olivia Grant,\n\nThank you for your order with Weber Keramik. We are pleased to confirm the details below.\n\nOrder Reference: WK-2026-0203-OG\nDate: 2026-02-03\nItems:\n- 1x Handmade Ceramic Bowl Set (4 pcs), Matte White\n- 1x Gift Wrap Service\n\nSubtotal: 85.00 EUR\nVAT (19%): 16.15 EUR\nShipping (DHL Express): 12.00 EUR\nTotal Paid: 113.15 EUR\nPayment Method: Visa Debit ****4821\nStatus: Paid\n\nDelivery Window: 2026-02-05 to 2026-02-07\nTracking Number: 00340434271234567891\n\nWe hope you enjoy your new ceramics. Please note that fragile items are packed with extra care.\n\nBest regards,\nLena Weber\nWeber Keramik"
+        },
+        "probe": {
+          "question": "What was the total amount paid for Olivia's order?",
+          "answer": "113.15 EUR"
+        }
+      },
+      {
+        "date": "2026-02-06",
+        "intentId": "lena-weber:orders",
+        "kind": "return",
+        "user": "Amira hat zurückgeschickt. Ein Teller war kaputt. Hab den Rücksendeschein geschickt. Bitte Status checken.",
+        "assistant": "Rücksendung ist im System als 'eingegangen' markiert. Ich prüfe die Fotos und starte die Erstattung, sobald der Teller da ist.",
+        "artifact": {
+          "title": "Return Authorization Record #RA-2026-0206-AY",
+          "from": "Weber Keramik",
+          "to": "Amira Yilmaz",
+          "language": "de",
+          "body": "Sehr geehrte Frau Yilmaz,\n\nwir haben Ihre Rücksendeanfrage erhalten.\n\nOriginalbestellung: WK-2026-0110-AY\nArtikel: 1x Keramik-Teller 'Nordblau'\nGrund: Beschädigung beim Transport\nStatus: Rücksendung angefordert\nRücksendeadresse: Weber Keramik, Berlin\nFrist: 14 Tage\n\nBitte senden Sie das Paket mit dem beigefügten Label zurück. Nach Eingang und Prüfung der Ware veranlassen wir die Erstattung auf Ihr ursprüngliches Zahlungsmittel.\n\nMit freundlichen Grüßen\nLena Weber"
+        },
+        "probe": {
+          "question": "What was the reason for the return?",
+          "answer": "Beschädigung beim Transport"
+        }
+      },
+      {
+        "date": "2026-02-09",
+        "intentId": "lena-weber:orders",
+        "kind": "support",
+        "user": "DHL Case ist offen. Nils hat nach Fotos gefragt. Hab die hochgeladen. Wann kommt die Antwort?",
+        "assistant": "Nils hat bestätigt, dass die Fotos eingegangen sind. Die Prüfung läuft. Ich halte dich auf dem Laufenden.",
+        "artifact": {
+          "title": "DHL Support Update #CASE-2026-0209-DHL",
+          "from": "Nils Hartmann",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Guten Tag Frau Weber,\n\nvielen Dank für Ihre Nachricht. Wir haben Ihre Sendungsnummer 00340434271234567890 und die hochgeladenen Fotos zur Kenntnis genommen.\n\nFallreferenz: CASE-2026-0209-DHL\nStatus: In Prüfung\nNächster Schritt: Unser Team prüft die Dokumentation. Bitte haben Sie etwas Geduld. Wir melden uns innerhalb von 3 Werktagen.\n\nMit freundlichen Grüßen\nNils Hartmann\nDHL Customer Service"
+        },
+        "probe": {
+          "question": "What is the next step according to the support reply?",
+          "answer": "Unser Team prüft die Dokumentation. Bitte haben Sie etwas Geduld. Wir melden uns innerhalb von 3 Werktagen."
+        }
+      },
+      {
+        "date": "2026-02-12",
+        "intentId": "lena-weber:studio-lease",
+        "kind": "legal",
+        "user": "Frau Becker will den Brandschutzbericht. Paul Neumann hat noch nicht unterschrieben. Dr. Maier, was fehlt noch im Entwurf?",
+        "assistant": "Der Entwurf v2.1 ist bereit, aber ohne Pauls Unterschrift ist die Klausel zu Abendkursen blockiert. Ich hake bei Paul nach.",
+        "artifact": {
+          "title": "Studio Lease Draft v2.1",
+          "from": "Dr. Lea Maier",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Sehr geehrte Frau Weber,\n\nanbei der überarbeitete Entwurf des Mietvertrags für die Werkstatt (Version 2.1, Stand 12.02.2026).\n\nParteien: Lena Weber (Mieterin), Berlin Hausverwaltung (Vermieterin).\nOffener Punkt: § 4.2 Nutzung zu Unterrichtszwecken (Abendkurse) ist vorläufig ausgesetzt, bis der Brandschutzbericht B-17 von Paul Neumann (Neumann Brandschutz) unterzeichnet und der Vermieterin vorliegt.\nStatus: Entwurf, nicht unterschrieben.\nBitte leiten Sie die Unterschrift an mich weiter, sobald sie vorliegt.\n\nMit freundlichen Grüßen\nDr. Lea Maier"
+        },
+        "probe": {
+          "question": "What is required to release the clause regarding evening classes?",
+          "answer": "der Brandschutzbericht B-17 von Paul Neumann (Neumann Brandschutz) unterzeichnet und der Vermieterin vorliegt"
+        }
+      },
+      {
+        "date": "2026-02-15",
+        "intentId": "lena-weber:studio-lease",
+        "kind": "invoice",
+        "user": "Rechnung von Neumann Brandschutz ist da. Paul hat den Bericht B-17 endlich geschickt. Ich zahle die Rechnung, damit die Unterschrift gilt.",
+        "assistant": "Gut. Rechnung über 450 EUR ist bezahlt. Ich leite den unterschriebenen Bericht an Frau Becker und Dr. Maier weiter.",
+        "artifact": {
+          "title": "Invoice #NB-2026-0215-001",
+          "from": "Neumann Brandschutz",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Rechnung Nr.: NB-2026-0215-001\nDatum: 15.02.2026\nLeistungszeitraum: 01.02.2026 - 14.02.2026\n\nPositionen:\n1. Brandschutzprüfung Werkstatt (Bericht B-17): 350,00 EUR\n2. Anfahrt und Beratung: 100,00 EUR\n\nNettobetrag: 450,00 EUR\nUmsatzsteuer (19%): 85,50 EUR\nGesamtbetrag: 535,50 EUR\n\nZahlungsziel: 14 Tage\nZahlungsmethode: SEPA-Überweisung\nStatus: Bezahlt am 15.02.2026\nReferenz: SEPA-2026-02-15-NB\n\nBitte überweisen Sie den Betrag auf das angegebene Konto.\n\nNeumann Brandschutz\nPaul Neumann"
+        },
+        "probe": {
+          "question": "What was the total amount due on the invoice?",
+          "answer": "535,50 EUR"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit delayed until Feb 10 (Nora Wells). Flat move plan v1.2 awaiting Mira's final sign-off on helper schedule. Family weekend DB ticket booking pending (due Jan 13). Closed: DHL shipment to Amira Yilmaz completed and paid (Jan 15). New: DB ticket for Klaus booked (Jan 18). Museum ticket for Klaus booked (Jan 21). Bike repair voucher received (Jan 24). Hotel in Stralsund booked with deposit paid (Jan 27). Move reserve transfer posted (Jan 28). Olivia Grant order shipped (Feb 3). Amira Yilmaz return initiated (Feb 6). DHL damage claim under review (Feb 9). Studio lease draft v2.1 pending fire-safety signature (Feb 12). Fire-safety invoice paid and report B-17 signed (Feb 15)."
+  }
+}

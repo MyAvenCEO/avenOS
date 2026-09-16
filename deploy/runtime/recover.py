@@ -206,7 +206,7 @@ def recover(source, platform, volume, target, snapshot='latest'):
             blank = copy.deepcopy(config)
             database = blank['services'][prefix+'database']
             database['volumes'] = [mount for mount in database['volumes']
-                                   if mount['target'] == '/var/lib/postgresql/data']
+                                   if mount['target'] == '/var/lib/postgresql']
             compose = local_compose(bundle, blank, images)
             host.phase('restore '+runtime_id+' databases with application services stopped')
             archive.run([*compose, 'up', '--detach', '--no-deps', '--pull', 'never', '--wait',

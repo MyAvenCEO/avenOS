@@ -35,13 +35,17 @@ roles and ordinals. They do not create a bank allocation ledger in this kernel.
 
 ## Contracts and verification
 
-Rust 1.93.1 and PostgreSQL 17 are the tested toolchain. The
+The release image uses Rust 1.98.0 and PostgreSQL 18. The
 [normative contracts](artifact-store-spec/README.md) define publication and evidence.
 The [build and test handbook](../../docs/operations/build-and-test.md) owns verification
 commands and the complete native/customer-database E2E gate; the
 [local stack guide](../../docs/operations/local-stack.md) owns local operation.
 
 ## Evidence bounds
+
+The [artifact library](../../docs/artifact-library.md) uses scoped, publication-bound
+read projections and schema version 4 indexes. Its document and financial rows do not
+rewrite stored artifacts or create supplier/entity records.
 
 Publication validates evidence against the exact input and output artifacts. Byte
 ranges must fit the primary blob; JSON pointers must use RFC 6901 escapes and resolve

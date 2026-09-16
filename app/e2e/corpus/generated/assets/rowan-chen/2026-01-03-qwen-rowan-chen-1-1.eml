@@ -1,0 +1,20 @@
+From: "Lucía Ortega" <l.ortega@iberia-retail.test>
+To: "Rowan Chen" <rowan@chen-consultancy.test>
+Date: Sat, 03 Jan 2026 18:02:00 GMT
+Subject: =?UTF-8?B?SGFuZG9mZiBkZSBsb3RlIGRlIHBydWViYSAtIFByb3llY3RvIEF0bGFz?=
+Message-ID: <qwen-rowan-chen-1-1@synthetic.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+X-Synthetic-Test-Record: true
+X-Intent-ID: rowan-chen:security-audit
+
+Hola Rowan,
+
+Aquí están las notas del lote de prueba v1.2 para la migración de Atlas. Los campos de cliente se mapean correctamente en el entorno de staging.
+
+Nota importante: No podemos ejecutar la carga en producción hasta que el DPA esté firmado. El equipo legal de Atlas aún no ha devuelto la versión final.
+
+Referencia de prueba: TEST-ATLAS-001
+
+Saludos,
+Lucía

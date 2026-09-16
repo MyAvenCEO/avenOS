@@ -1,0 +1,2448 @@
+{
+  "baseUrl": "http://100.96.61.57:8000",
+  "model": "qwen3.8-flash-next",
+  "toolRoundLimit": 32,
+  "execution": "regraded-live-output",
+  "grading": {
+    "requiresEveryExpectedFact": true,
+    "rejectsForbiddenConclusions": true,
+    "normalizesUnicodeHyphens": true
+  },
+  "intentCount": 300,
+  "corpus": "persona-breaking",
+  "results": [
+    {
+      "case": "Kitchen orders reconcile paid items, free replacement and total cash",
+      "difficulty": "hard",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nHere's the reconciliation. The March order is KS-2026-0327-88, dated 27 March, total paid 45.50 by PayPal: 2.5L Dulux Easycare Kitchen Paint in Salt-312 at 28.00, a microfibre roller set at 12.50, and a masking tape pack at 5.00. The May order is KS-2026-0521-44, dated 21 May, total paid 14.50, also PayPal: one litre of the same paint at 14.50 plus the roller set listed at 0.00.\n\nOn the roller, you paid for it once, in March, but the warehouse picked the paint and tape correctly and left the roller out at the final packing stage. You raised case KS-SUP-2026-0403-01, which was closed as resolved, and the supplier sent a replacement at no charge. It appears on the May order as a goodwill line at zero, so it was never charged twice. The one litre tin in May is a separate touch-up quantity, not a repeat of the March 2.5L purchase.\n\nTotal cash actually out of your pocket across both orders is 60.00, being 45.50 plus 14.50. The May delivery was booked for 22 May between ten and two, so it's worth confirming the roller and the touch-up tin both arrived before you close this out.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "kitchen supplier order March May roller"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "kitchen supplier order roller refund"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "kitchen supplier order"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "roller blind"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "rowan-chen:kitchen"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-10-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-7-1:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-6-4:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 7238,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:one-off-178",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 3,
+      "minimumArtifactReads": 3,
+      "requiredChecks": [
+        {
+          "pattern": "KS-2026-0327-88",
+          "matched": true
+        },
+        {
+          "pattern": "45[.]50",
+          "matched": true
+        },
+        {
+          "pattern": "KS-SUP-2026-0403-01",
+          "matched": true
+        },
+        {
+          "pattern": "KS-2026-0521-44",
+          "matched": true
+        },
+        {
+          "pattern": "14[.]50",
+          "matched": true
+        },
+        {
+          "pattern": "(0[.]00|free|goodwill)",
+          "matched": true
+        },
+        {
+          "pattern": "60(?:[.]00)?",
+          "matched": true
+        },
+        {
+          "pattern": "(not charged twice|wasn.t charged twice|no double charge|replacement)",
+          "matched": true
+        },
+        {
+          "pattern": "SALT-312",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "Latest clinic ticket resists earlier RE1 and future Leipzig booking",
+      "difficulty": "hard",
+      "language": "de",
+      "pass": true,
+      "answer": "\n\nDie gültige Fahrkarte ist die S‑Bahn‑Buchung vom 28. Juni.\n\nEs handelt sich um die Buchungsreferenz DB‑2026‑0628‑CLIN‑09, ausgestellt auf Klaus Weber für den 29.06.2026, Berlin Hbf nach Potsdam Hbf mit der S 7: Abfahrt 09:45 Uhr, Ankunft 10:25 Uhr. Bezahlt sind 4,70 Euro für einen Berlin‑ABC‑Einzelfahrausweis zweiter Klasse.\n\nBeim Sitzplatz gilt: kein reservierter Platz, weil Nahverkehr ohne Sitzplatzgarantie. Aufzug am Gleis und barrierefreier Zugang sind bestätigt, aber die Aufzugslage in Berlin Hbf und Potsdam Hbf sollt ihr am Morgen vor Abfahrt trotzdem noch einmal prüfen. Ein barrierefreier Shuttle hält am Nord‑Eingang, nicht an der Hauptpforte.\n\nNicht verwechseln: die beiden RE1‑Fahrten am 14.03. (DB‑2026‑03‑12‑4451, 12,40 Euro) und am 07.05. (DB‑2026‑0506‑CLIN‑04, 12,50 Euro) mit reserviertem Rollstuhlplatz Wagen 2 sind ältere Fahrten und gelten nicht für den 29. Juni. Der RE1 ist an dem Tag ohnehin gesperrt, deshalb wurde die S7 gebucht. Auch die spätere Familienreise nach Leipzig hat damit nichts zu tun.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Klinikfahrt 29. Juni Fahrkarte Buchung"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Vater Klinikfahrt Fahrkarte 2026-06-29"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Fahrkarte Zug Vater Klinik"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "lena-weber:father-clinic",
+            "query": "Fahrkarte Zug 29. Juni"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:father-clinic"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-12-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-9-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-5-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-clinic-travel-note"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 6629,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "lena-weber:one-off-178",
+      "switchExpected": false,
+      "switched": false,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 4,
+      "minimumArtifactReads": 3,
+      "requiredChecks": [
+        {
+          "pattern": "DB-2026-0628-CLIN-09",
+          "matched": true
+        },
+        {
+          "pattern": "S\\s*7",
+          "matched": true
+        },
+        {
+          "pattern": "09:45",
+          "matched": true
+        },
+        {
+          "pattern": "10:25",
+          "matched": true
+        },
+        {
+          "pattern": "4[,.]70\\s*(EUR|Euro|\\u20AC)",
+          "matched": true
+        },
+        {
+          "pattern": "(kein.{0,30}(reserviert|Sitzplatz)|no reserved seat)",
+          "matched": true
+        },
+        {
+          "pattern": "(RE\\s*1.{0,40}(nicht mehr aktuell|fr\\u00FCher|\\u00E4lter)|Leipzig.{0,50}(nichts zu tun|andere|separate|sp\\u00E4ter)|nicht.{0,30}(RE\\s*1|ICE|Leipzig)|weder.{0,80}(RE\\s*1|Leipzig))",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "Atlas rate changes across April and May without unlocking production",
+      "difficulty": "hard",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nShort answer: two different rates, and neither unlocked the data.\n\nApril services were governed by the Atlas Consultancy Renewal Agreement v2.0, countersigned by Malik Ahmed on 26 February 2026. That document set the 2026 annual rebate at 5% of net fees under clause 4.2, and explicitly superseded the 4% term in the 2025 rebate appendix. So April sits at 5%, and the 2025 appendix is purely historical — the January invoice was even left at 4% and never adjusted.\n\nMay services were governed by the signed renewal dated 3 May plus the implementation addendum executed on 28 May. That addendum is the document that changed the commercial term, lifting the rebate from 5% to 7% with an effective date of 1 May, applied to all net fees from that date onwards. It is retroactive in effect: the 5% is described as an interim rate that no longer applies to new billing cycles, and any provisional drafts issued at 5% are to be corrected with a credit note. Your May payment of 2,232.00, carrying the 140.00 net-fee credit and 28.00 VAT adjustment, reconciles against that 7% term.\n\nOn the data question, no — the commercial change never cleared production data transfer, and it was never meant to. The renewal draft itself carried the note that production data exchange remains blocked pending DPA-42 v3.0 signature, and that position still holds: as of 30 May, transfer stays blocked until DPA-42 is signed and countersigned, and the security audit matter remains open and waiting. The rebate moved on the commercial track; the data gate is on the DPA track and is still shut.",
+      "calls": [
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "rowan-chen:atlas-contract"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "rebate"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-170"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-150"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-130"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-110"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-11-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-160"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-140"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-120"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "appendix renewal signed effective",
+            "offset": 20
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "production data transfer DPA security audit"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-100"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-090"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:extra-090"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "rowan-chen:security-audit"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Atlas DPA data transfer",
+            "intent": "rowan-chen:security-audit"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-audit-evidence"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-1-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:extra-156"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "intent": "rowan-chen:atlas-contract",
+            "offset": 20,
+            "limit": 20
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-atlas-2025"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-4-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-3-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-5-3:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 17744,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:one-off-178",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 18,
+      "minimumArtifactReads": 4,
+      "requiredChecks": [
+        {
+          "pattern": "(5|five)\\s*(percent|%)",
+          "matched": true
+        },
+        {
+          "pattern": "(7|seven)\\s*(percent|%)",
+          "matched": true
+        },
+        {
+          "pattern": "(28 May|May 28|2026-05-28)",
+          "matched": true
+        },
+        {
+          "pattern": "(1 May|May 1|2026-05-01)",
+          "matched": true
+        },
+        {
+          "pattern": "(Implementation Addendum|v2[.]2)",
+          "matched": true
+        },
+        {
+          "pattern": "DPA-42",
+          "matched": true
+        },
+        {
+          "pattern": "(still|remains|stayed).{0,40}(blocked|suspended)|did not.{0,40}(clear|authori[sz]e)",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "Three identical-value travel and dog-care credits stay separate",
+      "difficulty": "very-hard",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nThree separate 25 items, all distinct.\n\nOne, the February delay compensation. The delay was on 7 February 2026 against booking GWR-9921-ATLAS; GWR issued a 25 voucher on 18 March, reference GWR-VCH-2026-0318-9921, listed expiry 18 March 2027, one use on any GWR service. It was applied at checkout to booking NRC-2026-0321-GLA, Bristol Temple Meads to Glasgow Central on 28 March, changing at London Euston. Fare was 85, so the voucher covered 25 and Monzo debit ending 5526 covered the remaining 60. That booking is confirmed and non-refundable, with a 10 change fee.\n\nTwo, Bea's cancelled sitting refund. Booking BEA-DOG-2026-03 for 28–29 March was cancelled because the sitter was unavailable, and 25 went back to the original payment method, PayPal, with processing quoted at 3–5 business days; a later payment note records it as refunded on 10 April. Jo Harding was notified and you were asked to arrange alternative cover, which became the Alex Thorne booking. This money returned to PayPal and never touched the rail fare.\n\nThree, the still-active voucher. Reference VOUCHER-GWR-2026-0512-44, raised from Delay Repay claim GWR-2026-0415-77, 25, GWR services only, no cash exchange, expiring 12 November 2026, status Active and unused.\n\nSo the only Monzo contribution to the rail fare was 60, and the 25 you still hold is the May voucher.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "25 Glasgow Pip"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "delay compensation voucher GWR"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Bea cancelled sitting refund"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "rail booking 28 March Monzo"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Glasgow Pip delay compensation voucher"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "rail booking 28 March Monzo refund"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Pip"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "25"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Glasgow"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "rowan-chen:family-visit"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-6-1:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-6-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-6-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-9-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-9-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-7-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:extra-123"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:extra-063"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:extra-153"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "rowan-chen:family-visit"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 17227,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:one-off-178",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 9,
+      "minimumArtifactReads": 5,
+      "requiredChecks": [
+        {
+          "pattern": "GWR-VCH-2026-0318-9921",
+          "matched": true
+        },
+        {
+          "pattern": "NRC-2026-0321-GLA",
+          "matched": true
+        },
+        {
+          "pattern": "60(?:[.]00)?",
+          "matched": true
+        },
+        {
+          "pattern": "BEA-DOG-2026-03",
+          "matched": true
+        },
+        {
+          "pattern": "(PayPal)",
+          "matched": true
+        },
+        {
+          "pattern": "VOUCHER-GWR-2026-0512-44",
+          "matched": true
+        },
+        {
+          "pattern": "(active|still active|unused)",
+          "matched": true
+        },
+        {
+          "pattern": "(three|3).{0,40}(separate|different)|separate.{0,60}(\\u00A325|25)",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "Two Mar Azul return cycles preserve their documentary contradictions",
+      "difficulty": "very-hard",
+      "language": "es",
+      "pass": false,
+      "answer": "\n\nLos papeles no cuadran. Te lo dejo separado por caso, sin mezclar nada.\n\n**MA-2026-0203.** El RMA es RA-2026-0206, emitido el 06/02/2026 por Isabel Ríos, por daño en transporte con tallos rotos en caja 3, recogida el 07/02/2026 de 14:00 a 16:00, y reembolso dirigido a la Visa terminada en 6418. El importe que figura es \"Importe Estimado: 196,50 EUR\", es decir una estimación, no una cifra pedida ni confirmada. Y aquí está el primer hueco gordo: no existe en ningún lado el documento de cierre de ese reembolso. No hay \"Refund Status Update\" para RA-2026-0206, no hay nota de crédito, no hay transacción de Mar Azul con esa referencia. El único extracto bancario que hay en el expediente cubre del 20/05 al 12/06/2026, así que ni siquiera alcanza febrero. Conclusión seca: 196,50 EUR estimados, cero euros acreditados, y ni siquiera sabemos si la inspección de almacén llegó a hacerse. El caso está abierto desde hace cuatro meses sin cierre documental.\n\n**MA-2026-0325.** El RMA es RA-2026-0328, del 28/03/2026, mismo motivo y misma ventana de recogida de 14:00 a 16:00, con destino Visa 6418. Aquí el importe sí está fijado: \"Importe a reembolsar: 450,00 EUR\". El cierre es el correo de Oliver Kent del 02/04/2026, caso MA-EXP-2026-0403, transacción MA-REF-20260402-991, que dice textualmente \"full refund of 180,00 EUR\" a la Visa 6418. La contradicción es frontal: Mar Azul autoriza 450,00 y abona 180,00 llamándolo reembolso completo. Faltan 270,00 EUR, y el documento que debería justificar la rebaja —el informe de inspección que recorte el importe— no existe en el expediente. Solo tienes la palabra del proveedor afirmando que la inspección del 02/04 confirmó el",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "MA-2026-0203 peonías devolución"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "MA-2026-0325 peonías devolución"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "peonías"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "RMA"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-10-3"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-6-5"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-3-2"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-11-1"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-10-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-6-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-3-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-11-1:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "reembolso Visa 6418 abono"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "nota de crédito Mar Azul"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "MA-2026-0203"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "MA-2026-0325"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "sofia-morales:flower-supplier",
+            "query": "reembolso",
+            "limit": 40
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "sofia-morales:flower-supplier",
+            "query": "crédito",
+            "limit": 40
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "extracto Visa cargos Mar Azul"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "intent": "sofia-morales:flower-supplier",
+            "limit": 60
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-11-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-10-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-7-1:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-orange-shipment-mail"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Refund Status Update Case",
+            "limit": 30
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "extracto cuenta febrero",
+            "limit": 30
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 30,
+            "query": "MA-2026-0203"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 30,
+            "query": "MA-2026-0325"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "sofia-morales:flower-supplier",
+            "query": "reembolso peonías febrero 2026 crédito"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-orange-shipment-mail:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-8-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "intent": "sofia-morales:flower-supplier",
+            "limit": 10,
+            "offset": 30
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 20,
+            "query": "Mar Azul cargo tarjeta pago pedido"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 42620,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "sofia-morales:one-off-178",
+      "switchExpected": false,
+      "switched": false,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 14,
+      "minimumArtifactReads": 6,
+      "requiredChecks": [
+        {
+          "pattern": "MA-2026-0203",
+          "matched": true
+        },
+        {
+          "pattern": "RA-2026-0206",
+          "matched": true
+        },
+        {
+          "pattern": "196[,.]50\\s*(EUR|Euro|\\u20AC)",
+          "matched": true
+        },
+        {
+          "pattern": "150[,.]00\\s*(EUR|Euro|\\u20AC)",
+          "matched": false
+        },
+        {
+          "pattern": "MA-2026-0325",
+          "matched": true
+        },
+        {
+          "pattern": "RA-2026-0328",
+          "matched": true
+        },
+        {
+          "pattern": "450[,.]00\\s*(EUR|Euro|\\u20AC)",
+          "matched": true
+        },
+        {
+          "pattern": "180[,.]00\\s*(EUR|Euro|\\u20AC)",
+          "matched": true
+        },
+        {
+          "pattern": "Visa.{0,30}6418|6418.{0,30}Visa",
+          "matched": true
+        },
+        {
+          "pattern": "ORANGE-64",
+          "matched": false
+        },
+        {
+          "pattern": "(no cuadra|contradic|inconsisten|discrepan)",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "Amira refund, merchant settlement and unrelated fifteen-euro entries",
+      "difficulty": "very-hard",
+      "language": "de",
+      "pass": true,
+      "answer": "\n\nDie Prüfung ist fertig. Stand 12. Juni, Geschäftskonto ****5602, Saldo von 1.850,00 auf 1.716,85 EUR, und die Rechnung geht exakt auf: minus 160,65 Nordton, plus 42,50 DHL, minus 15,00 Kartengebühr.\n\nKundenerstattung an Amira Yilmaz, 42,50 EUR: nachweislich verarbeitet. Die Rücksendung vom 28. März ist als Transportschaden anerkannt, REF-2026-0328-AY wurde auf die Originaltransaktion PAY-2026-0110-AY zurückgebucht, und der Zahlungsdienst hat das am 31. März bestätigt.\n\nDer offene Händlerabgang dazu ist die eigentliche Lücke. Der April-Auszug vermerkt den Abstimmungsposten PP-2026-0328-AY ausdrücklich als offen, und im Juni-Auszug taucht er ebenfalls nicht auf — dort stehen nur die drei Buchungen oben. Es gibt also bis heute keinen Abgangsbeleg auf dem Geschäftskonto. Wirtschaftlich heißt das: die Entschädigung ist da, die Erstattung selbst aber nirgends als Ausgabe verbucht.\n\nDie DHL-Händlerentschädigung ist sauber durch. Fall CASE-2026-0209-DHL wurde am 27. Mai genehmigt, die Gutschrift über 42,50 EUR kam am 8. Juni auf dem Konto an. Sendungsnummer 00340434271234567890, und DHL betont, dass das der reine Händlerfall ist, unabhängig von Amiras Erstattung.\n\nBei den beiden 15-Euro-Positionen fehlt die eindeutige Zuordnung. Auf der Visa-Abrechnung steht der 7. Juni, PayPal Business, 15,00 EUR, Gesamtbetrag 188,05 EUR, Fälligkeit 15. Juni, Status offen. Auf dem Kontoauszug stehen der 10. Juni, Kartenzahlung Visa Debit ****4821, 15,00 EUR, Buchungstext nur \"Kartengebühren\". Der Abfluss ist gebucht, aber ohne PayPal-Referenz lässt sich nicht belegen, dass es dieselbe Position ist — zumal die Visa-Abrechnung zwei Tage später noch auf \"offen\" steht und den Case PP-2026-0527-AY als nicht verbucht meldet.\n\nZwei Randbefunde noch: Nordtons 160,65 EUR erscheinen am 3. Juni doppelt, einmal als SEPA-Überweisung auf dem Konto und einmal als Soll auf der Visa-Abrechnung. Und die 12,40 EUR DHL Paket vom 5. Juni sind nur auf der Karte, noch nicht ausgeglichen. Zu klären bleiben also der Händlerabgang der 42,50 EUR und die Referenz der 15-Euro-Position.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Amira Erstattung 42,50"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Amira Rückerstattung Versand DHL Händlerentschädigung"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Erstattung"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "DHL Entschädigung"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "42,50"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-6-5:artifact"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:orders"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-10-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-3-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-weber:extra-078"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-weber:extra-168"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:cashflow"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-11-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-11-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-8-1:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-7-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-4-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "PayPal",
+            "limit": 20
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "15,00 EUR",
+            "limit": 20
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "PP-2026",
+            "limit": 20
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 20,
+            "query": "Kartengebühren PayPal Business"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "lena-weber:cashflow",
+            "query": "Amira Yilmaz Erstattung"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "lena-weber:orders",
+            "query": "Amira 42,50 Händlerabgang"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 20,
+            "query": "Kontoauszug Geschäftskonto"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "lena-weber:cashflow",
+            "query": "15,00 Kartengebühren PayPal Business"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "lena-weber:cashflow"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 36813,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "lena-weber:one-off-178",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 10,
+      "minimumArtifactReads": 4,
+      "requiredChecks": [
+        {
+          "pattern": "REF-2026-0328-AY",
+          "matched": true
+        },
+        {
+          "pattern": "PP-2026-0328-AY",
+          "matched": true
+        },
+        {
+          "pattern": "CASE-2026-0209-DHL",
+          "matched": true
+        },
+        {
+          "pattern": "42[,.]50\\s*(EUR|Euro|\\u20AC)",
+          "matched": true
+        },
+        {
+          "pattern": "(31[.]03|31\\. M\\u00E4rz|March 31)",
+          "matched": true
+        },
+        {
+          "pattern": "(08[.]06|8\\. Juni|June 8)",
+          "matched": true
+        },
+        {
+          "pattern": "PayPal[- ]Business",
+          "matched": true
+        },
+        {
+          "pattern": "(Kartengeb\\u00FChr|card fee)",
+          "matched": true
+        },
+        {
+          "pattern": "(offen|nicht verbucht|kein.{0,40}Abschluss|unresolved)",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "Wedding authority conflict distinguishes contract from impossible later roster",
+      "difficulty": "extreme",
+      "language": "es",
+      "pass": false,
+      "answer": "\n\nLa fecha contractual es el 15 de mayo de 2026.\n\nLa cadena documental la sostiene de principio a fin: la proforma del anticipo del 15/02/2026 dice \"Fecha Evento: 15/05/2026\" y \"anticipo de la boda del 15/05/2026\"; la confirmación de la visita técnica del 28/02 habla de \"la boda del 15/05/2026\"; la adenda logística del 06/04 fija en su cláusula 4.3 \"Se confirma la fecha del evento como 15/05/2026\" y remata con \"Esta adenda no modifica la fecha original del contrato base\"; y la confirmación de acceso de Mateo Serra del 21/04 vuelve a fechar el evento el 15/05/2026. Incluso el correo de turnos del 15/06 sigue hablando del \"evento de Clara Beltrán del 15/05/2026\" y recuerda que el suplemento de transporte de 150,00 EUR sigue pendiente de cobro.\n\nQué pasó después del evento. El 21/06 se creó en el expediente de turnos un calendario nuevo, \"Turnos Confirmados - Boda Clara Beltrán (27/06/2026)\", con Lucía de 07:00 a 15:00 y Mario de 06:30 a 11:00, y el 27/06 se giró el comprobante SEPA-20260627-EXTRA por 86,00 EUR: 3 horas extra de Lucía a 18,00 y 2 de Mario a 16,00, con el concepto \"Pago horas extra montaje evento 27/06/2026\" y nota de suplemento por trabajo en exterior. Ese mismo día se registró el retraso en el montaje del arco floral. O sea, el trabajo real del 27 de junio existió y se pagó.\n\nEl registro que llama \"boda\" al 27 de junio es ese calendario de turnos del 21/06, y arrastra el comprobante SEPA del 27/06. No modifica el contrato. La razón está escrita en la propia adenda, cláusula 4.4: \"Cualquier cambio de fecha solicitado con posterioridad a esta adenda requerirá la firma de un nuevo documento y la disponibilidad de agenda del proveedor\". Ese documento no existe, y tu mensaje a Elena lo cierra: \"Como no firmamos el cambio a junio, esto solo cubre la logística del 15 de mayo... La fecha sigue siendo 15/05\". El calendario es una pieza operativa interna, no una adenda, y ni siquiera está cerrado del todo: figura \"Pendiente firma acuerdo confidencialidad v2.1 (Elena Soler)\".\n\nDos avisos para el cierre de junio. El calendario del 27/06 reutiliza la clave SOL-983 y la referencia de peonías ORANGE-64 del turno de mayo, así que huele a plantilla copiada: conviene confirmar si el 27/06 fue un evento distinto o un trasvase de errores. Y el recibo SOFIA-MORALES-150 del 31/05 por 54,00 EUR coincide exacto con las 3 horas de Lucía del comprobante de junio, así que revisa antes de conciliar que no estés pagando dos veces el mismo extra.",
+      "calls": [
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Clara"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Clara"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-12-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-11-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-8-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-3-5:artifact"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "sofia-morales:valencia-wedding"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "27/06/2026 boda junio"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-7-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-4-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "sofia-morales:extra-090"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "sofia-morales:staff"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-12-4:artifact"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "sofia-morales:valencia-wedding",
+            "query": "27 junio"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "sofia-morales:staff",
+            "query": "27 junio boda"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "27 de junio"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "sofia-morales:valencia-wedding",
+            "query": "junio cambio fecha firma"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "sofia-morales:staff",
+            "query": "retraso montaje arco floral horas extra"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "contrato base fecha evento 15/05"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "sofia-morales:extra-150"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "sofia-morales:extra-162"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "sofia-morales:extra-174"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "sofia-morales:valencia-wedding",
+            "query": "27 junio evento otro cliente"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 20405,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "sofia-morales:one-off-178",
+      "switchExpected": false,
+      "switched": false,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 11,
+      "minimumArtifactReads": 5,
+      "requiredChecks": [
+        {
+          "pattern": "15(?:[/. -]05(?:[/. -]2026)?| de mayo(?: de 2026)?)",
+          "matched": true
+        },
+        {
+          "pattern": "27 de junio(?: de 2026)?|27[/. -]06[/. -]2026",
+          "matched": true
+        },
+        {
+          "pattern": "(pedido|arreglos).{0,80}(post-boda|despu\\u00E9s|adicional|aparte)|post-boda",
+          "matched": false
+        },
+        {
+          "pattern": "(ORD-)?2026-0521-MA",
+          "matched": false
+        },
+        {
+          "pattern": "(borrador|pendiente de aprobaci\\u00F3n)",
+          "matched": false
+        },
+        {
+          "pattern": "(turno|roster|registro de personal|staff)",
+          "matched": true
+        },
+        {
+          "pattern": "(no modifica|no sustituye|no cambia|no puede modificar)",
+          "matched": true
+        },
+        {
+          "pattern": "(contradic|inconsisten|err\\u00F3ne|incompatible|clon|sin contraparte ni firma)",
+          "matched": false
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "Lease chronology resolves signed claims against later authoritative blockers",
+      "difficulty": "extreme",
+      "language": "de",
+      "pass": true,
+      "answer": "\n\nEnde Juni: Vertrag unterschreiben, Kurse aussetzen.\n\nDie Akte liest sich chronologisch so: Am 27. März bestätigt die Berlin Hausverwaltung den Eingang des unterzeichneten Vertrags Version 2.1 und behauptet, § 4.2 sei wegen des angeblich am 25. März unterschriebenen Berichts B-17 freigegeben. Dem widerspricht schon der Entwurf Version 2.1 vom 6. April ausdrücklich: Abendkurse sind nicht genehmigt, Nutzung nach 20 Uhr untersagt, die Bestätigung des Ingenieurs steht aus. Am 21. März beziehungsweise 21. April konkretisiert Frau Becker in Version 2.2 (Ref. BHV-2026-LEASE-045), dass die Freigabe zwingend an die unterzeichnete Bestätigung von Paul Neumann gebunden ist. Die anwaltliche Stellungnahme von Dr. Lea Maier vom 28. Mai löst den Widerspruch pragmatisch: Unterschrift ist zulässig, obwohl B-17 fehlt, aber § 4.2 muss im Vertrag als „vorläufig ausgesetzt\" gekennzeichnet bleiben. Beckers Mail vom 15. Juni schließt den Kreis: Neumann hat der Hausverwaltung selbst mitgeteilt, dass der Bericht nicht final unterschrieben ist, die Klausel kann daher nicht aktiviert werden. Der Beleg vom 27. Juni zeigt 180,00 EUR an Neumann Brandschutz für die Prüfung, Status ausgeführt, mit dem Hinweis, dass die Prüfung abgeschlossen, die Unterschrift aber weiterhin offen ist.\n\nKonkret darf Lena damit Ende Juni den Mietvertrag Version 2.2 unterschreiben, um die Schlüsselübergabe nicht zu gefährden, und die Werkstatt für den normalen Betrieb nutzen — nicht aber für Abendkurse, und die Klausel § 4.2 darf sie nicht als freigegeben behandeln. Die März-Auftragsbestätigung taugt als Grundlage nicht: Sie ist durch die späteren Dokumente überholt und beruht auf einer Unterschrift, die Neumann bestreitet.\n\nEs fehlen weiterhin genau zwei Voraussetzungen für die Abendkurse: erstens der final von Paul Neumann unterschriebene Brandschutzbericht B-17, und zweitens die schriftliche Freigabe der Klausel § 4.2 durch die Vermieterin, also die Berlin Hausverwaltung. Beides ist offen, die Reihenfolge ist fest — erst der Bericht, dann die Freigabe.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Brandschutz Freigabe Werkstatt"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Werkstatt Brandschutz Abendkurs Freigabe"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Brandschutz"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Feuerwehr Abnahme Brandschutz"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "lena-weber:studio-lease"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:studio-lease"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {}
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-lease-draft"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-10-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-7-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-8-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Freigabe Abendkurse März Bestätigung Neumann"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-12-4:artifact"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "lena-weber:studio-lease",
+            "query": "März Freigabe Abendkurse"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "März 2026 Brandschutz B-17"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Abendkurse Freigabe erteilt"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "B-17"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "intent": "lena-weber:studio-lease",
+            "limit": 60
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-11-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-6-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-weber:artifact-170"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-weber:artifact-160"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 22640,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "lena-weber:one-off-178",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 9,
+      "minimumArtifactReads": 5,
+      "requiredChecks": [
+        {
+          "pattern": "(25[.]03|25\\. M\\u00E4rz|March 25)",
+          "matched": true
+        },
+        {
+          "pattern": "(06[.]04|6\\. April|April 6)",
+          "matched": true
+        },
+        {
+          "pattern": "(28[.]05|28\\. Mai|May 28)",
+          "matched": true
+        },
+        {
+          "pattern": "(15[.]06|15\\. Juni|June 15)",
+          "matched": true
+        },
+        {
+          "pattern": "(27[.]06|27\\. Juni|June 27)",
+          "matched": true
+        },
+        {
+          "pattern": "B[-\\u2011]17",
+          "matched": true
+        },
+        {
+          "pattern": "Paul Neumann",
+          "matched": true
+        },
+        {
+          "pattern": "(schriftliche Freigabe|written approval)",
+          "matched": true
+        },
+        {
+          "pattern": "(Vertrag.{0,50}unterschreiben|sign.{0,40}lease)",
+          "matched": true
+        },
+        {
+          "pattern": "(Abendkurse.{0,50}(nicht|ausgesetzt|untersagt)|keine.{0,40}Abendkurse)",
+          "matched": true
+        },
+        {
+          "pattern": "(widerspr|contradic)",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "Three Atlas billing periods reconcile rates, VAT credits and cash total",
+      "difficulty": "extreme",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nDone. Here's the reconciliation.\n\nJanuary services, billed as INV-2026-02-001 and paid under reference ATLAS-PAY-20260215: 2,000 net fees plus 400 VAT, rebate 4% or 80, cash received 2,320.\n\nFebruary services, invoice INV-2026-03-001, paid 9 March under ATLAS-PAY-2026-0309-02: same 2,400 gross, rebate 5% or 100, cash received 2,300.\n\nMay services, invoice INV-2026-05-001, paid 27 June under ATLAS-PAY-2026-0627-01: 2,400 gross, rebate 7% of net fees or 140, plus a 28 VAT credit on that rebate, cash received 2,232.\n\nCombined cash received across the three periods is 6,852. That is 7,200 of gross billing less 320 of net-fee rebates and the 28 VAT credit in May.\n\nJanuary was not restated because 4% was the only signed term in force when that invoice was raised. The 2025 appendix set 4%, the 5% draft v2.0 was still unsigned in January and only countersigned on 26 February, and the 7% renewal signed 3 May was implemented prospectively by addendum v2.2, which applies to services from 1 May onwards. Priya confirmed in writing that the January invoice stands at 4%, and no credit note was raised.\n\nOne thing to watch: January and February took the rebate against the gross total with no VAT adjustment, while May also credited the 28 of VAT on the rebate. If Atlas applied the May treatment consistently, January and February were short by 16 and 20 respectively. Worth a query, though it does not change the cash actually received.\n\nThe data-processing permission stays out of this. DPA-42 is still awaiting countersignature, so production data transfer remains suspended under clause 3 of the addendum, and that thread lives in the security audit and DPA matter, where the current step is still to wait for the signed DPA before moving any data. The commercial terms are locked; the data side is not.",
+      "calls": [
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "rowan-chen:atlas-contract"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Atlas invoice rebate payment",
+            "limit": 30
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "rowan-chen:atlas-contract"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-5-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-12-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-11-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:extra-150"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "January invoice Atlas rebate",
+            "limit": 30
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "data processing agreement unsigned permission",
+            "limit": 30
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 50
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "rowan-chen:atlas-contract",
+            "query": "January",
+            "limit": 20
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 50,
+            "query": "Atlas"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "rowan-chen:atlas-contract",
+            "limit": 30,
+            "query": "restated January invoice rebate"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "rowan-chen:atlas-contract",
+            "limit": 40,
+            "offset": 20
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-atlas-2026"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "rowan-chen:atlas-contract",
+            "limit": 40,
+            "query": "DPA-42 data processing"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "rowan-chen:atlas-contract",
+            "limit": 40,
+            "query": "Jan invoice 4% INV-2026-01"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 30,
+            "offset": 20,
+            "query": "Atlas"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-10-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 30,
+            "query": "INV-2026-01"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-3-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-atlas-2025"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-1-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-176"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 28101,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:one-off-178",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 10,
+      "minimumArtifactReads": 6,
+      "requiredChecks": [
+        {
+          "pattern": "INV-2026-02-001",
+          "matched": true
+        },
+        {
+          "pattern": "4\\s*%|4 percent",
+          "matched": true
+        },
+        {
+          "pattern": "2[,]?320(?:[.]00)?",
+          "matched": true
+        },
+        {
+          "pattern": "ATLAS-PAY-2026-0309-02",
+          "matched": true
+        },
+        {
+          "pattern": "5\\s*%|5 percent",
+          "matched": true
+        },
+        {
+          "pattern": "2[,]?300(?:[.]00)?",
+          "matched": true
+        },
+        {
+          "pattern": "ATLAS-PAY-2026-0627-01",
+          "matched": true
+        },
+        {
+          "pattern": "7\\s*%|7 percent",
+          "matched": true
+        },
+        {
+          "pattern": "140(?:[.]00)?",
+          "matched": true
+        },
+        {
+          "pattern": "28(?:[.]00)?",
+          "matched": true
+        },
+        {
+          "pattern": "2[,]?232(?:[.]00)?",
+          "matched": true
+        },
+        {
+          "pattern": "6[,]?852(?:[.]00)?",
+          "matched": true
+        },
+        {
+          "pattern": "DPA-42",
+          "matched": true
+        },
+        {
+          "pattern": "(still|remains).{0,30}(unsigned|blocked|pending)",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "All Glasgow journeys and dog-care bookings align without cross-wiring",
+      "difficulty": "breaking",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nHere is the trail, trip by trip.\n\nTrip one, 28 March. Rail booking NRC-2026-0321-GLA, Bristol Temple Meads 09:45 to Glasgow Central 15:30, change at London Euston, fare 85.00 split as a 25.00 GWR voucher plus 60.00 on Monzo debit 5526, non-refundable with a 10 change fee. The voucher is GWR-VCH-2026-0318-9921, issued 18 March for the 7 February delay, valid once on GWR, expiring 18 March 2027. Dog care for that window, Bea Fox reference BEA-DOG-2026-03 covering 28 to 29 March, was cancelled because the sitter was unavailable, 25.00 refunded to PayPal and settled by 10 April, with Jo Harding notified. So the March trip has no aligned cover at travel time, only the cancellation as the closing evidence. A separate GWR e-ticket GWR-2026-0312-441, Bristol to London Paddington on 14 March for 62.50, sits alongside it but is a different journey with the Glasgow leg booked separately via LNER.\n\nTrip two, 21 May. Ticket NR-2026-0506-GLA-01, Bristol Temple Meads 17:45 to Glasgow Central 23:15, 145.00, GWR to Paddington, cross-London transfer to King's Cross with at least 45 minutes allowed, then LNER to Edinburgh and ScotRail into Glasgow. Dog care aligns cleanly: Alex Thorne reference BOOK-DOG-2026-0515-AT, overnight for Pip 22 to 24 May, 60.00 total, 20.00 deposit paid via PayPal as PAY-2026-0515-DOG, fully refundable 48 hours out, sitter approved by Jo Harding. Arrival at 23:15 on the 21st hands over to a 22 May start, and the 27.00 receipt dated 22 May in the dog matter is the spend on that side. One loose end: voucher VOUCHER-GWR-2026-0512-44, 25.00 from claim GWR-2026-0415-77, expires 12 November 2026 and was never applied to this fare.\n\nTrip three, 28 June return. Ticket NR-2026-0628-BRI-02, Glasgow Central 08:30 to Bristol Temple Meads 14:15, 138.50, ScotRail to Edinburgh, LNER to King's Cross, GWR from Paddington to Bristol. The 15.00 taxi voucher from Jamie's address to Glasgow Central is inside that fare, reference TAXI-GLA-2026-0628, and the cross-London leg is King's Cross St Pancras to Paddington on the Circle or Hammersmith & City line. Dog care does not align: the only payment is 60.00 to Bea Fox on 6 June, PAY-2026-0606-BEA, for the weekend of 6 to 8 June, and the 25 June note still says arrange weekend care. That is the one real gap in the trail.\n\nExcluded, and why. The April deposit PAY-2026-0412-DOG is 40.00 to Alex Thorne on 12 April for sitting dates 28 to 29 April. It cannot cover the May journey because it names a different service window three weeks earlier, carries a different amount than the 20.00 May deposit, has its own transaction reference, and predates both the 6 May ticket issue and the 15 May booking. It belongs to an April trip, not the 21 to 24 May chain.\n\nNet position: March and May are fully evidenced end to end, June needs the 28 June cover confirmed before the trail closes.",
+      "calls": [
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Glasgow rail booking"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Glasgow rail booking"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Glasgow",
+            "limit": 30
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Glasgow",
+            "limit": 30
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Bea booking cancelled",
+            "limit": 20
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "taxi voucher London",
+            "limit": 20
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "intent": "rowan-chen:family-visit",
+            "limit": 40
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "intent": "rowan-chen:foster-dog",
+            "limit": 40
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-6-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-6-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-9-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-9-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 30,
+            "offset": 20,
+            "query": "Glasgow"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 20,
+            "query": "taxi"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-12-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-7-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "limit": 20,
+            "offset": 20,
+            "intent": "rowan-chen:foster-dog"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-6-1:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-083"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-9-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-11-2:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:extra-141"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-175"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-5-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-133"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-153"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 33176,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:one-off-178",
+      "switchExpected": false,
+      "switched": false,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 15,
+      "minimumArtifactReads": 7,
+      "requiredChecks": [
+        {
+          "pattern": "NRC-2026-0321-GLA",
+          "matched": true
+        },
+        {
+          "pattern": "85[.]00",
+          "matched": true
+        },
+        {
+          "pattern": "25[.]00.{0,60}(voucher|GWR)|voucher.{0,60}25[.]00",
+          "matched": true
+        },
+        {
+          "pattern": "60[.]00",
+          "matched": true
+        },
+        {
+          "pattern": "BEA-DOG-2026-03",
+          "matched": true
+        },
+        {
+          "pattern": "NR-2026-0506-GLA-01",
+          "matched": true
+        },
+        {
+          "pattern": "145[.]00",
+          "matched": true
+        },
+        {
+          "pattern": "BOOK-DOG-2026-0515-AT",
+          "matched": true
+        },
+        {
+          "pattern": "20[.]00",
+          "matched": true
+        },
+        {
+          "pattern": "PAY-2026-0412-DOG",
+          "matched": true
+        },
+        {
+          "pattern": "(April 28|28(?: to 29)? April|2026-04-28)",
+          "matched": true
+        },
+        {
+          "pattern": "NR-2026-0628-BRI-02",
+          "matched": true
+        },
+        {
+          "pattern": "138[.]50",
+          "matched": true
+        },
+        {
+          "pattern": "TAXI-GLA-2026-0628",
+          "matched": true
+        },
+        {
+          "pattern": "15[.]00",
+          "matched": true
+        },
+        {
+          "pattern": "Circle",
+          "matched": true
+        },
+        {
+          "pattern": "Hammersmith\\s*(?:&|and)\\s*City",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "Supplier audit proves net May liability while isolating earlier refund cycle",
+      "difficulty": "breaking",
+      "language": "es",
+      "pass": true,
+      "answer": "\n\nNeto: 140,00 EUR. La cadena documental de MA-2026-0510 queda así: el pedido original ascendía a 320,00 EUR, la Autorización de Devolución RA-2026-0524 ampara la devolución de la caja 2 por calidad de tallos insuficiente, con recogida el 25/05/2026 y reembolso dirigido a la Visa terminada en 6418; el soporte técnico es el caso MA-EXP-2026-0527, que confirma recepción e inspección en el almacén de Valencia el 25/05/2026 y el abono de 180,00 EUR; la Factura Proforma Ajustada del 03/06 cierra el número con 320,00 menos 180,00, o sea 140,00 EUR pendientes; y el extracto Visa del periodo 01/06 al 09/06 lo verifica en el banco, con el cargo de 320,00 EUR del 02/06 y el abono de 180,00 EUR del 03/06 en la misma tarjeta 6418. Los otros dos movimientos de ese extracto, Taller Alba Refrigeración por 750,20 y el payout de Stripe por 750,00, son de cámara fría y de un anticipo de cliente, así que no tocan este neto.\n\nSobre el reembolso de MA-2026-0325: es otro ejercicio y otro expediente. Su autorización es RA-2026-0328, su caso es MA-EXP-2026-0403, se procesó el 02/04/2026 con la referencia MA-REF-20260402-991 y corresponde a la orden de sustitución MA-2026-0410. Ese abono ya aparece liquidado en el extracto Visa del 01/04 al 15/04, en el movimiento del 03/04, dentro de un periodo cerrado. Coincide en importe y en tarjeta con el de junio, pero son dos operaciones distintas de dos pedidos distintos: volver a meterlo en el neto de MA-2026-0510 duplicaría 180,00 EUR y dejaría el neto mal en cero.\n\nY ORANGE-64 no es una cifra. Es la referencia de traspaso del envío, que el correo del 09/03 pide incluir junto con la hoja de relevo de las peonías; la nota de la RA-2026-0524 solo la repite como dato logístico. No lleva importe, no genera cargo ni abono, y no aparece en ningún extracto, así que va al expediente de trazabilidad del transporte, no al cierre contable. En resumen: para el 2026-06-28 se contabiliza un único pendiente de 140,00 EUR con Mar Azul.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "MA-2026-0510"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "ORANGE-64"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Mar Azul"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "extracto Visa"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "MA-2026-0510"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-10-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-11-1:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-11-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "MA-2026-0325"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "0325"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "MA-EXP-2026-0527 soporte"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-7-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Refund Status Update Case"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "reembolso anterior Mar Azul caso"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "MA-2026-0325 reembolso"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-10-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-7-1:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "sofia-orange-shipment-mail"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 19166,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "sofia-morales:one-off-178",
+      "switchExpected": false,
+      "switched": false,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 7,
+      "minimumArtifactReads": 5,
+      "requiredChecks": [
+        {
+          "pattern": "MA-2026-0510",
+          "matched": true
+        },
+        {
+          "pattern": "RA-2026-0524",
+          "matched": true
+        },
+        {
+          "pattern": "MA-EXP-2026-0527",
+          "matched": true
+        },
+        {
+          "pattern": "320[,.]00",
+          "matched": true
+        },
+        {
+          "pattern": "180[,.]00\\s*(EUR|Euro|\\u20AC)",
+          "matched": true
+        },
+        {
+          "pattern": "140[,.]00\\s*(EUR|Euro|\\u20AC)",
+          "matched": true
+        },
+        {
+          "pattern": "(03[./]06|3 de junio|June 3)",
+          "matched": true
+        },
+        {
+          "pattern": "MA-2026-0325",
+          "matched": true
+        },
+        {
+          "pattern": "RA-2026-0328",
+          "matched": true
+        },
+        {
+          "pattern": "ORANGE-64",
+          "matched": true
+        },
+        {
+          "pattern": "(anterior|separad|distint|no.{0,30}(sumar|contabilizar))",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    },
+    {
+      "case": "May liquidity note exposes a paid-versus-unpaid Atlas contradiction",
+      "difficulty": "breaking",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nThe note is ready, with one balance that doesn't tie.\n\nMay business account: opening 1,450.00, then four movements — GWR Delay Repay refund in 25.00 on 12 May, HMRC VAT out 400.00 on 20 May, Morgan Joinery Stage 3 out 1,200.00 on 25 May, and Bristol Nonprofit paying INV-2026-04-002 in 1,200.00 on 28 May. Those movements land on 1,075.00, but the statement prints a closing balance of 1,475.00. The gap is exactly 400.00, the VAT amount, so either the closing figure is stale or the VAT payment was double counted. I have not adjusted it; that needs the bank's own running balance before the note is signed off.\n\nCompany card ending 3074 for May: DataSync 45.00, Adobe 10.00, Microsoft 365 12.00, GWR ticket 25.50. That sums to 92.50, which matches the total due exactly. Status open, due 15 June. So liquidity at 1 June is 1,382.50 on the printed closing figure, or 982.50 if the computed 1,075.00 is the true one, in both cases after setting aside the 92.50 card bill.\n\nThe conflicting item is INV-2026-03-001, Atlas Ltd, described as February Services. The receipt dated 9 March, reference ATLAS-PAY-2026-0309-02, says Completed at 2,300.00 with a 5% rebate under Renewal Agreement v2.0. The May bank statement note says the same invoice remains unpaid. I am not picking a winner. Two things make it worse: the March card statement explicitly says that payment arrived by bank transfer, not card, yet there is no March business current account statement in the records to show the credit; and the February statement separately flags INV-2026-02-002 for February work as unpaid, so the February work may be sitting under two invoice numbers. Do not chase Atlas on a debt until that numbering is settled.\n\nTwo smaller defects worth noting: the two March card statements disagree on status, one Paid on 15 April, one Pending Direct Debit, and neither 1,245.00 matches its own line items, which total 95.00.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "May business bank statement closing balance"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "company card statement due date open balance"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "liquidity note Atlas invoice unpaid March paid receipt"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "bank statement"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "invoice Atlas"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Atlas renewal rebate invoice"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Mastercard statement"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "INV-2026"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "receipt paid"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-11-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-11-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-3-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "INV-2026-03-001"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Atlas Ltd invoice March 2026 payment reference"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-11-5:artifact"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "rowan-chen:atlas-contract"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-5-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-12-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:extra-150"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-7-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-8-1:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:artifact-174"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-4-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-chen:extra-114"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Atlas Ltd payment receipt bank transfer",
+            "limit": 30
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "rowan-chen:invoices"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 32890,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:one-off-178",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true,
+      "artifactReadCount": 12,
+      "minimumArtifactReads": 4,
+      "requiredChecks": [
+        {
+          "pattern": "1[,]?450[.]00",
+          "matched": true
+        },
+        {
+          "pattern": "1[,]?475[.]00",
+          "matched": true
+        },
+        {
+          "pattern": "25[.]00",
+          "matched": true
+        },
+        {
+          "pattern": "400[.]00",
+          "matched": true
+        },
+        {
+          "pattern": "1[,]?200[.]00",
+          "matched": true
+        },
+        {
+          "pattern": "INV-2026-04-002",
+          "matched": true
+        },
+        {
+          "pattern": "92[.]50",
+          "matched": true
+        },
+        {
+          "pattern": "(15 June|June 15|2026-06-15)",
+          "matched": true
+        },
+        {
+          "pattern": "INV-2026-03-001",
+          "matched": true
+        },
+        {
+          "pattern": "ATLAS-PAY-2026-0309-02",
+          "matched": true
+        },
+        {
+          "pattern": "(contradic|conflict|inconsisten)",
+          "matched": true
+        },
+        {
+          "pattern": "(paid|completed)",
+          "matched": true
+        },
+        {
+          "pattern": "unpaid",
+          "matched": true
+        }
+      ],
+      "forbiddenHit": false
+    }
+  ],
+  "passed": 10
+}

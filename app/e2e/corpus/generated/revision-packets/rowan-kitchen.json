@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-rowan-chen-10-2",
+      "user": "Tess says we need one last SALT-312 coat. Did KitchenSupply confirm the missing roller from March and the little paint tin? Need an ETA before Ellis gets home.",
+      "assistant": "KitchenSupply confirmed order KS-2026-0521-44. The 1L touch-up tin costs £14.50; they added the missing roller as a free replacement under the April support case. Both are due tomorrow, 22 May, between 10 and 14.",
+      "artifact": {
+        "title": "Kitchen Supplier Order Confirmation",
+        "from": "Kitchen Supplier Support <support@kitchensupplier.test>",
+        "to": null,
+        "language": "en",
+        "body": "Order Reference: KS-2026-0521-44\nDate: 2026-05-21\nItems:\n1x Dulux Easycare Kitchen Paint (SALT-312, 1L) - £14.50\n1x Microfibre Roller Set (goodwill replacement for missing March item) - £0.00\nSubtotal: £14.50\nVAT (20%): Included in price\nTotal Paid: £14.50 GBP\nPayment Method: PayPal\nDelivery Window: 2026-05-22, 10:00 - 14:00\nStatus: Confirmed; dispatch scheduled\n\nNote: This order resolves case KS-SUP-2026-0403-01. The roller set replaces the item missing from order KS-2026-0327-88. The 1L paint tin is a final touch-up quantity, distinct from the initial 2.5L purchase. Please inspect upon arrival."
+      },
+      "probe": {
+        "question": "How much did KitchenSupply charge for the May touch-up order?",
+        "answer": "Total Paid: £14.50 GBP"
+      }
+    }
+  ]
+}

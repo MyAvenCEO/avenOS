@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-06-03",
+        "intentId": "rowan-chen:migration",
+        "kind": "invoice",
+        "user": "Lucía sent the invoice for the test batch. Check the total and ref.",
+        "assistant": "Invoice INV-ES-2026-0603 for £145.00. Ref RIO-588. Pending payment.",
+        "artifact": {
+          "title": "Factura de Servicios de Migración de Datos",
+          "from": "Lucía Ortega",
+          "to": "Rowan Chen",
+          "language": "es",
+          "body": "Hola Rowan,\n\nAdjunto la factura para el lote de prueba RIO-588.\n\nFACTURA NÚMERO: INV-ES-2026-0603\nFECHA: 2026-06-03\nCLIENTE: Rowan Chen Consultancy\nSERVICIOS: Validación de archivos fuente y preparación de datos.\nSUBTOTAL: £120.83\nIVA (20%): £24.17\nTOTAL: £145.00\nESTADO: Pendiente de pago\nREFERENCIA DE ENVÍO: RIO-588\n\nPor favor, confirma la recepción. Saludos."
+        },
+        "probe": {
+          "question": "What is the total amount on the Spanish partner's invoice for the test batch?",
+          "answer": "TOTAL: £145.00"
+        }
+      },
+      {
+        "date": "2026-06-06",
+        "intentId": "rowan-chen:foster-dog",
+        "kind": "payment",
+        "user": "Paid Bea for the weekend sit. Did it go through?",
+        "assistant": "Yes, £60.00 sent via PayPal. Ref PAY-2026-0606-BEA.",
+        "artifact": {
+          "title": "PayPal Payment Confirmation",
+          "from": "PayPal",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Payment Confirmation\n\nYou sent a payment to Bea Fox.\n\nDate: 2026-06-06\nAmount: £60.00 GBP\nStatus: Completed\nPayment Method: Monzo Household Debit ending 5526\nTransaction ID: PAY-2026-0606-BEA\nNote: Weekend dog sitting for Pip (2026-06-06 to 2026-06-08). Approved by Jo Harding."
+        },
+        "probe": {
+          "question": "How much did I pay Bea for the weekend dog sitting?",
+          "answer": "£60.00 GBP"
+        }
+      },
+      {
+        "date": "2026-06-09",
+        "intentId": "rowan-chen:invoices",
+        "kind": "card-statement",
+        "user": "Check the company card. Did the software subs renew?",
+        "assistant": "Yes, DataSync and Adobe renewed. Total due £92.50.",
+        "artifact": {
+          "title": "Company Mastercard Statement: May 2026",
+          "from": "Card Issuer",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "CARD ENDING: 3074\nPERIOD: 2026-05-01 to 2026-05-31\n\nLINE ITEMS:\n2026-05-03 | Out | DataSync Cloud Ltd | -£45.00\n2026-05-05 | Out | Adobe Creative Cloud | -£10.00\n2026-05-10 | Out | Microsoft 365 | -£12.00\n2026-05-15 | Out | GWR Rail Ticket | -£25.50\n\nTOTAL DUE: £92.50\nPAYMENT DUE DATE: 2026-06-15\nSTATUS: Open"
+        },
+        "probe": {
+          "question": "What is the total amount due on the company Mastercard for May?",
+          "answer": "TOTAL DUE: £92.50"
+        }
+      },
+      {
+        "date": "2026-06-12",
+        "intentId": "rowan-chen:invoices",
+        "kind": "bank-statement",
+        "user": "Business account check. Did Atlas pay the March invoice?",
+        "assistant": "No, still outstanding. Only the GWR refund came in.",
+        "artifact": {
+          "title": "Business Current Account Statement: May 2026",
+          "from": "Bank",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Account: Business Current Account\nPeriod: 2026-05-01 to 2026-05-31\nOpening Balance: £1,450.00\nClosing Balance: £1,475.00\n\nENTRIES:\n2026-05-12 | In | GWR Delay Repay Refund | +£25.00\n2026-05-20 | Out | HMRC VAT Payment | -£400.00\n2026-05-25 | Out | Morgan Joinery (Stage 3) | -£1,200.00\n2026-05-28 | In | Bristol Nonprofit (INV-2026-04-002) | +£1,200.00\n\nNOTE: Atlas Ltd invoice INV-2026-03-001 remains unpaid."
+        },
+        "probe": {
+          "question": "Did the Bristol Nonprofit pay their invoice in May?",
+          "answer": "2026-05-28 | In | Bristol Nonprofit (INV-2026-04-002) | +£1,200.00"
+        }
+      },
+      {
+        "date": "2026-06-15",
+        "intentId": "rowan-chen:atlas-contract",
+        "kind": "email",
+        "user": "Malik, status on the signed renewal? Need to bill June.",
+        "assistant": "Draft v2.1 still unsigned. 7% rebate not active.",
+        "artifact": {
+          "title": "RE: Atlas Renewal Appendix v2.1 Status",
+          "from": "Malik Ahmed",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Dear Rowan,\n\nRegarding the Atlas Consultancy Renewal Appendix v2.1: The document remains in DRAFT state. It has not been countersigned by Atlas Legal. Therefore, the 7% rebate term is not yet active for June invoices. Please await the signed document before adjusting any calculations. The previous 4% term applies until countersignature.\n\nRegards,\nMalik Ahmed\nAtlas Legal"
+        },
+        "probe": {
+          "question": "Is the 7% rebate active for June invoices?",
+          "answer": "the 7% rebate term is not yet active for June invoices"
+        }
+      }
+    ],
+    "continuity": "Open: Atlas Renewal Appendix v2.1 remains unsigned draft; 7% rebate application blocked. Open: DPA-42 v3.0 unsigned; production data exchange blocked. Open: Invoice INV-ES-2026-0603 (£145.00) issued to Rowan Chen Consultancy, unpaid. Resolved: Bristol Nonprofit invoice INV-2026-04-002 (£1,200.00) paid on 2026-05-28. Resolved: Weekend dog sitting paid to Bea Fox (£60.00). New: Company Mastercard May statement shows £92.50 due. New: Business account closing balance £1,475.00."
+  }
+}

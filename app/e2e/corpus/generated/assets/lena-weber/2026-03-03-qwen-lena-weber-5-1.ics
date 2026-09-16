@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//avenOS//Synthetic Corpus//EN
+BEGIN:VEVENT
+UID:qwen-lena-weber-5-1@synthetic.test
+DTSTAMP:20260303T180200Z
+DTSTART;TZID=Europe/Berlin:20260303T140000
+DTEND;TZID=Europe/Berlin:20260303T143000
+SUMMARY:Calendar Invite: Nordton Sample Kit Review & Shipping Prep
+DESCRIPTION:Subject: Meeting Invitation: Nordton Sample Kit Review & Shipping Prep\n\nHi Lena\,\n\nI am scheduling a brief call to confirm the release of the Spring Glaze Sample Kit (Ref: NK-2026-SPR-09). We need to ensure the batch meets the quality standards before you proceed with the new classes.\n\nDate: Tuesday\, March 3\, 2026\nTime: 14:00 - 14:30 CET\nLocation: Zoom Link (sent separately)\nAttendees: Lena Weber (Weber Keramik)\, Nora Wells (Nordton Export Desk)\n\nAgenda:\n1. Confirm shipment status of Sample Kit NK-2026-SPR-09.\n2. Review packaging requirements for fragile ceramics.\n3. Next steps for bulk order pricing.\n\nPlease confirm your availability. We aim to finalize the sample release by end of day.\n\nBest regards\,\nNora Wells\nQuality Support Employee\nNordton Export Desk
+X-SYNTHETIC-TEST-RECORD:TRUE
+END:VEVENT
+END:VCALENDAR

@@ -77,7 +77,7 @@ import json, os
 from pathlib import Path
 root = Path(os.environ['RECOVERY_FIXTURE_ROOT']) / 'release-bundle'
 root.mkdir(mode=0o700)
-image = 'postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73'
+image = 'postgres:18-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2'
 (root / 'release.json').write_text(json.dumps({'version': 1, 'sha': 'a'*40, 'images': {'DATABASE_IMAGE': image}}))
 (root / '.env').write_text(f'DATABASE_IMAGE={image}\nRECOVERY_VALUE=retained-fixture\n')
 (root / '.env').chmod(0o600)

@@ -135,7 +135,7 @@ describe('api facade', () => {
 			})
 		)
 		expect(completed.status).toBe(200)
-		expect(complete).toHaveBeenCalledWith({ modelId: 'vision' })
+		expect(complete).toHaveBeenCalledWith({ modelId: 'vision' }, expect.any(AbortSignal))
 		expect(verify).not.toHaveBeenCalled()
 	})
 	test('fails closed before contacting a downstream', async () => {

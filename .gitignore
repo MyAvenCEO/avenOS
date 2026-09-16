@@ -120,3 +120,6 @@ ARCHIVE/tauri-plugin-passkey/swift-lib/.build/
 # that every build re-resolves.
 libs/tauri-plugin-ios-passkey/.tauri/
 libs/tauri-plugin-ios-passkey/ios/Package.resolved
+
+# Generated SvelteKit output for every workspace.
+**/.svelte-kit/

@@ -2,7 +2,7 @@ import { api, readJson } from '$lib/server/api.js'
 import { AppError } from '$lib/server/errors.js'
 import { ProofOfWorkError } from '$lib/server/proof-of-work.js'
 import { rateLimit } from '$lib/server/rate-limit.js'
-import { secureNameSchema } from '$lib/validation.js'
+import { preferredBrowserLanguage, secureNameSchema } from '$lib/validation.js'
 
 export const POST = api(async (event, rt) => {
 	if (!rateLimit(`names-hold:${event.getClientAddress()}`, 10, 3_600_000))
@@ -20,7 +20,10 @@ export const POST = api(async (event, rt) => {
 	const hold = await rt.names.secure(input.name, input.email, {
 		tier: input.tier,
 		salutation: input.salutation,
-		idea: input.idea
+		idea: input.idea,
+		browserLanguage:
+			input.browserLanguage ??
+			preferredBrowserLanguage(event.request.headers.get('accept-language'))
 	})
 	return { status: 201, body: { hold } }
 })

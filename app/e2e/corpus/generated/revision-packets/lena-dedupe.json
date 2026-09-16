@@ -1,0 +1,117 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-lena-weber-4-3",
+      "user": "Kontoauszug checken. Die Zahlung an Neumann ist raus, aber ich will sehen, ob die Miete schon abgebucht wurde. Und die Einnahmen vom Online-Shop fehlen mir noch.",
+      "assistant": "Hier ist der Auszug für den Zeitraum 15.–24. Februar. Die Miete ist noch nicht abgebucht (Dauerauftrag läuft am 1. des Monats), aber die Stripe-Auszahlung ist da. Die Zahlung an Neumann Brandschutz ist korrekt verbucht.",
+      "artifact": {
+        "title": "Kontoauszug Weber Keramik Geschäftskonto",
+        "from": "Weber Keramik GmbH",
+        "to": null,
+        "language": "de",
+        "body": "Kontoauszug\nKonto: Weber Keramik Geschäftskonto ****5602\nZeitraum: 15.02.2026 - 24.02.2026\n\nAnfangssaldo: 2.450,00 EUR\n\nBuchungen:\n15.02.2026 | SEPA-Überweisung | Neumann Brandschutz (Rechnung NB-2026-0215-001) | -535,50 EUR\n18.02.2026 | Gutschrift | Stripe Payout (Online-Shop Verkäufe KW 7) | +420,00 EUR\n20.02.2026 | Kartenzahlung | DHL Express (Versand Olivia Grant) | -12,50 EUR\n\nSchlusssaldo: 2.322,00 EUR\n\nHinweis: Dauerauftrag Miete (850,00 EUR) ist für den 01.03.2026 geplant. Keine weiteren offenen Posten aus dem Zeitraum."
+      },
+      "probe": {
+        "question": "Was war der Schlusssaldo auf dem Geschäftskonto am 24. Februar?",
+        "answer": "2.322,00 EUR"
+      }
+    },
+    {
+      "id": "qwen-lena-weber-7-5",
+      "user": "Visa Abrechnung checken. Die Nordton Muster sind drauf, aber ich will wissen, ob die Zahlung für die Brandschutzprüfung auch über die Karte lief oder per SEPA. Und wann ist die Frist?",
+      "assistant": "Die Brandschutzprüfung wurde per SEPA bezahlt, nicht über die Karte. Auf der Visa-Abrechnung sind die Nordton-Muster, die Radwerk-Reparatur und der DHL-Versand. Fällig ist der Betrag am 05.05.",
+      "artifact": {
+        "title": "Visa Debit Kartenabrechnung April 2026",
+        "from": "Sparkasse Berlin",
+        "to": null,
+        "language": "de",
+        "body": "Kartenabrechnung\nKarte: Visa Debit ****4821\nAbrechnungszeitraum: 01.03.2026 - 14.04.2026\n\nBuchungen:\n09.03.2026 | Nordton GmbH | Glaze Sample Kit (Ref: NK-2026-SPR-09) | 45,00 EUR\n18.03.2026 | Radwerk Prenzlberg | Bremsen Service | 25,00 EUR\n20.03.2026 | DHL Express | Versand Olivia Grant | 12,50 EUR\n05.04.2026 | Nordton GmbH | Musterplatten Matte Serie | 60,57 EUR\n\nGesamtbetrag: 143,07 EUR\nFälligkeitsdatum: 05.05.2026\nStatus: Offen; Lastschrift geplant zum 05.05.2026\n\nHinweis: Die Zahlung an Neumann Brandschutz (535,50 EUR) erfolgte per SEPA-Überweisung vom Geschäftskonto ****5602 und ist hier nicht enthalten."
+      },
+      "probe": {
+        "question": "Welcher Betrag war auf der Visa-Abrechnung für den Zeitraum bis 14. April fällig?",
+        "answer": "143,07 EUR"
+      }
+    },
+    {
+      "id": "qwen-lena-weber-9-5",
+      "user": "Mira, ich hab den Trip für Leipzig gebucht. Papa muss da hin, wegen der Reha-Nachsorge. Bitte check die Zeiten, ob das mit den Kursen klappt.",
+      "assistant": "Gut, dass du das jetzt machst. Die Zeiten passen, Jonas übernimmt die Kurse. Der Zug ist gut angebunden.",
+      "artifact": {
+        "title": "DB Buchungsbestätigung",
+        "from": "Deutsche Bahn",
+        "to": null,
+        "language": "de",
+        "body": "Buchungsbestätigung\n\nReise: Berlin Hbf -> Leipzig Hbf\nDatum: 18.07.2026\nZug: ICE 1502\nAbfahrt: 08:15 Uhr\nAnkunft: 09:15 Uhr\nReisende: Lena Weber, Mira, Klaus Weber\nKlasse: 2. Klasse\nSitzplatz: Barrierefreier Bereich, Wagen 5\nTarif: Flexpreis\nPreis: 145,00 EUR\nZahlungsmethode: Visa Debit ****4821\nStatus: Bezahlt\nBuchungsnummer: DB-2026-0515-LEIP-01\nStornierung: Vor dem 1. Geltungstag gegen 19,00 EUR Entgelt; danach ausgeschlossen.\n\nHinweis: Bitte nutzen Sie den Aufzug am Gleis 1 in Berlin Hbf. Die aktuelle Aufzugslage und Einstiegshilfe bitte 24 Stunden vorher prüfen."
+      },
+      "probe": {
+        "question": "Wann fährt unser Familienzug nach Leipzig?",
+        "answer": "Datum: 18.07.2026"
+      }
+    },
+    {
+      "id": "qwen-lena-weber-10-3",
+      "user": "Olivia hat die kaputten Teller zurückgeschickt. Ich hab die Ersatzlieferung rausgeschickt. Bitte den Fall schließen, damit ich die Gutschrift im System verbuchen kann.",
+      "assistant": "Die Rücksendung ist eingegangen; der Schaden an allen vier Tellern wurde bestätigt. Die Ersatzlieferung geht heute als Kulanz raus. Die Erstattung vom 28. April bleibt bestehen, danach ist RMA-2026-0524-OG abgeschlossen.",
+      "artifact": {
+        "title": "RMA Abschlussbestätigung #RMA-2026-0524-OG",
+        "from": "Weber Keramik",
+        "to": null,
+        "language": "de",
+        "body": "Kundin: Olivia Grant\n\nSehr geehrte Frau Grant,\n\nwir bestätigen den Abschluss Ihrer Reklamation für die Bestellung WK-2026-0415-OG.\n\nRMA-Referenz: RMA-2026-0524-OG\nOriginalbestellung: WK-2026-0415-OG\nGrund: Beschädigung beim Transport (4 Teller 'Nordblau')\nStatus: Geschlossen\n\nMaßnahmen:\n1. Rücksendung der beschädigten Ware: Eingegangen am 22.05.2026. Schaden an allen vier Tellern bestätigt.\n2. Ersatzlieferung: Versandt am 24.05.2026 per DHL Express (Tracking: 00340434271234567891).\n3. Zahlung: Die ursprüngliche Erstattung vom 28.04.2026 bleibt bestehen. Die Ersatzware ist eine zusätzliche Kulanzleistung; keine weitere Zahlung oder Erstattung offen.\n\nMit freundlichen Grüßen\nLena Weber\nWeber Keramik"
+      },
+      "probe": {
+        "question": "Welche RMA-Referenznummer wurde für den Abschluss von Olivias Fall verwendet?",
+        "answer": "RMA-2026-0524-OG"
+      }
+    },
+    {
+      "id": "qwen-lena-weber-10-5",
+      "user": "Dr. Maier, Frau Becker will den Vertrag jetzt unterschreiben, obwohl Paul B-17 noch nicht final hat. Ist das rechtlich okay, wenn wir die Abendkurse vorerst aussetzen?",
+      "assistant": "Ja, das ist möglich. Der Vertrag kann unterzeichnet werden, solange die Klausel für Abendkurse (§ 4.2) explizit ausgesetzt bleibt, bis der Bericht vorliegt. So sichern Sie sich die Räumlichkeiten, ohne gegen Auflagen zu verstoßen.",
+      "artifact": {
+        "title": "Rechtliche Stellungnahme: Mietvertrag Prenzlauer Berg",
+        "from": "Dr. Lea Maier",
+        "to": null,
+        "language": "de",
+        "body": "STELLUNGNAHME\n\nAn: Lena Weber, Weber Keramik\nVon: Dr. Lea Maier, Rechtsanwältin\nDatum: 28.05.2026\nBetreff: Unterzeichnung Mietvertrag Version 2.2 (Ref: BHV-2026-LEASE-045)\n\nSehr geehrte Frau Weber,\n\nbezugnehmend auf Ihre Anfrage bestätige ich: Die Unterzeichnung des Mietvertrags ist rechtlich zulässig, auch wenn der Brandschutzbericht B-17 von Paul Neumann noch nicht final unterschrieben vorliegt.\n\nVoraussetzung:\nDie Klausel § 4.2 (Nutzung zu Unterrichtszwecken/Abendkurse) muss im Vertrag als 'vorläufig ausgesetzt' gekennzeichnet bleiben. Die Nutzung der Räumlichkeiten für Abendkurse ist erst nach Vorlage des unterschriebenen Berichts B-17 und schriftlicher Freigabe durch die Vermieterin (Berlin Hausverwaltung) zulässig.\n\nEmpfehlung:\nUnterschreiben Sie den Vertrag, um die Schlüsselübergabe am 01.06.2026 nicht zu gefährden. Halten Sie die Abendkurse bis zur Freigabe ausgesetzt.\n\nMit freundlichen Grüßen\nDr. Lea Maier"
+      },
+      "probe": {
+        "question": "Unter welcher Bedingung kann ich den Studiomietvertrag jetzt unterschreiben?",
+        "answer": "Die Klausel § 4.2 (Nutzung zu Unterrichtszwecken/Abendkurse) muss im Vertrag als 'vorläufig ausgesetzt' gekennzeichnet bleiben."
+      }
+    },
+    {
+      "id": "qwen-lena-weber-11-4",
+      "user": "Kontoauszug Juni checken. Ist die DHL-Händlerentschädigung für den Februarschaden schon drauf? Und Nordton müsste auch abgebucht sein.",
+      "assistant": "Ja. Die DHL-Entschädigung über 42,50 EUR kam am 8. Juni; Nordtons Rechnung über 160,65 EUR ging am 3. Juni ab. Der Geschäftskontosaldo zum 12. Juni beträgt 1.716,85 EUR.",
+      "artifact": {
+        "title": "Kontoauszug Weber Keramik Geschäftskonto",
+        "from": "Weber Keramik GmbH",
+        "to": null,
+        "language": "de",
+        "body": "Kontoauszug\nKonto: Weber Keramik Geschäftskonto ****5602\nZeitraum: 01.06.2026 - 12.06.2026\n\nAnfangssaldo: 1.850,00 EUR\n\nBuchungen:\n03.06.2026 | SEPA-Überweisung | Nordton GmbH (Rechnung INV-2026-0603-NW) | -160,65 EUR\n08.06.2026 | Gutschrift | DHL Entschädigung (Fall CASE-2026-0209-DHL) | +42,50 EUR\n10.06.2026 | Kartenzahlung | Visa Debit ****4821 (Kartengebühren) | -15,00 EUR\n\nSchlusssaldo: 1.716,85 EUR\n\nHinweis: Die private Mietkaution läuft nicht über dieses Geschäftskonto. Die erste Studiomiete für den neuen Standort ist zum 01.07.2026 vorgemerkt."
+      },
+      "probe": {
+        "question": "Welcher Betrag wurde am 08.06.2026 als Gutschrift von DHL auf dem Geschäftskonto verbucht?",
+        "answer": "42,50 EUR"
+      }
+    },
+    {
+      "id": "qwen-lena-weber-12-5",
+      "user": "Papa, dein Termin in Potsdam ist morgen. Ich hab das Ticket für den S7 gebucht, weil der RE1 gerade gesperrt ist. Bitte pünktlich am Gleis sein.",
+      "assistant": "Die S7-Verbindung für Klaus fährt am 29. Juni um 09:45 ab Berlin Hbf und erreicht Potsdam Hbf um 10:25. Es gibt keinen reservierten Platz; prüft bitte morgens noch einmal die Aufzugslage.",
+      "artifact": {
+        "title": "DB Ticket Confirmation: Berlin Hbf to Potsdam Hbf",
+        "from": "Deutsche Bahn",
+        "to": null,
+        "language": "de",
+        "body": "Fahrkartenbestätigung\n\nReisedaten:\nDatum: 29.06.2026\nStrecke: Berlin Hbf -> Potsdam Hbf\nZug: S 7\nAbfahrt: 09:45 Uhr\nAnkunft: 10:25 Uhr\nReisender: Klaus Weber\nKlasse: 2. Klasse\nSitzplatz: Kein reservierter Platz (Nahverkehr)\nBarrierefreiheit: Aufzug am Gleis verfügbar, barrierefreier Zugang\n\nBuchungsreferenz: DB-2026-0628-CLIN-09\nTarif: Berlin ABC Einzelfahrausweis\nPreis: 4,70 EUR\nStatus: Bezahlt\n\nHinweis: Keine Sitzplatzgarantie im Nahverkehr. Bitte die aktuelle Aufzugslage in Berlin Hbf und Potsdam Hbf vor Abfahrt prüfen."
+      },
+      "probe": {
+        "question": "Welcher Zug wurde für Klaus' Fahrt am 29. Juni gebucht?",
+        "answer": "S 7"
+      }
+    }
+  ]
+}

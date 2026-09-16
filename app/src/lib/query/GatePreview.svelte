@@ -169,9 +169,7 @@ const { held }: { held: HeldMessage } = $props()
 
 	<!-- the footer: the only place the gate opens -->
 	<div class="gate-card-actions">
-		<button class="btn btn--ghost" type="button" onclick={() => rejectHeld(held.id)}>
-			Reject
-		</button>
+		<button class="btn btn--ghost" type="button" onclick={() => rejectHeld(held.id)}>Reject</button>
 		<button class="btn btn--primary" type="button" onclick={() => confirmHeld(held.id)}>
 			Confirm
 		</button>

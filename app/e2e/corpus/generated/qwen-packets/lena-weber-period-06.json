@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-03-18",
+        "intentId": "lena-weber:family-weekend",
+        "kind": "voucher",
+        "user": "Mira, hast du den Gutschein für die Ostsee noch? Ich will die Rückfahrt buchen.",
+        "assistant": "Ja, hab ihn gefunden. 50 Euro Rabatt auf die Bahnfahrt. Läuft bis Ende April.",
+        "artifact": {
+          "title": "DB Gutschein Bestätigung",
+          "from": "Deutsche Bahn AG",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Sehr geehrte Frau Weber,\n\nvielen Dank für Ihre Treue. Anbei erhalten Sie einen Reisegutschein im Wert von 50,00 EUR.\n\nGutschein-Referenz: DB-VOUCH-2026-8821\nWert: 50,00 EUR\nGültig bis: 30.04.2026\nEinlösbar für: Fernverkehrstickets (ICE, IC, EC) innerhalb Deutschlands.\nNicht einlösbar für: Reservierungen, Nahverkehr oder bereits gebuchte Tickets.\n\nBitte geben Sie den Code bei der Buchung im Feld 'Gutschein' ein."
+        },
+        "probe": {
+          "question": "Wie lange ist der Gutschein gültig?",
+          "answer": "Gültig bis: 30.04.2026"
+        }
+      },
+      {
+        "date": "2026-03-21",
+        "intentId": "lena-weber:family-weekend",
+        "kind": "booking",
+        "user": "Fahrkarten sind gebucht. Papa, bitte den Nord-Eingang nicht vergessen.",
+        "assistant": "Alles klar. Ich hab die Zeiten gespeichert. Barrierefreier Zugang ist bestätigt.",
+        "artifact": {
+          "title": "DB Buchungsbestätigung",
+          "from": "Deutsche Bahn AG",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Buchungsbestätigung\n\nReise: Berlin Hbf -> Stralsund Hbf\nDatum: 24.04.2026\nZug: IC 2110\nAbfahrt: 09:15 Uhr\nAnkunft: 12:45 Uhr\nReisende: Lena Weber, Mira, Klaus Weber\nKlasse: 2. Klasse\nSitzplatz: Barrierefreier Bereich, Wagen 4\nPreis: 120,00 EUR (nach Gutscheinabzug)\nZahlungsmethode: Visa Debit ****4821\nStatus: Bezahlt\nBuchungsnummer: DB-2026-03-21-9902\nStornierung: Kostenlos bis 7 Tage vor Abfahrt."
+        },
+        "probe": {
+          "question": "Welche Zugnummer haben wir für die Hinfahrt gebucht?",
+          "answer": "Zug: IC 2110"
+        }
+      },
+      {
+        "date": "2026-03-24",
+        "intentId": "lena-weber:home-budget",
+        "kind": "transaction",
+        "user": "Mira, Rücklage checken. Dauerauftrag für Miete ist raus.",
+        "assistant": "Kontostand ist okay. 2.100 Euro sind noch da. Kartons können wir bestellen.",
+        "artifact": {
+          "title": "Kontoauszug Sparkasse Berlin",
+          "from": "Sparkasse Berlin",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Kontoauszug für den Zeitraum 20.03.2026 - 24.03.2026\nKontonummer: ****4821\n\nBuchungen:\n21.03.2026 | SEPA-Überweisung | Umzugsrücklage Weber | 500,00 EUR | Soll\n22.03.2026 | Dauerauftrag | Hausverwaltung Berlin | 850,00 EUR | Soll\n23.03.2026 | SEPA-Eingang | Weber Keramik GmbH | 1.200,00 EUR | Haben\n24.03.2026 | Kartenzahlung | DHL Express | 12,50 EUR | Soll\n\nSchlusssaldo: 2.100,00 EUR"
+        },
+        "probe": {
+          "question": "Wie hoch ist der Schlusssaldo auf dem Konto?",
+          "answer": "Schlusssaldo: 2.100,00 EUR"
+        }
+      },
+      {
+        "date": "2026-03-27",
+        "intentId": "lena-weber:studio-lease",
+        "kind": "order",
+        "user": "Frau Becker, hier ist die Unterschrift für den neuen Vertrag. Paul hat B-17 finalisiert.",
+        "assistant": "Danke Lena. Wir haben den Vertrag erhalten. Die Freigabe für Abendkurse ist erteilt.",
+        "artifact": {
+          "title": "Auftragsbestätigung Mietvertrag",
+          "from": "Berlin Hausverwaltung",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Sehr geehrte Frau Weber,\n\nwir bestätigen den Eingang des unterzeichneten Mietvertrags (Version 2.1) für die Werkstatt in Prenzlauer Berg.\n\nAuftragsreferenz: BHV-2026-LEASE-045\nVertragsbeginn: 01.05.2026\nMonatliche Miete: 1.200,00 EUR\nKaution: 3.600,00 EUR\nStatus: Aktiv\nNächster Schritt: Schlüsselübergabe am 30.04.2026.\nHinweis: Die Klausel § 4.2 (Abendkurse) ist gemäß Brandschutzbericht B-17 (unterschrieben am 25.03.2026) freigegeben."
+        },
+        "probe": {
+          "question": "Wann beginnt der neue Mietvertrag?",
+          "answer": "Vertragsbeginn: 01.05.2026"
+        }
+      },
+      {
+        "date": "2026-03-28",
+        "intentId": "lena-weber:orders",
+        "kind": "return",
+        "user": "Nils, das Paket von Amira ist zurück. Fotos sind im Anhang. Wann kommt die Erstattung?",
+        "assistant": "Fall CASE-2026-0328-DHL ist offen. Wir prüfen die Fotos. Erstattung dauert 3-5 Werktage.",
+        "artifact": {
+          "title": "DHL Rücksendebestätigung",
+          "from": "DHL Support",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Guten Tag Frau Weber,\n\nvielen Dank für Ihre Nachricht. Wir haben Ihre Sendungsnummer 00340434271234567890 und die hochgeladenen Fotos zur Kenntnis genommen.\n\nFallreferenz: CASE-2026-0328-DHL\nStatus: In Prüfung\nNächster Schritt: Unser Team prüft die Dokumentation. Bitte haben Sie etwas Geduld. Wir melden uns innerhalb von 5 Werktagen.\nHinweis: Die Erstattung an die ursprüngliche Zahlungsmethode (Visa ****4821) wird nach Abschluss der Prüfung veranlasst."
+        },
+        "probe": {
+          "question": "Wie lange dauert die Prüfung laut DHL?",
+          "answer": "innerhalb von 5 Werktagen"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit NK-2026-SPR-09 confirmed for release (Mar 3). Move reserve balance verified at 2.100 EUR (Mar 24). Fire safety fee paid, lease § 4.2 approval granted and contract signed (Mar 27). Klaus's clinic ticket booked for Mar 14 (DB-2026-03-12-4451). Apartment viewing scheduled for Mar 17 with Britta. DHL damage claim for Amira under review (CASE-2026-0328-DHL). Closed: Studio lease fire-safety report B-17 signed and paid (Mar 9). Bike route plan finalized (Feb 28). Family weekend DB tickets booked for Apr 24 (DB-2026-03-21-9902)."
+  }
+}

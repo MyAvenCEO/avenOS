@@ -54,6 +54,7 @@ export interface DocumentModelResponse {
 export interface DocumentModelStatus {
 	available: boolean
 	maxPages: number
+	maxParallelism?: number
 	modelId?: string
 	modelLabel?: string
 	alternatives?: Array<{ id: string; label: string }>
