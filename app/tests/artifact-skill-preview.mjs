@@ -97,6 +97,8 @@ try {
 			window.__TAURI_INTERNALS__ = {
 				invoke: async (command, args) => {
 					window.previewCalls.push({ command, args: structuredClone(args ?? {}) })
+					if (command === 'artifact_library')
+						return { storeEpoch: 'fixture-epoch', snapshotSequence: 2, items: [], nextAfter: null }
 					if (command === 'artifact_store_list')
 						return { storeEpoch: 'fixture-epoch', artifacts: [file, skill], truncated: false }
 					if (command === 'artifact_query')
@@ -125,6 +127,7 @@ try {
 		{ file, skill, definition }
 	)
 	await page.getByRole('button', { name: 'Artefakte', exact: true }).click()
+	await page.getByRole('button', { name: 'Herkunft & Details', exact: true }).click()
 	await page
 		.getByRole('group', { name: 'Artifact filter' })
 		.getByRole('button', { name: 'Skills', exact: true })

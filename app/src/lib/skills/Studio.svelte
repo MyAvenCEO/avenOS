@@ -151,12 +151,14 @@ async function openSkill(artifact: StudioArtifact, action: 'open' | 'use' | 'pre
 	}
 	selected = artifact
 }
-async function explore(artifact: StudioArtifact) {
-	selected = artifact
-	exploration = await studioRequest<StudioExploration>('explore', {
-		artifactId: artifact.artifactId
-	})
+async function exploreId(artifactId: string) {
+	const result = await studioRequest<StudioExploration>('explore', { artifactId })
+	selected = result.source
+	exploration = result
 	tab = 'explore'
+}
+async function explore(artifact: StudioArtifact) {
+	await exploreId(artifact.artifactId)
 }
 async function addOperation(entry: StudioCatalogEntry) {
 	if (!definition) fresh(newStudioSkillV2('Untitled Skill'))
@@ -350,6 +352,12 @@ $effect(() => {
 		tab = 'explore'
 	}
 	workspaceKey = key
+})
+$effect(() => {
+	const id = studio.requestedArtifactId
+	if (!id) return
+	studio.requestedArtifactId = null
+	void act(() => exploreId(id))
 })
 $effect(() => {
 	const id = studio.requestedSkillId
