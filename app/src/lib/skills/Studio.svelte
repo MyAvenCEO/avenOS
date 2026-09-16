@@ -47,6 +47,7 @@ let pendingRun: {
 	inputs: Record<string, string>
 } | null = null
 let pendingConnection: Record<string, unknown> | null = null
+let openedPublishedSkillId = $state<string | null>(null)
 let workspaceKey = ''
 let disposed = false
 let explorationSequence = 0
@@ -74,7 +75,11 @@ const conflict = $derived(
 	!!draft && !!snapshot?.drafts.some((d) => d.id === draft!.id && d.revision !== draft!.revision)
 )
 const published = $derived(
-	!dirty && draft?.published_revision === draft?.revision ? draft?.published_artifact_id : null
+	!dirty && openedPublishedSkillId
+		? openedPublishedSkillId
+		: !dirty && draft?.published_revision === draft?.revision
+			? draft?.published_artifact_id
+			: null
 )
 const artifacts = $derived(
 	(snapshot?.artifacts ?? []).filter((a) =>
@@ -129,6 +134,7 @@ async function explore(id: string) {
 	}
 }
 function create(def: StudioDefinition) {
+	openedPublishedSkillId = null
 	definition = structuredClone($state.snapshot(def))
 	draft = {
 		id: crypto.randomUUID(),
@@ -146,6 +152,7 @@ function create(def: StudioDefinition) {
 	tab = 'build'
 }
 function openDraft(value: StudioDraft) {
+	openedPublishedSkillId = null
 	draft = structuredClone($state.snapshot(value))
 	definition = structuredClone($state.snapshot(value.definition))
 	bindings = {}
@@ -160,6 +167,41 @@ function chooseSaved(artifact: StudioArtifact) {
 	const found = snapshot?.drafts.find((d) => d.published_artifact_id === artifact.artifactId)
 	if (found) openDraft(found)
 	else create(parseStudioDefinition(artifact.payload))
+}
+async function openExactSkill(id: string, action: 'open' | 'use' | 'prepare') {
+	const details = await studioRequest<{ artifact: StudioArtifact }>('inspect', { artifactId: id })
+	const artifact = details.artifact
+	if (
+		!artifact ||
+		artifact.artifactId !== id ||
+		artifact.typeKey !== 'studio.skill' ||
+		artifact.typeVersion !== 1
+	)
+		throw new Error('This exact Skill version is not available in the current Studio runtime.')
+	selected = artifact
+	if (action === 'use') {
+		wrapSkill(artifact)
+		notice = 'New draft calls the exact selected Skill.'
+		return
+	}
+	const saved = parseStudioDefinition(artifact.payload)
+	definition = structuredClone(saved)
+	draft = {
+		id: crypto.randomUUID(),
+		revision: 0,
+		definition: structuredClone(saved),
+		published_artifact_id: null,
+		published_revision: null
+	}
+	openedPublishedSkillId = id
+	bindings = {}
+	comparison = null
+	raw = JSON.stringify(saved, null, 2)
+	tab = 'build'
+	notice =
+		action === 'prepare'
+			? 'Select actual inputs below. Preview the plan, then run this exact Skill.'
+			: 'Viewing the exact saved Skill. Editing creates a new draft.'
 }
 function wrapSkill(artifact: StudioArtifact) {
 	const child = parseStudioDefinition(artifact.payload)
@@ -202,6 +244,7 @@ async function save() {
 		revision: draft.revision,
 		definition: $state.snapshot(definition)
 	})
+	openedPublishedSkillId = null
 	await refreshStudio()
 	notice = 'Draft saved'
 }
@@ -332,6 +375,7 @@ $effect(() => {
 		pendingSample = null
 		pendingRun = null
 		pendingConnection = null
+		openedPublishedSkillId = null
 		tab = 'explore'
 		error = ''
 		notice = ''
@@ -347,6 +391,15 @@ $effect(() => {
 		studio.requestedArtifactId = null
 		void explore(request)
 	}
+})
+$effect(() => {
+	const id = studio.requestedSkillId
+	if (!id) return
+	const action = studio.requestedSkillAction
+	studio.requestedSkillId = null
+	void openExactSkill(id, action).catch((cause) => {
+		error = cause instanceof Error ? cause.message : String(cause)
+	})
 })
 $effect(() => {
 	studio.refreshVersion
@@ -585,10 +638,12 @@ onMount(() => {
 								maxlength="160"
 							>
 							<p class="muted">
-								{published ? 'Published revision ' + draft.revision : 'Draft · changes are yours until saved'}
+								{openedPublishedSkillId ? 'Exact saved Skill · edits create a new draft' : published ? 'Published revision ' + draft.revision : 'Draft · changes are yours until saved'}
 							</p>
 						</div>
-						<button class="secondary" disabled={busy} onclick={() => act(save)}>Save draft</button>
+						<button class="secondary" disabled={busy} onclick={() => act(save)}>
+							{openedPublishedSkillId ? 'Edit as new draft' : 'Save draft'}
+						</button>
 					</div>
 					{#if conflict}
 						<div class="message warning" role="alert">

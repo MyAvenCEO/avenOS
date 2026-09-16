@@ -541,6 +541,7 @@ export class Chat {
 	}
 
 	async #send(prompt: string, anonymousSpeaker?: AnonymousSpeaker): Promise<void> {
+		const epoch = this.#sendEpoch
 		this.failure = null
 		// Pinned for the whole turn: `use()` may swap the visible session while
 		// the reply streams, and the reply must land where it was asked — unless
@@ -584,6 +585,7 @@ export class Chat {
 			let nudged = false
 			for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
 				const calls = await this.#round(live.wire)
+				if (epoch !== this.#sendEpoch) return
 				const reply = this.#reply as Turn
 				if (calls.length === 0) {
 					// The answer round is complete: the tools before it have had
@@ -625,6 +627,7 @@ export class Chat {
 				// own template expects, so nothing here reads as conversation.
 				for (const call of calls) {
 					const result = await this.#tools.run(call.name, call.arguments)
+					if (epoch !== this.#sendEpoch) return
 					;(this.#reply as Turn).calls?.push({ name: call.name, result: result.record })
 					live.wire.push({ role: 'tool', tool_call_id: call.id, content: result.wire })
 				}
@@ -634,6 +637,7 @@ export class Chat {
 			}
 			this.#sink.onDone?.()
 		} catch (err) {
+			if (epoch !== this.#sendEpoch) return
 			this.#settle()
 			const reply = this.#reply as Turn
 			if (this.#abort?.signal.aborted) {
@@ -653,11 +657,13 @@ export class Chat {
 				if (reply.content === '') dropStub()
 			}
 		} finally {
-			this.#settle()
-			this.streaming = false
-			this.#abort = null
-			this.#live = null
-			this.#reply = null
+			if (epoch === this.#sendEpoch) {
+				this.#settle()
+				this.streaming = false
+				this.#abort = null
+				this.#live = null
+				this.#reply = null
+			}
 		}
 	}
 
@@ -851,6 +857,30 @@ export class Chat {
 		this.turns = []
 		this.#wire = []
 		this.failure = null
+		this.#sink.onTurn?.()
+	}
+
+	/** Discard every in-memory conversation when the owner changes environment. */
+	resetForEnvironment(): void {
+		this.#sendEpoch++
+		this.stop()
+		this.#abort = null
+		this.#sendTail = Promise.resolve()
+		this.#sessions.clear()
+		this.#uploads.clear()
+		this.#artifacts.clear()
+		this.#live = null
+		this.#pending = null
+		this.#reply = null
+		this.#wire = []
+		this.turns = []
+		this.session = ''
+		this.streaming = false
+		this.failure = null
+		this.routing = null
+		this.routingReply = ''
+		this.lastRequest = null
+		this.onExchange = null
 		this.#sink.onTurn?.()
 	}
 }

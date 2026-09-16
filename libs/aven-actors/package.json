@@ -17,6 +17,9 @@
 		"./run": "./src/run.ts",
 		"./sandbox": "./src/sandbox.ts",
 		"./studio": "./src/studio/index.ts",
+		"./studio/catalog": "./src/studio/catalog.ts",
+		"./studio/presentation": "./src/studio/presentation.ts",
+		"./studio/v2": "./src/studio/v2.ts",
 		"./abort": "./src/abort.ts"
 	},
 	"scripts": {

@@ -1,3 +1,4 @@
+import { ArtifactStoreProblem } from '@avenos/artifact-store'
 import type { TenantGrantClaims } from '@avenos/aven-customer-contracts'
 import type { IdentityClaims } from '@avenos/aven-identity'
 import { BodyLimitError } from '@avenos/http-boundary'
@@ -207,6 +208,8 @@ export class ArtifactHandler {
 			}
 			return json(404, { code: 'ROUTE_NOT_FOUND' })
 		} catch (error) {
+			if (error instanceof ArtifactStoreProblem && error.status === 404)
+				return json(404, { code: 'ARTIFACT_NOT_FOUND', message: 'Artifact not found.' })
 			if (error instanceof BodyLimitError) return bodyLimitResponse(error)
 			if (error instanceof AppError)
 				return json(error.status, { code: error.code, message: error.message })

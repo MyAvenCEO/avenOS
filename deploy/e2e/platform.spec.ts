@@ -711,6 +711,113 @@ async function tauriReconciliation(
 	return remoteCandidateId
 }
 
+async function tauriEnvironmentSwitchAcceptance(
+	page: import('@playwright/test').Page,
+	first: { id: string; name: string; priorSources: string[] },
+	second: { id: string; name: string },
+	authorizedHeaders: Record<string, string>
+): Promise<void> {
+	const session = await TauriSession.launch(tauriApplication, tauriDriver)
+	async function waitForSelectedName(name: string): Promise<void> {
+		const deadline = Date.now() + 30_000
+		let lastLabel = ''
+		let lastError = ''
+		while (Date.now() < deadline) {
+			try {
+				const label = await session.text(await session.find('[data-testid="environment-current"]'))
+				lastLabel = label
+				if (label.includes(`${name}.aven.ceo`)) return
+			} catch (cause) {
+				lastError = String(cause)
+			}
+			await new Promise((resolve) => setTimeout(resolve, 200))
+		}
+		throw new Error(
+			`Tauri did not select ${name}.aven.ceo in the same session; label=${JSON.stringify(lastLabel)}; error=${lastError}; url=${await session.url()}; body=${await session.bodyText()}`
+		)
+	}
+	async function studioScope(): Promise<string> {
+		await session.execute(`
+			window.__avenE2EStudioScope = { status: 'pending' };
+			window.__TAURI_INTERNALS__.invoke('studio_request', { command: { operation: 'state', data: {} } })
+				.then(value => window.__avenE2EStudioScope = { status: 'done', scopeId: value.scopeId })
+				.catch(error => window.__avenE2EStudioScope = { status: 'error', error: String(error) });
+			return true;
+		`)
+		const deadline = Date.now() + 30_000
+		while (Date.now() < deadline) {
+			const result = await session.execute<{
+				status: string
+				scopeId?: string
+				error?: string
+			} | null>('return window.__avenE2EStudioScope || null')
+			if (result?.status === 'done' && result.scopeId) return result.scopeId
+			if (result?.status === 'error')
+				throw new Error(`Studio state request failed: ${result.error}`)
+			await new Promise((resolve) => setTimeout(resolve, 200))
+		}
+		throw new Error('Studio state did not complete after environment selection')
+	}
+	try {
+		await session.waitForBodyText('GERÄTECODE')
+		const code = (await session.bodyText()).match(/\b([A-Z0-9]{4})-([A-Z0-9]{4})\b/)
+		if (!code) throw new Error('Tauri switch proof displayed no device code')
+		await page.goto(`${identityBrowser}/device?user_code=${code[1]}${code[2]}`)
+		await expect(page.getByRole('button', { name: 'Authorize' })).toBeVisible()
+		await page.getByRole('button', { name: 'Authorize' }).click()
+		await session.waitForBodyText('Wähle deine Umgebung')
+		await session.click(
+			await session.findEventually(`[data-testid="environment-choice-${first.id}"]`)
+		)
+		await waitForSelectedName(first.name)
+		expect(await studioScope()).toBe(first.id)
+		await session.click(
+			await session.findEventually(`[data-testid="environment-choice-${second.id}"]`)
+		)
+		await waitForSelectedName(second.name)
+		expect(await studioScope()).toBe(second.id)
+
+		const dashboard = new URL(await session.url())
+		dashboard.pathname = '/dashboard'
+		dashboard.searchParams.set('e2eFixture', tauriFixture)
+		dashboard.searchParams.set('e2ePlacement', 'local')
+		await session.navigate(dashboard.toString())
+		await session.click(await session.findEventually('[data-testid="e2e-import-fixture"]'))
+		const secondBase = `${api}/api/environments/${second.id}/artifacts`
+		const secondDocument = await waitForDocumentGraph(secondBase, authorizedHeaders, new Set())
+		expect(
+			(
+				await fetch(`${api}/api/environments/${first.id}/artifacts/${secondDocument.sourceId}`, {
+					headers: authorizedHeaders
+				})
+			).status
+		).toBe(404)
+
+		await session.click(
+			await session.findEventually(`[data-testid="environment-choice-${first.id}"]`)
+		)
+		await waitForSelectedName(first.name)
+		expect(await studioScope()).toBe(first.id)
+		const firstBase = `${api}/api/environments/${first.id}/artifacts`
+		const firstBrowse = (await json(await fetch(firstBase, { headers: authorizedHeaders }))) as {
+			artifacts: BrowsedArtifact[]
+		}
+		for (const sourceId of first.priorSources) {
+			expect(firstBrowse.artifacts.some((artifact) => artifact.artifactId === sourceId)).toBe(true)
+			expect(
+				(
+					await fetch(`${api}/api/environments/${second.id}/artifacts/${sourceId}`, {
+						headers: authorizedHeaders
+					})
+				).status
+			).toBe(404)
+		}
+		expect(await session.bodyText()).not.toContain('Too many requests')
+	} finally {
+		await session.close()
+	}
+}
+
 async function json(response: Response) {
 	const body = await response.json().catch(() => null)
 	if (!response.ok)
@@ -1083,19 +1190,6 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 	await secondPage.getByRole('button', { name: 'Continue with passkey' }).click()
 	await expect(secondPage.getByRole('heading', { name: 'Your account' })).toBeVisible()
 
-	const secondName = `${name}-other`.slice(0, 28)
-	const secondNameHold = await fetch(`${checkout}/api/names/hold`, {
-		method: 'POST',
-		headers: {
-			'content-type': 'application/json',
-			origin: checkoutBrowser,
-			'x-proof-of-work': await proofOfWork('secure-name')
-		},
-		body: JSON.stringify({ name: secondName, email, tier: 'aven-name' })
-	})
-	expect(secondNameHold.status).toBe(409)
-	expect(await secondNameHold.json()).toMatchObject({ code: 'NAME_LIMIT_REACHED' })
-
 	const sessionToken = await deviceSession(secondPage)
 	const tokenBody = (await json(
 		await fetch(`${identity}/api/auth/token`, {
@@ -1195,21 +1289,22 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 	}
 	if (!environment) throw new Error('customer environment did not reconcile')
 	const tauri = await tauriAcceptance(secondPage, environment.id, authorizedHeaders)
-	const secondEntitlement = await fetch(`${api}/internal/v1/customer-entitlement-events`, {
+	const secondName = `${name}-other`.slice(0, 28)
+	const secondNameHold = await fetch(`${checkout}/api/names/hold`, {
 		method: 'POST',
 		headers: {
-			authorization: 'Bearer customer-entitlement-token-for-e2e',
-			'content-type': 'application/json'
+			'content-type': 'application/json',
+			origin: checkoutBrowser,
+			'x-proof-of-work': await proofOfWork('secure-name')
 		},
-		body: JSON.stringify({
-			eventId: crypto.randomUUID(),
-			eventType: 'purchase_granted',
-			subjectId: claims.sub,
-			purchasedName: `${name}-second`,
-			occurredAt: new Date().toISOString()
-		})
+		body: JSON.stringify({ name: secondName, email, tier: 'aven-name' })
 	})
-	expect(secondEntitlement.status).toBe(201)
+	expect(secondNameHold.status).toBe(201)
+	const secondClaimMail = await waitForMail(new RegExp(`Checkout link for ${secondName}`))
+	await page.goto(linkFrom(secondClaimMail, new URL(checkoutBrowser).host))
+	await expect(page.getByText(`${secondName}.aven.ceo`)).toBeVisible()
+	await page.getByRole('button', { name: 'Pay' }).click()
+	await expect(page).toHaveURL(/\/purchase\/success/)
 	let secondEnvironment: typeof environment | undefined
 	const secondEnvironmentDeadline = Date.now() + 60_000
 	while (Date.now() < secondEnvironmentDeadline) {
@@ -1226,6 +1321,16 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 		await new Promise((resolve) => setTimeout(resolve, 250))
 	}
 	if (!secondEnvironment) throw new Error('second customer environment did not reconcile')
+	await tauriEnvironmentSwitchAcceptance(
+		secondPage,
+		{
+			id: environment.id,
+			name,
+			priorSources: [tauri.sourceArtifactId, tauri.serverSourceArtifactId]
+		},
+		{ id: secondEnvironment.id, name: secondName },
+		authorizedHeaders
+	)
 
 	const intentBase = `${api}/api/environments/${environment.id}/intents`
 	const targetIntentId = crypto.randomUUID()
@@ -1255,7 +1360,7 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 		id: string
 	}[]
 	expect(firstList.map((intent) => intent.id)).not.toContain(secondIntentId)
-	// The same still-valid identity token must obey current database membership.
+	// The same still-valid identity token must obey the current owner-only WIP policy.
 	const membershipDatabase = new pg.Pool({
 		connectionString: databaseUrl.replace(/\/postgres$/, '/aven_api'),
 		max: 1
@@ -1265,7 +1370,7 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 			'UPDATE customer_environment_memberships SET role=$1 WHERE environment_id=$2 AND subject_id=$3',
 			['member', environment.id, claims.sub]
 		)
-		expect((await fetch(intentBase, { headers: authorizedHeaders })).status).toBe(200)
+		expect((await fetch(intentBase, { headers: authorizedHeaders })).status).toBe(404)
 		expect(
 			(
 				await fetch(`${intentBase}/${targetIntentId}`, {
@@ -1273,10 +1378,10 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 					headers: authorizedHeaders
 				})
 			).status
-		).toBe(403)
+		).toBe(404)
 		expect(
 			(await fetch(`${intentBase}/${targetIntentId}`, { headers: authorizedHeaders })).status
-		).toBe(200)
+		).toBe(404)
 		await membershipDatabase.query(
 			'DELETE FROM customer_environment_memberships WHERE environment_id=$1 AND subject_id=$2',
 			[environment.id, claims.sub]
@@ -1603,7 +1708,7 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 			expect(
 				(await secondCustomer.query('SELECT count(*)::int AS count FROM aven_intents.intents'))
 					.rows[0].count
-			).toBe(1)
+			).toBe(2)
 		} finally {
 			await secondCustomer.end()
 		}

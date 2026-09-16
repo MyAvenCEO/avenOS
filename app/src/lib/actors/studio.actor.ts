@@ -16,6 +16,25 @@ const inputs = {
 const revision = { type: 'integer', minimum: 1 }
 const methods = [
 	{
+		operation: 'catalog',
+		description:
+			'Explore visible Actor and Skill capabilities under your current session. Page with the returned snapshot cursor; readiness and reasons are explicit. Read-only.',
+		properties: {
+			search: string,
+			cursor: string,
+			viewToken: uuid,
+			limit: { type: 'integer', minimum: 1, maximum: 100 }
+		},
+		required: []
+	},
+	{
+		operation: 'present',
+		description:
+			'Inspect a compact, visual-ready projection of an exact saved Skill artifact. Safe for malformed or unsupported definitions and does not execute.',
+		properties: { artifactId: uuid },
+		required: ['artifactId']
+	},
+	{
 		operation: 'state',
 		description:
 			'Inspect saved drafts, exact published Skills, Sources, subscriptions, pending arrivals and recent runs. Read-only.',

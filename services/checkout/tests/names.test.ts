@@ -80,16 +80,17 @@ describe('checkout name grant', () => {
 		).toMatchObject({ status: 'revoked' })
 	})
 
-	it('allows only one avenNAME per account at both checkout gates', async () => {
+	it('grants two unique names to one identity subject through checkout', async () => {
 		const config = testConfig()
 		const payments = new FakePaymentProvider(config)
+		const subjectId = randomUUID()
 		const service = new NameService(
 			database.pool,
 			config,
 			testNotifier(config),
 			payments,
 			async (email) => ({
-				account: { id: randomUUID(), name: email.split('@')[0] ?? email, email, role: 'user' },
+				account: { id: subjectId, name: email.split('@')[0] ?? email, email, role: 'user' },
 				setupUrl: 'https://aven.id/setup/test'
 			})
 		)
@@ -126,16 +127,38 @@ describe('checkout name grant', () => {
 		expect(await service.grantFromEvent(event)).toEqual({ granted: true })
 
 		const second = `n${randomUUID().replaceAll('-', '').slice(0, 12)}`
-		await expect(service.secure(second, email)).rejects.toMatchObject({
-			code: 'NAME_LIMIT_REACHED',
-			status: 409
-		})
-		await expect(service.claim(staleToken)).rejects.toMatchObject({
-			code: 'NAME_LIMIT_REACHED',
-			status: 410
-		})
-		await expect(service.secure(second, `${second}@example.test`)).resolves.toMatchObject({
-			name: second
-		})
+		await expect(service.claim(staleToken)).resolves.toMatchObject({ name: staleName })
+		await expect(service.secure(second, email)).resolves.toMatchObject({ name: second })
+		const secondHold = (
+			await database.pool.query('SELECT id FROM name_holds WHERE name=$1', [second])
+		).rows[0]
+		const secondToken = `claim-${randomUUID().replaceAll('-', '')}`
+		await database.pool.query('UPDATE name_holds SET claim_token_hash=$1 WHERE id=$2', [
+			sha256Hex(secondToken),
+			secondHold.id
+		])
+		const secondCheckout = await service.claim(secondToken)
+		const secondCheckoutId = new URL(secondCheckout.checkoutUrl).searchParams.get('checkoutId')
+		if (!secondCheckoutId) throw new Error('Second fake checkout did not provide an id')
+		const secondEvent = parsePolarEvent(
+			payments.buildCompletedWebhookBody({
+				checkoutId: secondCheckoutId,
+				holdId: secondHold.id,
+				name: second,
+				email,
+				amountEur: 25
+			})
+		)
+		expect(await service.grantFromEvent(secondEvent)).toEqual({ granted: true })
+		expect((await service.listForUser(subjectId)).map((row) => row.name).sort()).toEqual(
+			[first, second].sort()
+		)
+		expect(
+			(
+				await database.pool.query('SELECT DISTINCT owner_user_id FROM names WHERE name=ANY($1)', [
+					[first, second]
+				])
+			).rows
+		).toEqual([{ owner_user_id: subjectId }])
 	})
 })

@@ -60,6 +60,31 @@ test('a failed document does not block later documents, and pending duplicates a
 	expect(order).toEqual(['second'])
 })
 
+test('switching environments drops queued documents before they can use the next customer session', async () => {
+	const state = { pending: 0, active: 0 }
+	const release = deferred()
+	const finished = deferred()
+	const started: string[] = []
+	const queue = new DocumentImportQueue(state, () => {
+		throw new Error('Unexpected failure')
+	})
+	queue.enqueue('first', async () => {
+		started.push('first')
+		await release.promise
+		finished.resolve()
+	})
+	queue.enqueue('old-customer-pending', async () => {
+		started.push('old-customer-pending')
+	})
+	queue.discardPending()
+	expect(state).toEqual({ pending: 0, active: 1 })
+	release.resolve()
+	await finished.promise
+	await Promise.resolve()
+	expect(started).toEqual(['first'])
+	expect(state).toEqual({ pending: 0, active: 0 })
+})
+
 test('many documents fill the configured slots and lowering the limit drains without cancellation', async () => {
 	const state = { pending: 0, active: 0 }
 	const release = deferred()

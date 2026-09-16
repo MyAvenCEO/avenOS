@@ -87,10 +87,14 @@ VITE_AVEN_E2E=true bun run --cwd "$root/app" build
 # Linux app; relying on a developer's pre-existing ignored runtime would make a
 # clean checkout compile and then panic before its first window opened.
 AVEN_SPEECH_GPU=cpu bun "$root/scripts/fetch-onnxruntime.ts"
+# The raw E2E binary is not installed under /usr/lib/avenOS. Point its loader
+# at the exact runtime fetched above; installed packages keep their own resource path.
+ORT_DYLIB_PATH="$root/app/src-tauri/resources/onnxruntime/libonnxruntime.so"
+export ORT_DYLIB_PATH
 AVEN_IDENTITY_BASE_URL="http://localhost:$E2E_IDENTITY_HOST_PORT" \
 AVEN_API_BASE_URL="http://127.0.0.1:$E2E_API_HOST_PORT" \
 cargo build --locked --release --features custom-protocol,e2e-voice-proof --manifest-path "$root/app/src-tauri/Cargo.toml" --bin aven-os-app
-E2E_TAURI_APPLICATION="$root/target/rust/release/aven-os-app"
+E2E_TAURI_APPLICATION="${CARGO_TARGET_DIR:-$root/target/rust}/release/aven-os-app"
 E2E_TAURI_DRIVER=${TAURI_DRIVER_BIN:-$HOME/.cargo/bin/tauri-driver}
 E2E_TAURI_FIXTURE="$root/deploy/e2e/fixtures/e2e-document.txt"
 if [ ! -x "$E2E_TAURI_APPLICATION" ] || [ ! -x "$E2E_TAURI_DRIVER" ]; then
@@ -159,8 +163,11 @@ TEST_ARTIFACT_STORE_BEARER_TOKEN="artifact-store-runtime-conformance-token" \
 TEST_ARTIFACT_STORE_SCOPE_ID="99999999-9999-4999-8999-999999999999" \
 bun run --cwd "$root/services/actor-runner" test:e2e:persistence
 
-TEST_ADMIN_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \
-bun run --cwd "$root/services/checkout" test
+(
+  cd "$root/services/checkout"
+  TEST_ADMIN_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \
+    ./node_modules/.bin/vitest run
+)
 
 TEST_IDENTITY_ADMIN_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \
 bun run --cwd "$root/services/identity" test

@@ -1,6 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import {
 	ACTOR_RUN_PROTOCOL,
+	StudioCatalog,
+	presentSkillArtifact,
+	parseStudioSkillV2,
+	StudioSkillV2Error,
+	validateStudioSkillCapabilities,
+	type ActorAuthorizer,
+	type ActorRegistrySnapshot,
+	type CapabilityId,
 	type PlanRunExecutionContext,
 	type PlanRunner,
 	type PlanRunSecurityContext
@@ -31,6 +39,8 @@ const ids = z.record(z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/), uuid)
 const commandSchema = z
 	.object({
 		operation: z.enum([
+			'catalog',
+			'present',
 			'state',
 			'inspect',
 			'explore',
@@ -49,13 +59,29 @@ const commandSchema = z
 	})
 	.strict()
 export class StudioConflict extends Error {}
-export const STUDIO_READ_OPERATIONS = ['state', 'inspect', 'explore', 'preview', 'compare'] as const
+export const STUDIO_READ_OPERATIONS = [
+	'state',
+	'catalog',
+	'present',
+	'inspect',
+	'explore',
+	'preview',
+	'compare'
+] as const
+
+export interface StudioCatalogSource {
+	registry(): ActorRegistrySnapshot | Promise<ActorRegistrySnapshot>
+	authorizer(security: PlanRunSecurityContext): ActorAuthorizer | Promise<ActorAuthorizer>
+	runtimeSupports?(actorId: string, capabilityId: string): boolean
+}
 
 export class StudioService {
+	readonly catalog = new StudioCatalog()
 	constructor(
 		readonly database: pg.Pool,
 		readonly artifacts: StudioArtifacts,
-		readonly runner: PlanRunner
+		readonly runner: PlanRunner,
+		readonly catalogSource?: StudioCatalogSource
 	) {}
 	async call(
 		raw: unknown,
@@ -68,6 +94,42 @@ export class StudioService {
 			throw new StudioConflict('This operation requires write access.')
 		const subject = security.principal.subjectId
 		switch (operation) {
+			case 'catalog': {
+				const d = z
+					.object({
+						search: z.string().max(160).optional(),
+						limit: z.number().int().min(1).max(100).optional(),
+						cursor: z.string().max(32).optional(),
+						viewToken: z.uuid().optional()
+					})
+					.strict()
+					.parse(data)
+				if (!this.catalogSource) throw new StudioConflict('ACTOR_CATALOG_UNCONFIGURED')
+				const [registry, authorizer] = await Promise.all([
+					this.catalogSource.registry(),
+					this.catalogSource.authorizer(security)
+				])
+				return this.catalog.page({
+					registry,
+					authorizer,
+					principal: security.principal,
+					access: security.access,
+					runtimeSupports: this.catalogSource.runtimeSupports,
+					...d
+				})
+			}
+			case 'present': {
+				const d = z.object({ artifactId: uuid }).strict().parse(data)
+				const artifact = await this.artifacts.get(d.artifactId)
+				if (artifact.typeKey !== 'studio.skill')
+					throw new StudioConflict('The selected artifact is not a Skill.')
+				return presentSkillArtifact(
+					artifact.artifactId,
+					artifact.artifactSha256,
+					artifact.typeVersion,
+					artifact.payload
+				)
+			}
 			case 'state':
 				z.object({}).strict().parse(data)
 				return this.state(subject)
@@ -117,7 +179,7 @@ export class StudioService {
 			}
 			case 'preview': {
 				const d = z.object({ definition: z.unknown() }).strict().parse(data)
-				return this.preview(d.definition)
+				return this.preview(d.definition, security)
 			}
 			case 'compare': {
 				const d = z
@@ -126,8 +188,8 @@ export class StudioService {
 					.parse(data)
 				return {
 					mode: 'planning-only',
-					baseline: await this.preview(d.baseline),
-					variants: await Promise.all(d.variants.map((v) => this.preview(v)))
+					baseline: await this.preview(d.baseline, security),
+					variants: await Promise.all(d.variants.map((v) => this.preview(v, security)))
 				}
 			}
 			case 'draft': {
@@ -170,7 +232,7 @@ export class StudioService {
 				if (draft.revision !== d.revision)
 					throw new StudioConflict('The draft changed. Refresh before publishing.')
 				if (draft.published_revision === d.revision) return draft
-				const preview = await this.preview(draft.definition)
+				const preview = await this.preview(draft.definition, security)
 				if (!preview.ok) throw new StudioValidationError(preview.issues!)
 				const definition = parseStudioDefinition(draft.definition)
 				const children = [
@@ -371,7 +433,110 @@ export class StudioService {
 		if (!row.rows[0]) throw new StudioConflict('This draft is unavailable.')
 		return row.rows[0]
 	}
-	async preview(raw: unknown) {
+	async preview(raw: unknown, security?: PlanRunSecurityContext) {
+		if (
+			raw &&
+			typeof raw === 'object' &&
+			!Array.isArray(raw) &&
+			(raw as { version?: unknown }).version === 2
+		) {
+			try {
+				const definition = parseStudioSkillV2(raw)
+				if (!security || !this.catalogSource)
+					return {
+						ok: false,
+						issues: [
+							{
+								path: 'catalog',
+								code: 'ACTOR_CATALOG_UNCONFIGURED',
+								message: 'The trusted Actor catalog is not configured for this customer.'
+							}
+						]
+					}
+				const [registry, authorizer] = await Promise.all([
+					this.catalogSource.registry(),
+					this.catalogSource.authorizer(security)
+				])
+				const visible = new Set<string>()
+				const issues: Array<{ path: string; code: string; message: string }> = []
+				for (const [index, step] of definition.steps.entries()) {
+					if (step.kind !== 'invoke') {
+						issues.push({
+							path: `steps.${index}`,
+							code: 'UNSUPPORTED_RUNTIME',
+							message: 'This step is not yet available in the shared runtime.'
+						})
+						continue
+					}
+					const actor = registry.definitions.find((item) =>
+						item.capabilities.some((candidate) => candidate.id === step.capabilityId)
+					)
+					const decision =
+						actor &&
+						(await authorizer.decide({
+							action: 'discover',
+							principal: security.principal,
+							access: security.access,
+							definitionRef: actor.ref,
+							capabilityId: step.capabilityId as CapabilityId
+						}))
+					if (!decision?.allow)
+						issues.push({
+							path: `steps.${index}`,
+							code: 'CAPABILITY_UNAVAILABLE',
+							message: 'This capability is unavailable under your current authority.'
+						})
+					else {
+						visible.add(step.capabilityId)
+						if (!this.catalogSource.runtimeSupports?.(actor!.ref, step.capabilityId))
+							issues.push({
+								path: `steps.${index}`,
+								code: 'UNSUPPORTED_RUNTIME',
+								message: 'The trusted host does not support execution of this capability.'
+							})
+					}
+				}
+				const visibleRegistry: ActorRegistrySnapshot = {
+					...registry,
+					definitions: registry.definitions.map((item) => ({
+						...item,
+						capabilities: item.capabilities.filter((capability) => visible.has(capability.id))
+					}))
+				}
+				issues.push(
+					...validateStudioSkillCapabilities(definition, visibleRegistry).filter(
+						(issue) =>
+							issue.code !== 'CAPABILITY_UNAVAILABLE' ||
+							!definition.steps.some(
+								(step, index) =>
+									`steps.${index}` === issue.path &&
+									issues.some(
+										(known) => known.path === issue.path && known.code === 'CAPABILITY_UNAVAILABLE'
+									)
+							)
+					)
+				)
+				const view = await this.catalog.page({
+					registry,
+					authorizer,
+					principal: security.principal,
+					access: security.access,
+					runtimeSupports: this.catalogSource.runtimeSupports
+				})
+				return {
+					ok: issues.length === 0,
+					issues,
+					catalogDigest: view.catalogDigest,
+					mode: 'planning-only',
+					publishes: false,
+					executable: false
+				}
+			} catch (error) {
+				if (error instanceof StudioSkillV2Error)
+					return { ok: false, issues: error.issues, mode: 'planning-only', publishes: false }
+				throw error
+			}
+		}
 		try {
 			const definition = parseStudioDefinition(raw)
 			const library = await this.artifacts.library(

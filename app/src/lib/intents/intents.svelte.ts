@@ -827,8 +827,13 @@ const persistencePending = (title: string) => ({
 })
 
 class IntentsActor extends Actor {
-	items = $state<MockIntent[]>(INTENTS)
+	items = $state<MockIntent[]>(structuredClone(INTENTS))
 	selectedId = $state(INTENTS[0].id)
+
+	resetForEnvironment(): void {
+		this.items = structuredClone(INTENTS)
+		this.selectedId = INTENTS[0].id
+	}
 
 	beginFileIntent(id: string, title: string, focus = true): void {
 		const intent: MockIntent = {

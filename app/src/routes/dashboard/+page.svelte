@@ -171,7 +171,7 @@ onMount(() => {
 	let contributionPersistence = Promise.resolve()
 	const webview = getCurrentWebview()
 	void loadPersistentIntents().catch((error) => {
-		chat.failure = `Could not load persistent intents: ${String(error)}`
+		if (!disposed) chat.failure = `Could not load persistent intents: ${String(error)}`
 	})
 	chat.onExchange = (session, user, assistant) => {
 		if (!intents.items.find((intent) => intent.id === session)?.persistent) return

@@ -18,10 +18,12 @@ document-processing job: it is the durable context in which an Aven can continue
 piece of work and account for what happened.
 
 An account starts with checkout. After a verified purchase, the customer receives a
-link to create a passkey at `aven.id`. The Rust client then asks the customer to
-approve that device with the same identity. Once a customer environment is selected,
-the client reaches its data through `api.aven.ceo`; it never receives database
-credentials or chooses a database by name.
+link to create a passkey at `aven.id`. The same account can purchase more globally
+unique platform names, each with its own customer environment and database. The Rust
+client asks the customer to approve that device with the same identity and lets the
+customer switch among owned environments in that session. Once an environment is
+selected, the client reaches its data through `api.aven.ceo`; it never receives
+database credentials or chooses a database by name.
 
 The application is a work in progress. The current foundation proves customer-specific
 databases, bounded service roles, passkey identity, persistent Intents and Actor runs,

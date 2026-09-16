@@ -2,6 +2,7 @@ import {
 	type ActorAuthorizer,
 	type ActorExecutionHost,
 	type ActorFactoryResolver,
+	type ActorInstanceResolver,
 	ActorRegistry,
 	type ActorRegistrySnapshot,
 	type AffordanceDefinition,
@@ -17,6 +18,7 @@ export interface ServerActorHostDependencies {
 	registryFor(request: PlanRunStartRequest): Awaitable<ActorRegistrySnapshot>
 	authorizerFor(request: PlanRunStartRequest): Awaitable<ActorAuthorizer>
 	factoriesFor(request: PlanRunStartRequest): Awaitable<ActorFactoryResolver>
+	instancesFor?(request: PlanRunStartRequest): Awaitable<ActorInstanceResolver>
 	artifactsFor(
 		request: PlanRunStartRequest
 	): Awaitable<RuntimeArtifactResolver & RuntimeArtifactPublisher>
@@ -40,6 +42,7 @@ export function createServerActorExecutionHost(
 		registry: dependencies.registryFor,
 		authorizer: dependencies.authorizerFor,
 		factories: dependencies.factoriesFor,
+		...(dependencies.instancesFor && { instances: dependencies.instancesFor }),
 		artifacts: dependencies.artifactsFor,
 		...(dependencies.resourceFor && { resource: dependencies.resourceFor }),
 		...(dependencies.affordancesFor && { affordances: dependencies.affordancesFor }),

@@ -582,7 +582,7 @@ onDestroy(() => {
 				     the limit is reached by a subscription in some other state,
 				     so booking would be refused rather than merely unavailable. -->
 				<p class="text-xs opacity-60">
-					Du hast {p.name} bereits gebucht — mehr als eines gibt es pro Konto nicht.
+						Du hast {p.name} bereits gebucht.
 				</p>
 			{:else if s?.cancelAtPeriodEnd || s?.pauseAtPeriodEnd || s?.status === 'paused'}
 				<button

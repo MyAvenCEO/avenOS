@@ -16,7 +16,12 @@ import {
 	solveAuthorized
 } from './physical-planner'
 import type { Ingredient, PlanValue } from './planner'
-import type { ActorRegistrySnapshot, ExecutionEnvironment, RegisteredCapability } from './registry'
+import {
+	definitionRef,
+	type ActorRegistrySnapshot,
+	type ExecutionEnvironment,
+	type RegisteredCapability
+} from './registry'
 import {
 	assertPortableRunValue,
 	type PlanRunExecutor,
@@ -69,6 +74,11 @@ export interface RuntimeArtifactPublisher {
 	publish(publication: RuntimeStepPublication): Promise<RuntimeArtifact[]>
 }
 
+/** Host-owned lookup; a registry address alone can never supply executable code. */
+export interface ActorInstanceResolver {
+	resolve(instanceId: string): Actor | undefined | Promise<Actor | undefined>
+}
+
 export interface ActorStepInput {
 	artifactId: string
 	predicate: Predicate
@@ -104,6 +114,7 @@ export interface PhysicalProgramExecutionRequest {
 	access: ActorAccessContext
 	authorizer: ActorAuthorizer
 	factories: ActorFactoryResolver
+	instances?: ActorInstanceResolver
 	artifacts: RuntimeArtifactResolver & RuntimeArtifactPublisher
 	parameters?: Record<string, unknown>
 	resource?: Record<string, unknown>
@@ -133,6 +144,7 @@ export interface ActorExecutionHost {
 	registry(request: PlanRunStartRequest): Awaitable<ActorRegistrySnapshot>
 	authorizer(request: PlanRunStartRequest): Awaitable<ActorAuthorizer>
 	factories(request: PlanRunStartRequest): Awaitable<ActorFactoryResolver>
+	instances?(request: PlanRunStartRequest): Awaitable<ActorInstanceResolver>
 	artifacts(
 		request: PlanRunStartRequest
 	): Awaitable<RuntimeArtifactResolver & RuntimeArtifactPublisher>
@@ -207,10 +219,11 @@ export function createActorPlanExecutor(host: ActorExecutionHost): PlanRunExecut
 			}
 		}
 
-		const [factories, artifacts, resource] = await Promise.all([
+		const [factories, artifacts, resource, instances] = await Promise.all([
 			host.factories(request),
 			host.artifacts(request),
-			host.resource?.(request)
+			host.resource?.(request),
+			host.instances?.(request)
 		])
 		const result = await executePhysicalProgram({
 			runId: request.idempotencyKey,
@@ -220,6 +233,7 @@ export function createActorPlanExecutor(host: ActorExecutionHost): PlanRunExecut
 			access: request.security.access,
 			authorizer,
 			factories,
+			...(instances && { instances }),
 			artifacts,
 			parameters: request.parameters,
 			...(resource && { resource })
@@ -357,7 +371,7 @@ export async function executePhysicalProgram(
 		const inputs = await resolveInputs(step.inputs, values, request.artifacts)
 		validateSlots('input', capability.inputSlots, capability.requires, inputs)
 		const inputBindings = bindInputs(capability, inputs)
-		const outputs = await executeFactoryStep(
+		const outputs = await executeTargetStep(
 			request,
 			step,
 			capability,
@@ -408,6 +422,85 @@ export async function executePhysicalProgram(
 	}
 }
 
+async function executeTargetStep(
+	request: PhysicalProgramExecutionRequest,
+	step: PhysicalPlanStep,
+	capability: RegisteredCapability,
+	inputs: RuntimeInputBinding[],
+	policyDecisionIds: Set<string>
+): Promise<{ drafts: RuntimeOutputDraft[]; warnings: string[] }> {
+	if (step.target.kind === 'instance')
+		return executeInstanceStep(request, step, capability, inputs, policyDecisionIds)
+	return executeFactoryStep(request, step, capability, inputs, policyDecisionIds)
+}
+
+async function executeInstanceStep(
+	request: PhysicalProgramExecutionRequest,
+	step: PhysicalPlanStep,
+	capability: RegisteredCapability,
+	inputs: RuntimeInputBinding[],
+	policyDecisionIds: Set<string>
+): Promise<{ drafts: RuntimeOutputDraft[]; warnings: string[] }> {
+	if (step.target.kind !== 'instance') throw new Error('invalid instance target')
+	const target = step.target
+	const advertised = request.registry.instances.find(
+		(candidate) =>
+			candidate.instanceId === target.instanceId &&
+			candidate.definitionRef === target.definitionRef &&
+			candidate.status === 'available' &&
+			candidate.executionEnvironment === request.program.executionEnvironment &&
+			candidate.capabilityIds.includes(step.capability as CapabilityId) &&
+			(!candidate.expiresAt || candidate.expiresAt > request.registry.capturedAt)
+	)
+	if (!advertised) throw new Error(`live actor ${target.instanceId} is unavailable`)
+	const actor = await request.instances?.resolve(target.instanceId)
+	if (
+		!actor ||
+		actor.uuid !== target.instanceId ||
+		definitionRef(
+			actor.manifest.id,
+			actor.manifest.version,
+			actor.manifest.authority,
+			actor.manifest.namespace
+		) !== target.definitionRef ||
+		!actor.handles(step.method)
+	)
+		throw new Error(`trusted live actor ${target.instanceId} is unavailable`)
+	const decision = await request.authorizer.decide({
+		action: 'invoke',
+		principal: request.principal,
+		access: request.access,
+		definitionRef: target.definitionRef,
+		capabilityId: step.capability as CapabilityId,
+		method: step.method,
+		target: { kind: 'instance', instanceId: target.instanceId },
+		configuration: {},
+		inputs: authorizationInputs(inputs),
+		runId: request.runId,
+		...(request.resource && { resource: request.resource })
+	})
+	if (!decision.allow) throw new Error(`invoke denied: ${decision.reasonCode}`)
+	policyDecisionIds.add(decision.decisionId)
+	const boundInputs: Record<string, ActorStepInput> = {}
+	for (const input of inputs) boundInputs[input.slot] = input.artifact
+	const payload: ActorStepPayload = {
+		runId: request.runId,
+		stepId: step.id,
+		capabilityId: step.capability as CapabilityId,
+		inputs: boundInputs,
+		parameters: request.parameters ?? {},
+		configuration: {}
+	}
+	assertPortableRunValue(payload)
+	const response = await dispatch(actor, {
+		to: actor.uuid,
+		method: step.method,
+		payload
+	})
+	const result = parseActorStepResult(response)
+	return { drafts: outputDrafts(capability, step, result), warnings: result.warnings ?? [] }
+}
+
 async function executeFactoryStep(
 	request: PhysicalProgramExecutionRequest,
 	step: PhysicalPlanStep,
@@ -415,9 +508,7 @@ async function executeFactoryStep(
 	inputs: RuntimeInputBinding[],
 	policyDecisionIds: Set<string>
 ): Promise<{ drafts: RuntimeOutputDraft[]; warnings: string[] }> {
-	if (step.target.kind !== 'factory') {
-		throw new Error(`executor slice requires a factory target for ${step.capability}`)
-	}
+	if (step.target.kind !== 'factory') throw new Error('invalid factory target')
 	const factory = request.factories.resolve(step.target.factoryId)
 	if (!factory || factory.offer.offerId !== step.target.offerId) {
 		throw new Error(`factory implementation is unavailable for ${step.target.offerId}`)

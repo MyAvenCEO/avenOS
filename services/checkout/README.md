@@ -10,6 +10,13 @@ database. A committed purchase or revocation writes the platform-event outbox in
 same transaction; the narrow worker delivers that lifecycle fact idempotently to
 `api.aven.ceo`, which owns environment policy and provisioning.
 
+An account may purchase several distinct platform names. The former one-name limit
+blocked a second customer environment even though the name registry, identity account,
+and customer-directory model already supported several. Each verified name purchase
+now creates its own entitlement and customer environment for the same stable identity
+subject. Name uniqueness and purchase idempotency remain enforced per name and payment
+event.
+
 Every signature-verified Polar call is archived before domain processing in
 `polar_webhook_deliveries`, with its JSON payload, selected transport headers, event
 identity/type, receive time, processing state, retry count, and bounded error. Unknown

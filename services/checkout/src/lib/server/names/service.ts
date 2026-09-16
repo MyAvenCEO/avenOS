@@ -5,9 +5,8 @@
 // Policy: requesting a name does NOT reserve it — several people may request
 // the same name and each gets a claim email. The name is reserved (for
 // NAME_RESERVATION_TTL_MINUTES, default 5) only when a claim link is clicked,
-// i.e. once the email is confirmed. ONE name per account for now — additional
-// names will be sold through the app; the web flow refuses a second purchase
-// before payment is reachable. Refunds revoke AND lock the name.
+// i.e. once the email is confirmed. A subject may own several distinct names;
+// each paid name provisions its own customer environment. Refunds revoke AND lock the name.
 import { randomUUID } from 'node:crypto'
 import type { ProvisionedAccount } from '@avenos/aven-identity'
 import type pg from 'pg'
@@ -17,7 +16,7 @@ import { writeAudit } from '../audit.js'
 import type { PaymentEvent, PaymentProvider } from '../billing/provider.js'
 import type { NameServiceConfig } from '../config.js'
 import { isBearerToken, randomToken, sha256Hex } from '../crypto.js'
-import { type Queryable, withTransaction } from '../db.js'
+import { withTransaction } from '../db.js'
 import { AppError } from '../errors.js'
 import type { Notifier } from '../notifications.js'
 
@@ -112,25 +111,6 @@ export class NameService {
 		await client.query("SELECT pg_advisory_xact_lock(hashtext('name:' || $1))", [name])
 	}
 
-	// One name per account (for now): true when the email already owns one.
-	private async emailOwnsName(connection: Queryable, email: string): Promise<boolean> {
-		const customer = (
-			await connection.query<{ subject_id: string }>(
-				'SELECT subject_id FROM checkout_customers WHERE lower(email)=lower($1)',
-				[email]
-			)
-		).rows[0]
-		if (!customer) return false
-		return Boolean(
-			(
-				await connection.query(
-					"SELECT 1 FROM names WHERE owner_user_id=$1 AND status='owned' LIMIT 1",
-					[customer.subject_id]
-				)
-			).rows[0]
-		)
-	}
-
 	// Registers a purchase request and emails the unique claim link. Nothing is
 	// reserved yet — the click is both the email confirmation and the start of
 	// the short reservation window. Re-requesting rotates the token (the latest
@@ -140,8 +120,6 @@ export class NameService {
 		const check = await this.availability(name)
 		if (!check.available && check.reason !== 'NAME_HELD')
 			throw new AppError(409, check.reason ?? 'NAME_UNAVAILABLE', 'That name is not available.')
-		if (await this.emailOwnsName(this.pool, email))
-			throw new AppError(409, 'NAME_LIMIT_REACHED', 'This email already owns a name.')
 		// An active reservation by someone else doesn't forbid requesting: if
 		// they don't pay, the window lapses and this claim link still works.
 
@@ -243,9 +221,6 @@ export class NameService {
 			const owned = (await client.query('SELECT 1 FROM names WHERE name=$1', [hold.name])).rows[0]
 			if (owned)
 				throw new AppError(410, 'NAME_UNAVAILABLE', 'This name has been purchased in the meantime.')
-			// One name per account: refuse before payment is reachable.
-			if (await this.emailOwnsName(client, hold.email))
-				throw new AppError(410, 'NAME_LIMIT_REACHED', 'This email already owns a name.')
 			const otherReservation = (
 				await client.query(
 					'SELECT 1 FROM name_holds WHERE name=$1 AND id<>$2 AND reserved_until >= now()',

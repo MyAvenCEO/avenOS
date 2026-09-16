@@ -209,11 +209,17 @@ bun run test:e2e:platform
 
 The harness builds an optimized Rust/Tauri application and every service image, starts
 fresh databases on dynamic loopback ports, and proves the public journey:
+When `CARGO_TARGET_DIR` is set for an isolated worktree, the harness uses that
+directory for both the native build and its application executable.
+The raw test binary loads the fetched ONNX Runtime from this worktree; installed
+application packages use their bundled resource path.
 
 - checkout, email, fake payment, signup, and raw Polar webhook retention;
 - first and second passkey enrollment and login;
 - native Tauri device authorization and short-lived service-token exchange;
 - customer database provisioning and per-schema isolation;
+- two unique name purchases by one identity subject, native environment selection
+  and same-session switching, with reads isolated to each customer database;
 - live membership downgrade/removal with an unchanged identity token, while another
   environment remains independently accessible;
 - artifact upload and exact readback;

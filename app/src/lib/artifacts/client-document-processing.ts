@@ -40,6 +40,11 @@ interface ArtifactContent {
 }
 
 const PUBLICATION_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const
+let activeDocumentRuns = 0
+
+export function clientDocumentRunsBusy(): boolean {
+	return activeDocumentRuns > 0
+}
 
 function publicationErrorMessage(error: unknown): string {
 	return transportError(error).message
@@ -187,6 +192,7 @@ export async function processClientDocument(
 	reconcile = true,
 	csvConfirmationArtifactId?: string
 ): Promise<void> {
+	activeDocumentRuns++
 	let request = documentRunStartRequest(
 		{ artifactId, originalName, ...(declaredMediaType && { declaredMediaType }) },
 		executionEnvironment
@@ -246,6 +252,8 @@ export async function processClientDocument(
 		}
 	} catch (error) {
 		clientDocumentRuntime.fail(request, new Error(transportError(error).message))
+	} finally {
+		activeDocumentRuns--
 	}
 }
 
