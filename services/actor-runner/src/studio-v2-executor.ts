@@ -1,17 +1,17 @@
 import {
-	authorizeRegistryForPlanning,
-	compileStudioSkillV2Execution,
-	executePhysicalProgram,
-	resourceId,
 	type ActorAuthorizer,
 	type ActorFactoryResolver,
 	type ActorRegistrySnapshot,
+	authorizeRegistryForPlanning,
+	compileStudioSkillV2Execution,
+	executePhysicalProgram,
 	type PlanRunExecutor,
 	type PlanRunStartRequest,
+	resourceId,
 	type TrustedActorInstallations
 } from '@avenos/actors'
 import { ArtifactStoreRuntimePort } from './artifact-store-port.js'
-import { type StudioArtifact, type StudioArtifacts } from './studio-artifacts.js'
+import type { StudioArtifact, StudioArtifacts } from './studio-artifacts.js'
 import {
 	STUDIO_BRIEF_SCHEMA,
 	STUDIO_EMAIL_BRIEF_CAPABILITY,
@@ -74,9 +74,14 @@ export function createStudioV2Executor(
 		if (admitted.issues.length)
 			throw new Error(`STUDIO_RUNTIME_CONTRACT_INVALID:${admitted.issues[0]!.code}`)
 		throwIfAborted(context?.signal)
-		const view = await authorizeRegistryForPlanning(registry, request.security.principal, authorizer, {
-			access: request.security.access
-		})
+		const view = await authorizeRegistryForPlanning(
+			registry,
+			request.security.principal,
+			authorizer,
+			{
+				access: request.security.access
+			}
+		)
 		const program = compileStudioSkillV2Execution({
 			definition: admitted.definition,
 			children: admitted.children,
@@ -89,6 +94,10 @@ export function createStudioV2Executor(
 			client: artifacts.client,
 			scopeId: artifacts.scope,
 			initiator: { kind: 'user', id: `user:${request.security.principal.subjectId}` },
+			causalInputs: [
+				{ role: 'activation', artifactId: activationId },
+				{ role: 'program', artifactId: skillArtifactId }
+			],
 			schemas: [
 				{
 					schema: STUDIO_EMAIL_SCHEMA,

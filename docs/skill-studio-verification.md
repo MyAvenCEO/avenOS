@@ -27,8 +27,10 @@ but are not yet executable.
 - Inspect output provenance and preview a Skill visually in the Artifact library
   without planning, executing, publishing or reading file content.
 - Connect future matching artifacts to an exact Skill under the current authenticated
-  session. Admission evaluates every internal and nested publication and rejects a
-  cyclic artifact-type graph, including hidden-output self-triggering loops.
+  session. While Studio is visible it runs bounded authorized synchronization; an
+  ordinary arrival starts a connected Skill without pressing Sample or Sync. Admission
+  accounts for activation as well as every internal and nested publication, rejecting
+  both direct and control-artifact feedback loops.
 - Use the same operations from the Studio Actor. The agent can analyze state and
   catalog opportunities, create a closed v2 definition, compose an authorized
   operation or exact child Skill, and apply typed semantic edits with an inspectable
@@ -58,13 +60,17 @@ but are not yet executable.
 | `libs/aven-actors/tests/studio-edit.test.ts` | Agent-safe creation and semantic modification with stable identities and diffs |
 | `app/tests/studio-actor.test.ts` | Agent analyzes, creates, composes and modifies through the actual bus Actor |
 | `services/actor-runner/tests/skill-studio-productive.e2e.test.ts` | Catalog → compose → draft → immutable publish → generic execution → committed output and provenance |
+| `services/actor-runner/tests/studio.persistence.e2e.test.ts` | Real PostgreSQL and current Rust Artifact Store: nested Skill, connected delivery, Store lineage, replay, restart and draft isolation |
 | `services/actor-runner/tests/studio-v2-runtime-safety.test.ts` | Cancellation, execution-time revalidation, activation ownership, public-result selection and feedback-loop rejection |
 | `services/actor-runner/tests/studio-v2-validation.test.ts` | Shared preview/publication validation, Store-type integrity, transitive children and honest runtime readiness |
-| `app/tests/studio-ui.mjs` | Real Svelte journey: discover, compose, parameterize, publish, run, trace, connect and nest |
+| `app/tests/studio-ui.mjs` | Real Svelte journey: discover, compose, parameterize, publish, run, trace, connect, automatic ordinary arrival and nest |
 | `app/tests/artifact-skill-preview.mjs` | Pure Skill card and visual Artifact-library preview |
 | Artifact Store core built-in tests | Registered v2 Skill, activation and subscription payload/reference contracts |
 
-The browser tests simulate only the authenticated native IPC boundary. The productive
-runner test uses the real shared composer, publisher, compiler, generic executor and
-Store runtime port. Provider-backed model tests are not required for the deterministic
+The browser tests simulate only the authenticated native IPC boundary. The focused
+productive test uses the real shared composer, publisher, compiler, generic executor
+and Store runtime port. The restored persistence test was also executed on 16 September
+2026 against an isolated PostgreSQL schema and a fresh database served by the current
+Rust Artifact Store binary: 2 passed, 0 failed. The broader repository CI checks are
+separate. Provider-backed model tests are not required for this deterministic
 email-brief acceptance path.

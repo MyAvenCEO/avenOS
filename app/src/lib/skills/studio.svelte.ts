@@ -102,3 +102,24 @@ export async function refreshStudio() {
 	}
 	return snapshot
 }
+
+let activeSynchronization: Promise<void> | null = null
+/** Session-bound, bounded delivery pass. Polling state alone cannot start subscriptions. */
+export function synchronizeStudio(): Promise<void> {
+	if (activeSynchronization) return activeSynchronization
+	const current = studio.snapshot
+	activeSynchronization = (async () => {
+		await authorizedStudioRequest('sync')
+		if (
+			current &&
+			studio.snapshot &&
+			(current.scopeId !== studio.snapshot.scopeId ||
+				current.subjectId !== studio.snapshot.subjectId)
+		)
+			return
+		await refreshStudio()
+	})().finally(() => {
+		activeSynchronization = null
+	})
+	return activeSynchronization
+}

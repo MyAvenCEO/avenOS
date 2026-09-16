@@ -44,8 +44,9 @@ Run the application unit tests separately:
 Skill Studio's compiler and service tests run in the customer-platform suite.
 Its `studio.persistence.e2e.test.ts` is included in the Actor Runner persistence
 stage of the full-stack gate and requires both its disposable PostgreSQL database
-and production Artifact Store. It proves the synthetic source → nested document
-Skill → subscribed brief path, provenance, duplicate delivery, restart and draft
+and production Artifact Store. The v2 journey proves a synthetic email → exact
+nested Skill → committed brief path, output-to-activation-to-Skill provenance,
+duplicate-delivery replay, connection catch-up after Runner restart, and draft
 conflicts. It does not contact a mailbox or call a model.
 
 Persistence test files run sequentially because they share one Artifact Store

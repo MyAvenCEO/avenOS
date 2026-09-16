@@ -1,20 +1,20 @@
 import {
 	ACTOR_RUN_PROTOCOL,
-	composeCatalogOperation,
-	newStudioSkillV2,
-	parseStudioSkillParameters,
-	parseStudioSkillV2,
-	studioSkillChildReferences,
-	StudioCatalog,
-	presentSkillArtifact,
 	type ActorAuthorizer,
 	type ActorRegistrySnapshot,
+	composeCatalogOperation,
+	newStudioSkillV2,
 	type PlanRunExecutionContext,
 	type PlanRunner,
 	type PlanRunSecurityContext,
+	parseStudioSkillParameters,
+	parseStudioSkillV2,
+	presentSkillArtifact,
+	StudioCatalog,
+	type StudioSkillV2,
+	studioSkillChildReferences,
 	type TrustedActorInstallation,
-	type TrustedActorInstallations,
-	type StudioSkillV2
+	type TrustedActorInstallations
 } from '@avenos/actors'
 import type pg from 'pg'
 import { z } from 'zod'
@@ -26,8 +26,8 @@ import {
 } from './studio-artifacts.js'
 import { StudioV2Authoring } from './studio-v2-authoring.js'
 import { StudioV2Drafts } from './studio-v2-drafts.js'
-import { StudioV2SkillPublisher } from './studio-v2-publisher.js'
 import { STUDIO_SKILL_V2 } from './studio-v2-executor.js'
+import { StudioV2SkillPublisher } from './studio-v2-publisher.js'
 
 const uuid = z.uuid()
 const ids = z.record(z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/), uuid)
@@ -771,6 +771,9 @@ async function producedArtifactTypes(
 	root: StudioSkillV2
 ): Promise<Set<string>> {
 	const produced = new Set<string>()
+	// Every accepted run emits an activation before any declared Actor output.
+	// It is part of the same causal graph and must not be watched recursively.
+	produced.add('studio.activation@2')
 	const visited = new Set<string>()
 	const collect = (definition: StudioSkillV2) => {
 		const walk = (steps: StudioSkillV2['steps']) => {
