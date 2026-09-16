@@ -1,0 +1,308 @@
+{
+  "baseUrl": "http://100.96.61.57:8000",
+  "model": "qwen3.8-flash-next",
+  "intentCount": 300,
+  "corpus": "personas",
+  "results": [
+    {
+      "case": "German signed supplier document supersedes old price",
+      "language": "de",
+      "pass": true,
+      "answer": "\n\n4,65 Euro je Kilo. Das freigegebene Dokument „Nordton Konditionen 2026\" nennt diese Preisstaffel und ersetzt damit die Frühjahrsstaffel mit 4,20 Euro; gültig ist der Wert für den nächsten Einkauf. Die Änderung ist also bereits in der Vertragsablage dokumentiert.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Nordton Konditionen Kilo Preis"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Nordton Glasur Preis Kilo freigegeben"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Nordton"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "query": "Nordton"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-nordton-current-terms"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "lena-weber:glaze-supplier"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 4682,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "lena-weber:glaze-supplier",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "German question retrieves an English supplier email",
+      "language": "de",
+      "pass": true,
+      "answer": "\n\nDie Nummer ist BLUE-271. Sie steht in der englischen Mail \"Glaze batch release and kiln samples\" vom Nordton-Qualitätsteam vom 2. April, zusammen mit dem Hinweis, den Code vor der nächsten Bestellung ans Chargenblatt für die Brennöfen zu hängen. Beim Beschriften der neuen Bestände also auf BLUE-271 verweisen, damit die Qualitätserfassung mitzieht.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Nordton release batch approval number"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Nordton release number"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Nordton"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "lena-weber:glaze-supplier",
+            "query": "release number"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-nordton-batch-mail"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "lena-weber:glaze-supplier"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 4686,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "lena-weber:glaze-supplier",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "Spanish archived handoff document",
+      "language": "es",
+      "pass": true,
+      "answer": "\n\nLa clave es SOL-983.\n\nAparece en la confirmación de acceso y relevo de la boda de Clara Beltrán, enviada por Mateo Serra el 21 de abril: la hoja de relevo es la versión 2.1 y lleva esa misma clave. El evento es el 15 de mayo de 2026, con apertura de la puerta de carga a las 07:00 y contacto en sitio el propio Mateo Serra. Ojo con dos detalles del mismo documento: la adenda v2.1 debe estar firmada por ambas partes antes de la entrega, y el recargo de transporte de 150,00 EUR va en la factura final.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "relevo boda Valencia"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "hoja de relevo entrega carpeta naranja"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "Confirmación de Acceso y Relevo - Boda Clara Beltrán"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 3068,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "sofia-morales:one-off-178",
+      "switchExpected": false,
+      "switched": false,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "Spanish clinic email cancels old appointment",
+      "language": "es",
+      "pass": true,
+      "answer": "\n\nEl correo nuevo confirma el jueves a las 19:00. La cita antigua del martes a las 18:30 queda cancelada, y el mensaje no especifica el día del calendario, así que conviene dejar claro que es el jueves inmediato. Con ese cambio, la hoja de ruta y la recogida del taxi adaptado habría que reajustarlas a esa hora.",
+      "calls": [
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "sofia-morales:mother-clinic"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "cita clínica cambio de hora correo",
+            "intent": "sofia-morales:mother-clinic",
+            "limit": 10
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "sofia-morales:mother-clinic",
+            "query": "correo nuevo cita día hora"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "sofia-clinic-updated-mail"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 4545,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "sofia-morales:mother-clinic",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "English signed renewal versus historic appendix",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nThe signed 2026 renewal dated 3 May sets the current rebate at 7 percent, and it supersedes the 2025 appendix, which carried 4 percent. The countersigned implementation addendum v2.2 of 28 May confirms that 7 percent applies to all invoices for services from 1 May onward, replacing the 5 percent interim rate. So 7 percent is the live figure, and the old appendix is no longer operative.",
+      "calls": [
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "rowan-chen:atlas-contract"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Atlas renewal rebate 2026 signed appendix"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "rowan-chen:atlas-contract"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "rowan-chen:atlas-contract",
+            "query": "rebate appendix renewal signed"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-atlas-2026"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-10-5:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 4053,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:atlas-contract",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "English question retrieves a Spanish migration email",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nIt gave RIO-588 as the shipping reference for the test batch, filed alongside the migration dry run.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Referencia del lote de prueba"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "migration dry run shipping reference Spanish partner email"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "rowan-spanish-batch-mail"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "rowan-chen:migration"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 2584,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:migration",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    }
+  ],
+  "passed": 6
+}

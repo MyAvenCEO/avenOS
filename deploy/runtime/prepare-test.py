@@ -106,6 +106,7 @@ def main():
         assert len({provisioner[key] for key in ('INTENTS_API_DB_CREDENTIAL_ROOT', 'ACTOR_API_DB_CREDENTIAL_ROOT',
                                                 'ACTOR_WORKER_DB_CREDENTIAL_ROOT', 'ARTIFACT_API_DB_CREDENTIAL_ROOT')}) == 4
         assert services['green-database']['volumes'][0]['source'] == str(root / 'data/green/postgres')
+        assert services['green-database']['volumes'][0]['target'] == '/var/lib/postgresql'
         route = json.loads(outputs['route.json'])
         assert route['targets'][1]['baseUrl'] == 'http://green-intent-service:3010'
         assert route['artifactStoreBearerToken'] == services['green-artifact-store']['environment']['ARTIFACT_STORE_BEARER_TOKEN']

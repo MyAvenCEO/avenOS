@@ -24,7 +24,7 @@ const scratch = await mkdtemp(join(tmpdir(), 'aven-customer-movement-'))
 const names = [0, 1].map((index) => `aven-movement-${randomUUID()}-${index}`)
 const pools: pg.Pool[] = []
 const databaseImage =
-	'postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73'
+	'postgres:18-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2'
 async function command(args: string[]) {
 	const child = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' })
 	const [code, output, error] = await Promise.all([

@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-sofia-morales-3-4",
+      "user": "Elena, Clara ha preguntado si podriamos mover la boda a junio. Le he dicho que el 15 de mayo esta reservado pero que lo miramos. Necesito un borrador de adenda para el contrato v2.0. Que quede claro que la fecha actual sigue siendo 15/05/2026 hasta que firmemos algo nuevo. Gracias.",
+      "assistant": "Entendido, Sofía. He preparado el borrador de la Adenda v2.1. Mantiene la fecha original del 15/05/2026 como vigente y añade una cláusula opcional para un cambio a junio, sujeto a disponibilidad y nuevo anticipo. Queda pendiente de firma.",
+      "artifact": {
+        "title": "Borrador Adenda v2.1 - Contrato Servicios Florales",
+        "from": "Elena Pérez (Abogada)",
+        "to": null,
+        "language": "es",
+        "body": "ADENDA AL CONTRATO DE SERVICIOS FLORALES\nPartes: Estudio Morales (Sofía Morales) y Clara Beltrán.\nVersión: 2.1\nFecha: 12/02/2026\nEstado: Borrador - Pendiente de revisión\n\nCláusula Adicional 4.2.1 (Reserva de Fecha):\nSe confirma que la fecha del evento reservada y vigente es el 15/05/2026. Cualquier solicitud de cambio de fecha a junio de 2026 será tratada como una nueva reserva sujeta a disponibilidad de agenda y reevaluación de costes logísticos.\n\nCláusula Adicional 4.2.2 (Anticipo):\nEl anticipo actual de 500,00 EUR se mantiene como garantía de la reserva para el 15/05/2026. En caso de cambio a junio, se requerirá un nuevo anticipo del 12% del presupuesto total actualizado."
+      },
+      "probe": {
+        "question": "¿Qué fecha de evento está confirmada como vigente en este borrador legal?",
+        "answer": "la fecha del evento reservada y vigente es el 15/05/2026"
+      }
+    },
+    {
+      "id": "qwen-sofia-morales-3-5",
+      "user": "Hola, necesito emitir la proforma para Clara Beltrán. Es para la boda del 15 de mayo. El total del presupuesto es 2.500 EUR. El anticipo es el 12%. Pon fecha de vencimiento el 28 de febrero para que entre antes de la visita al sitio. Gracias.",
+      "assistant": "Aquí tienes la proforma. He calculado el 12% sobre 2.500 EUR (300 EUR) y he puesto el vencimiento el 28/02/2026. Recuerda que es un anticipo, no la factura final.",
+      "artifact": {
+        "title": "PROFORMA ANTICIPO - BODA CLARA BELTRÁN",
+        "from": "Estudio Morales",
+        "to": null,
+        "language": "es",
+        "body": "PROFORMA DE SERVICIOS FLORALES\nCliente: Clara Beltrán\nEvento: Boda Valencia\nFecha Evento: 15/05/2026\n\nConcepto: Anticipo reserva de fecha (12%)\nBase Imponible: 300,00 EUR\nIVA (21%): 63,00 EUR\nTOTAL A PAGAR: 363,00 EUR\n\nMétodo de pago: Transferencia Bancaria o Stripe\nVencimiento: 28/02/2026\n\nNota: Este documento es una proforma para el anticipo de la boda del 15/05/2026. No constituye factura final. El saldo restante se facturará tras la confirmación definitiva de los detalles del evento."
+      },
+      "probe": {
+        "question": "¿Cuál es el total a pagar indicado en esta proforma?",
+        "answer": "TOTAL A PAGAR: 363,00 EUR"
+      }
+    },
+    {
+      "id": "qwen-sofia-morales-4-4",
+      "user": "Mateo, gracias por la visita de hoy. He tomado notas para la boda del 15 de mayo. La puerta de carga abre a las 07:00 con la clave SOL-983. Confirmame si el acceso a la cocina está libre para el montaje de los centros de mesa. Saludos.",
+      "assistant": "Recibido, Sofía. Confirmo la visita técnica del 28 de febrero. La puerta de carga estará operativa a las 07:00 con la clave SOL-983. El acceso a la cocina está habilitado para el montaje previo. Quedo a la espera de la hoja de relevo final.",
+      "artifact": {
+        "title": "Confirmación Visita Técnica - Venue Manager",
+        "from": "Mateo Serra",
+        "to": null,
+        "language": "es",
+        "body": "Estimada Sofía,\n\nAdjunto la confirmación de la visita técnica realizada hoy, 28/02/2026, para la preparación de la boda del 15/05/2026.\n\nDetalles de la Visita:\n- Fecha: 28/02/2026\n- Hora: 10:00 - 11:30\n- Propósito: Site walk-through y medición de espacios\n- Acceso Puerta Carga: Clave SOL-983 (Operativa desde 07:00)\n\nObservaciones:\nLa cocina está libre para el montaje de los centros de mesa. Se ha verificado la ubicación de los puntos de agua. Esta visita no constituye el montaje del día del evento, sino una revisión logística previa."
+      },
+      "probe": {
+        "question": "¿Qué tipo de actividad se realizó el 28 de febrero según este correo?",
+        "answer": "visita técnica realizada hoy, 28/02/2026"
+      }
+    },
+    {
+      "id": "qwen-sofia-morales-6-4",
+      "user": "Isabel, necesito confirmar el pedido de materiales para la boda de Clara del 15 de mayo. Rosas blancas, eucalipto y follaje verde. Entrega el 14 de mayo por la mañana. Es un pedido, no la factura final. Gracias.",
+      "assistant": "Hola Sofía. Pedido registrado. Confirmo la disponibilidad de las rosas y el eucalipto para la entrega del 14/05/2026. Te adjunto la confirmación del pedido con los ítems detallados.",
+      "artifact": {
+        "title": "CONFIRMACIÓN DE PEDIDO - MAR AZUL",
+        "from": "Isabel Ríos",
+        "to": null,
+        "language": "es",
+        "body": "CONFIRMACIÓN DE PEDIDO\nNº Pedido: ORD-2026-0327-MA\nFecha: 27/03/2026\nCliente: Estudio Morales\nEvento: Boda Clara Beltrán - 15/05/2026\n\nArtículos Reservados:\n1. Rosas Blancas Avalanche (500 uds): 450,00 EUR\n2. Eucalipto Cinerea (50 manojos): 150,00 EUR\n3. Follaje Verde Variado (30 manojos): 90,00 EUR\n\nSubtotal: 690,00 EUR\nIVA (21%): 144,90 EUR\nTotal Estimado: 834,90 EUR\n\nEstado: Confirmado\nVentana de Entrega: 14/05/2026, 08:00 - 10:00\nLugar: Calle de la Madera, Valencia\n\nNota: Este documento es una confirmación de pedido de materiales. La factura se emitirá tras la recepción de la mercancía."
+      },
+      "probe": {
+        "question": "¿Qué tipo de documento es este para el evento del 15 de mayo?",
+        "answer": "confirmación de pedido de materiales"
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//avenOS//Synthetic Corpus//EN
+BEGIN:VEVENT
+UID:qwen-sofia-morales-5-1@synthetic.test
+DTSTAMP:20260303T180200Z
+DTSTART;TZID=Europe/Madrid:20260304T100000
+DTEND;TZID=Europe/Madrid:20260304T113000
+SUMMARY:Calendar: Technical Maintenance & Inspection
+DESCRIPTION:Event: Cold Room Compressor Replacement & Calibration\nDate: 2026-03-04\nTime: 10:00 - 11:30\nLocation: Estudio Morales\, Valencia\nAttendees: Alba Pérez (Technician)\, Mario Costa (Staff)\nStatus: Confirmed\nNotes: Technician will install new compressor unit. Calibration required before floral storage. Current internal temperature fluctuating between 5.5°C and 6.2°C. Do not store delicate flowers (peonies\, ranunculus) until post-maintenance temperature log confirms stability at 4.0°C ± 0.5°C for 2 hours. Reference Case: TA-2026-0303-ALB.
+X-SYNTHETIC-TEST-RECORD:TRUE
+END:VEVENT
+END:VCALENDAR

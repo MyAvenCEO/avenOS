@@ -162,6 +162,34 @@ test('stop during a scan prevents returned attachments from being uploaded', asy
 	expect(state.running).toBe(false)
 })
 
+test('switching customer environments discards an in-flight mailbox result and its prior UI state', async () => {
+	const state = initialEmailJobState()
+	let finishScan!: (value: EmailResult) => void
+	let scanStarted!: () => void
+	const started = new Promise<void>((resolve) => {
+		scanStarted = resolve
+	})
+	const scanResult = new Promise<EmailResult>((resolve) => {
+		finishScan = resolve
+	})
+	const job = new EmailImportJob(state, {
+		accountScope: async () => 'account-customer-a',
+		scan: async () => {
+			scanStarted()
+			return await scanResult
+		},
+		ingest: async () => {
+			throw new Error('Old customer PDF must not be imported')
+		}
+	})
+	const run = job.startMailbox(request, 'local')
+	await started
+	job.resetForEnvironment()
+	finishScan(page({ scope: 'account-customer-a', attachments: [attachment('late')], done: true }))
+	await run
+	expect(state).toEqual(initialEmailJobState())
+})
+
 test('a failed initial mailbox connection stays bound to the starting account on resume', async () => {
 	const state = initialEmailJobState()
 	let scopeReads = 0

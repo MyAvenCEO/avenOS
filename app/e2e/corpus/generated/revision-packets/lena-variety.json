@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-lena-weber-9-3",
+      "user": "Britta, danke nochmal für die Hilfe beim Umzugskisten packen. Hier ist das Ticket für die Premiere am Deutschen Theater. Ich kann leider nicht, aber du bist eingeladen. Viel Spaß!",
+      "assistant": "Das Ticket ist für Britta Seidel ausgestellt. Es handelt sich um eine Premiere am Deutschen Theater am 15. Mai. Der Preis beträgt 28,00 EUR. Bitte beachte die Einlassbedingungen.",
+      "artifact": {
+        "title": "Eintrittskarte: Premiere \"Die Räuber\"",
+        "from": "Deutsches Theater Berlin",
+        "to": null,
+        "language": "de",
+        "body": "EINTRITTSKARTE\n\nVeranstaltung: Premiere \"Die Räuber\" (Regie: N.N.)\nOrt: Deutsches Theater, Schumannstraße 13A, 10117 Berlin\nDatum: 15.05.2026\nUhrzeit: 19:30 Uhr (Einlass 19:00 Uhr)\nInhaber: Britta Seidel\nKategorie: Parkett, Reihe 12, Platz 4\nPreis: 28,00 EUR\nTicket-ID: DT-2026-05-15-BS-442\n\nHinweis: Bitte pünktlich erscheinen. Einlass nur mit gültigem Ticket. Keine Platzgarantie nach Vorstellungsbeginn. Das Ticket ist nicht übertragbar."
+      },
+      "probe": {
+        "question": "Wo sitzt Britta bei der Theaterpremiere am 15. Mai?",
+        "answer": "Parkett, Reihe 12, Platz 4"
+      }
+    },
+    {
+      "id": "qwen-lena-weber-7-2",
+      "user": "Frau Becker, hier ist der Entwurf für den Mietvertrag Prenzlauer Berg. Bitte prüfen Sie die Klausel zu den Abendkursen. Ich warte noch auf Pauls Bericht.",
+      "assistant": "Der Entwurf Version 2.1 ist eingegangen. Die Klausel § 4.2 (Abendkurse) ist vorläufig und hängt von der Freigabe des Brandschutzberichts B-17 ab. Bitte senden Sie das unterschriebene Dokument erst nach Erhalt der Bestätigung zurück.",
+      "artifact": {
+        "title": "Mietvertragsentwurf Prenzlauer Berg - Version 2.1",
+        "from": "Berlin Hausverwaltung",
+        "to": null,
+        "language": "de",
+        "body": "MIETVERTRAGSENTWURF\n\nParteien: Weber Keramik (Mieter) und Berlin Hausverwaltung (Vermieter)\nObjekt: Werkstatt Prenzlauer Berg\nVersion: 2.1 (Entwurf)\nDatum: 06.04.2026\n\nKlausel § 4.2 (Nutzungszeiten):\nDie Nutzung für Abendkurse ist noch nicht genehmigt. Voraussetzung für eine spätere Freigabe ist der Brandschutzbericht B-17; die Bestätigung durch den zuständigen Ingenieur steht aus. Ohne diese Bestätigung ist die Nutzung nach 20:00 Uhr untersagt.\n\nStatus: Entwurf, nicht unterzeichnet.\nHinweis: Bitte warten Sie auf den unterzeichneten Bericht und die finale Freigabe, bevor Sie das Dokument zur Unterschrift zurücksenden."
+      },
+      "probe": {
+        "question": "Darf ich laut Mietvertragsentwurf schon Abendkurse im neuen Studio geben?",
+        "answer": "Ohne diese Bestätigung ist die Nutzung nach 20:00 Uhr untersagt."
+      }
+    },
+    {
+      "id": "qwen-lena-weber-10-2",
+      "user": "Bestellung für Brandschutz im Studio. Ich brauche die Schilder und den Feuerlöscher bis zum 25. Mai. Bitte bestätigen.",
+      "assistant": "Ihre Bestellung ist eingegangen. Die Artikel sind auf Lager und werden am 22. Mai versandt. Die Zahlung wurde über Ihr Visa Debit Konto abgebucht.",
+      "artifact": {
+        "title": "Auftragsbestätigung: Brandschutz-Ausstattung",
+        "from": "Sicherheitsbedarf24 GmbH",
+        "to": null,
+        "language": "de",
+        "body": "AUFTRAGSBESTÄTIGUNG\n\nBestellnummer: SB24-2026-05-21-889\nDatum: 21.05.2026\nKunde: Weber Keramik\n\nArtikel:\n1. Feuerlöscher ABC 6kg (inkl. Wandhalterung) - 1 Stk. - 45,00 EUR\n2. Fluchtwegschild \"Notausgang\" (PVC, selbstklebend) - 4 Stk. - 12,00 EUR\n3. Warnschild \"Feuerlöscher\" - 2 Stk. - 6,00 EUR\n\nZwischensumme: 63,00 EUR\nUmsatzsteuer (19%): 11,97 EUR\nGesamtbetrag: 74,97 EUR\n\nZahlungsmethode: Visa Debit ****4821\nStatus: Bezahlt\nLieferdatum: Geschätzt 22.05.2026\nLieferadresse: Weber Keramik, Prenzlauer Berg, Berlin\nHinweis: Bitte prüfen Sie die Ware bei Erhalt auf Transportschäden."
+      },
+      "probe": {
+        "question": "Was hat die Brandschutzbestellung fürs Studio insgesamt gekostet?",
+        "answer": "Gesamtbetrag: 74,97 EUR"
+      }
+    }
+  ]
+}

@@ -82,6 +82,7 @@ export class EmailImportJob {
 	private pending: EmailAttachment[] = []
 	private done = false
 	private stop = false
+	private environmentEpoch = 0
 
 	constructor(
 		readonly state: EmailJobState,
@@ -115,6 +116,15 @@ export class EmailImportJob {
 
 	clearCompleted() {
 		if (!this.state.running && !this.state.paused) this.reset(this.environment)
+	}
+
+	resetForEnvironment(): void {
+		this.environmentEpoch++
+		this.stop = true
+		this.request = null
+		this.pending = []
+		this.scope = ''
+		Object.assign(this.state, initialEmailJobState())
 	}
 
 	private reset(environment: ExecutionEnvironment) {
@@ -161,38 +171,43 @@ export class EmailImportJob {
 		await this.run()
 	}
 
-	private async scanWithRetry(request: EmailRequest): Promise<EmailResult | null> {
+	private async scanWithRetry(request: EmailRequest, epoch: number): Promise<EmailResult | null> {
 		for (let attempt = 0; ; attempt++) {
+			if (epoch !== this.environmentEpoch) return null
 			try {
 				return await this.dependencies.scan({ ...request })
 			} catch (cause) {
+				if (epoch !== this.environmentEpoch) return null
 				if (!errorMessage(cause).includes('IMAP_RETRYABLE:') || attempt >= 3) throw cause
 				this.state.status = `Mailbox connection interrupted. Retrying automatically (${attempt + 1}/3)…`
 				await (this.dependencies.delay?.(1000 * 2 ** attempt) ??
 					new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt)))
-				if (this.stop || this.state.paused) return null
+				if (epoch !== this.environmentEpoch || this.stop || this.state.paused) return null
 			}
 		}
 	}
 
 	private async run(): Promise<void> {
+		const epoch = this.environmentEpoch
 		this.state.running = true
 		try {
-			while (!this.stop && !this.state.paused) {
+			while (epoch === this.environmentEpoch && !this.stop && !this.state.paused) {
 				const attachment = this.pending[0]
 				if (attachment) {
 					this.state.status = `Uploading ${attachment.name}…`
 					try {
 						const context = await emailImportContext(this.scope, attachment, this.environment)
-						if (this.stop || this.state.paused) break
+						if (epoch !== this.environmentEpoch || this.stop || this.state.paused) break
 						const receipt = await this.dependencies.ingest(attachment.path, this.environment, {
 							...context,
 							background: true,
 							throwOnError: true
 						})
+						if (epoch !== this.environmentEpoch) break
 						if (!receipt) throw new Error('The file upload did not return a receipt.')
 						this.state.imported.push(attachment.id)
 					} catch (cause) {
+						if (epoch !== this.environmentEpoch) break
 						this.state.failed.push({ attachment, error: errorMessage(cause) })
 					}
 					this.pending.shift()
@@ -203,7 +218,7 @@ export class EmailImportJob {
 					throw new Error('Enter your mailbox connection settings to start an import.')
 				if (!this.scope) {
 					this.scope = await this.dependencies.accountScope()
-					if (this.stop) break
+					if (epoch !== this.environmentEpoch || this.stop) break
 					this.request.expectedScope = this.scope
 				}
 				this.state.status =
@@ -212,8 +227,8 @@ export class EmailImportJob {
 						: this.state.phase === 'indexing'
 							? `Ordering messages by received date: ${this.state.indexed} of ${this.state.total}…`
 							: `Reading mailbox: ${this.state.scanned} of ${this.state.total} messages…`
-				const response = await this.scanWithRetry({ ...this.request })
-				if (this.stop || !response) break
+				const response = await this.scanWithRetry({ ...this.request }, epoch)
+				if (epoch !== this.environmentEpoch || this.stop || !response) break
 				if (this.scope && response.scope !== this.scope)
 					throw new Error('Your Aven account changed. Start a new import.')
 				this.scope = response.scope
@@ -237,6 +252,7 @@ export class EmailImportJob {
 					this.state.scanned = response.cursor ?? 0
 				}
 			}
+			if (epoch !== this.environmentEpoch) return
 			if (this.stop) this.state.status = 'Import stopped. Completed uploads are retained.'
 			else if (this.state.paused) this.state.status = 'Import paused. Resume to continue.'
 			else {
@@ -245,11 +261,12 @@ export class EmailImportJob {
 				this.state.status = `Import finished. ${this.state.imported.length} PDFs uploaded; ${this.state.failed.length} uploads failed. Follow processing in the workspace.`
 			}
 		} catch (cause) {
+			if (epoch !== this.environmentEpoch) return
 			this.state.error = errorMessage(cause)
 			this.state.paused = true
 			this.state.status = 'Import paused. Resume to retry the current mailbox operation.'
 		} finally {
-			this.state.running = false
+			if (epoch === this.environmentEpoch) this.state.running = false
 		}
 	}
 }

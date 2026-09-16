@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-rowan-chen-10-5",
+      "user": "Malik sent the implementation addendum. Is this the final signed version for the 7% rate?",
+      "assistant": "Yes, this is the executed implementation addendum. It formally incorporates the 7% rebate rate approved in the 3 May renewal. The document is fully countersigned by both parties, superseding the previous 5% interim term. Production data access remains blocked pending DPA-42, but the commercial terms are now locked in.",
+      "artifact": {
+        "title": "Implementation Addendum to Renewal Agreement v2.2",
+        "from": "Malik Ahmed",
+        "to": null,
+        "language": "en",
+        "body": "DOCUMENT: Implementation Addendum to Atlas Consultancy Renewal Agreement\nVERSION: v2.2 (Executed)\nDATE: 2026-05-28\nPARTIES: Atlas Ltd and Rowan Chen Consultancy\n\nSTATUS: FULLY COUNTERSIGNED\n\nTERMS:\n1. Rebate Structure: This addendum implements the 7 percent annual rebate rate approved in the signed renewal dated 2026-05-03. This rate supersedes the 5 percent interim rate previously active.\n2. Effective Date: The 7 percent rebate applies to all invoices issued for services rendered from 2026-05-01 onwards.\n3. Data Exchange: Production data transfer remains suspended pending the separate countersignature of DPA-42. This addendum does not alter data security protocols.\n\nSIGNATURES:\nMalik Ahmed (Atlas Ltd): Signed 2026-05-28\nRowan Chen (Consultancy): Signed 2026-05-28\n\nREFERENCE: ATLAS-ADD-2026-0528-01"
+      },
+      "probe": {
+        "question": "Did Malik’s 28 May addendum get signed by both sides?",
+        "answer": "STATUS: FULLY COUNTERSIGNED"
+      }
+    },
+    {
+      "id": "qwen-rowan-chen-11-5",
+      "user": "Priya, just checking the rebate calculation for the May invoice. Is the 7% definitely active now?",
+      "assistant": "Hi Rowan, yes. The 7% rebate is active for all May and subsequent invoices. We have updated our billing system to reflect the signed 3 May renewal and the 28 May implementation addendum. The May invoice should show the 7% deduction. Let me know if you need the updated rate schedule for your records.",
+      "artifact": {
+        "title": "RE: Atlas May Invoice Rebate Confirmation",
+        "from": "Priya Shah",
+        "to": null,
+        "language": "en",
+        "body": "Hi Rowan,\n\nConfirming that the 7% rebate is active for the May 2026 invoice period. This aligns with the signed renewal from 3 May and the implementation addendum executed on 28 May.\n\nWe have adjusted our internal ledger to apply the 7% rate to all net fees from 1 May onwards. The previous 5% interim rate is no longer applicable for new billing cycles.\n\nPlease ensure your invoice INV-2026-05-001 reflects this change. If any earlier provisional drafts were sent at 5%, we will issue a credit note upon receipt of the corrected final invoice.\n\nBest,\nPriya"
+      },
+      "probe": {
+        "question": "What rate should I put on that May Atlas invoice?",
+        "answer": "7% rebate is active for the May 2026 invoice period"
+      }
+    },
+    {
+      "id": "qwen-rowan-chen-12-4",
+      "user": "Payment for the May invoice just cleared. Can you confirm the 7% rebate was applied correctly?",
+      "assistant": "The payment receipt confirms the 7% rebate was applied. The £2,232.00 transfer includes a £140.00 net-fee credit and £28.00 VAT adjustment. The transaction reference matches the bank transfer. This reconciles the May billing cycle with the signed 3 May renewal terms.",
+      "artifact": {
+        "title": "Payment Receipt: Atlas Ltd",
+        "from": "Atlas Ltd Finance",
+        "to": null,
+        "language": "en",
+        "body": "Merchant: Atlas Ltd\nDate: 2026-06-27\nReference: ATLAS-PAY-2026-0627-01\nDescription: Payment for Invoice INV-2026-05-001 (May Services)\n\nBREAKDOWN:\nSubtotal: £2,000.00\nVAT (20%): £400.00\nGross Total: £2,400.00\nRebate Applied: 7% of net fees (£140.00)\nVAT credit on rebate: £28.00\nTotal Paid after credit: £2,232.00\n\nCurrency: GBP\nPayment Method: Bank Transfer\nStatus: Completed\n\nNote: Rebate calculated per Renewal Agreement v2.2 (Executed 2026-05-28). The 7% rate supersedes the previous 5% interim term. No further adjustments required for this period."
+      },
+      "probe": {
+        "question": "How much did Atlas actually pay after the 7% credit?",
+        "answer": "Total Paid after credit: £2,232.00"
+      }
+    }
+  ]
+}

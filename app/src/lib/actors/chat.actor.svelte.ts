@@ -10,6 +10,7 @@ import chatMachineSource from './chat-machine.pl?raw'
 import { LlmActor } from './llm.actor'
 import { RegistryActor } from './registry.actor'
 import { singleton } from './singleton'
+import { StudioActor } from './studio.actor'
 import { summarizeRecord } from './summarize'
 import { todoActor } from './todo.svelte'
 import { chatStyle, chatView } from './views/chat/view'
@@ -129,15 +130,6 @@ export class ChatActor extends Actor {
 						const record = JSON.stringify({ ok: false, error: `unreadable arguments: ${args}` })
 						return { record, wire: 'unreadable arguments' }
 					}
-					if (name === 'send') {
-						const inner =
-							payload.payload && typeof payload.payload === 'object'
-								? (payload.payload as Record<string, unknown>)
-								: {}
-						const result = await bus.dispatch('chat', String(payload.method ?? ''), inner)
-						activity.show(summarizeCall(String(payload.method ?? ''), result.record))
-						return result
-					}
 					const result = await bus.dispatch('chat', name, payload)
 					activity.show(summarizeCall(name, result.record))
 					return result
@@ -219,6 +211,8 @@ bus.register(llmActor)
 bus.extractJson = extractJsonObject
 
 bus.register(todoActor)
+export const studioActor = singleton('aven.studio', () => new StudioActor())
+bus.register(studioActor)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))
 bus.register(registryActor)
 export const chatActor = singleton('aven.chat', () => new ChatActor())

@@ -1,0 +1,155 @@
+{
+	"validatedAt": "2026-09-16",
+	"branch": "codex/bounded-intent-context",
+	"appUnitTests": {
+		"passed": 233,
+		"failed": 0,
+		"assertions": 6188
+	},
+	"nativeUnitTests": {
+		"passed": 18,
+		"failed": 0,
+		"ignored": 1
+	},
+	"fullStack": {
+		"passed": true,
+		"nativeScenarioSeconds": 28.7,
+		"checkoutTests": 61,
+		"persistenceConformanceTests": 8,
+		"includes": [
+			"fresh single-schema provisioning",
+			"native workspace_search/workspace_read against PostgreSQL",
+			"exact message evidence with timestamp",
+			"only two lookup tools; generic send absent",
+			"bounded source reads and tenant isolation",
+			"chat persistence and voice interruption",
+			"deployed checkout, identity, facade and managed hosting"
+		],
+		"note": "Final fresh stack passed; the subsequent browser-only schema reset was separately tested in Chromium and the full app unit suite."
+	},
+	"checks": {
+		"appTypes": "pass",
+		"serviceTypes": "pass",
+		"serviceTests": "pass; checkout rerun with required disposable PostgreSQL",
+		"serviceBuilds": "pass",
+		"infrastructureTests": "pass",
+		"deploymentValidation": "pass",
+		"recoveryDrill": "pass",
+		"documentation": "pass: 52 active Markdown files, 14 authorities, 47 workflow settings",
+		"changedSourceLint": "pass: 49 changed TypeScript/Svelte files",
+		"repositoryLint": "fails on existing generated fixtures and other unchanged files"
+	},
+	"liveModel": {
+		"model": "qwen3.8-flash-next",
+		"reviewer": "gpt-5.6-terra",
+		"evaluator": "gpt-5.6-terra",
+		"completed": 12,
+		"passed": 5,
+		"total": 12,
+		"evidence": "live-harness-results.json",
+		"configuration": "Strict baseline before final repair escalation and compatibility cleanup; not a final all-case rerun."
+	},
+	"performanceEvidence": {
+		"browser": "source-index-scale-results.json",
+		"postgresql": "intent-retrieval-scale-results.json"
+	},
+	"remainingScaleLimits": [
+		"Document metadata discovery replays the publication feed on restart, with an in-memory catalog proportional to archive size.",
+		"Cold document index construction is linear; search coverage is partial until discovery and indexing finish.",
+		"Source bodies larger than 1 MiB are reported unavailable."
+	],
+	"status": "Implementation and validation pass completed; documented model and cold-index limitations remain.",
+	"schema": {
+		"version": 1,
+		"retrievalInInitialSchema": true,
+		"upgradeOrBackfill": false,
+		"unboundedIntentListRemoved": true,
+		"browserVersion": 1,
+		"browserUpgradeCodeRemoved": true,
+		"freshBrowserProof": "source-index-fresh-schema-results.json"
+	},
+	"liveHeldout": {
+		"passed": 3,
+		"total": 3,
+		"languages": ["en", "de", "es"],
+		"writer": "qwen3.8-flash-next",
+		"reviewer": "gpt-5.6-terra",
+		"evaluator": "gpt-5.6-terra",
+		"evidence": "live-heldout-reviewed-results.json",
+		"note": "Completed before final compatibility cleanup; outcomes deliberately differ from original failure cases."
+	},
+	"messageRoutingRetest": {
+		"passed": 2,
+		"total": 3,
+		"allFactualAnswersCorrect": true,
+		"remainingFailure": "Correct Harbor reference answered without switching to its task.",
+		"evidence": "live-message-routing-results.json"
+	},
+	"databaseTests": {
+		"passed": 13,
+		"failed": 0,
+		"freshSchemaRealPostgreSQL": true
+	},
+	"performance": {
+		"postgresMessages": 1000000,
+		"p95Ms": {
+			"recent": 1.47,
+			"common": 7.54,
+			"rare": 19.0,
+			"absent": 4.72,
+			"scoped": 4.84
+		},
+		"limitP95Ms": 250,
+		"note": "Database query timings, not model-answer latency."
+	},
+	"repairExperiment": {
+		"writer": "qwen3.8-flash-next",
+		"reviewer": "gpt-5.6-terra",
+		"finalRepairModel": "gpt-5.6-sol",
+		"evaluator": "gpt-5.6-terra",
+		"passed": 1,
+		"total": 4,
+		"evidence": "live-repair-escalation-results.json",
+		"results": [
+			{
+				"case": "Three identical-value travel and dog-care credits stay separate",
+				"passed": false,
+				"escalated": false,
+				"outcome": "failed factual rubric",
+				"error": null
+			},
+			{
+				"case": "Two Mar Azul return cycles preserve their documentary contradictions",
+				"passed": true,
+				"escalated": true,
+				"outcome": "passed",
+				"error": null
+			},
+			{
+				"case": "Lease chronology resolves signed claims against later authoritative blockers",
+				"passed": false,
+				"escalated": true,
+				"outcome": "withheld: failed review",
+				"error": "Answer remains unverified after two repair attempts: Die praktische Nutzungsbewertung darf die widerspr\u00fcchliche, nicht ausdr\u00fccklich widerrufene M\u00e4rz-Auftragsbest\u00e4tigung zu aktivem v2.1 und freigegebenem \u00a7 4.2 nicht durch die pauschale Aussage ersetzen, der sp\u00e4tere Stand sei rechtlich ma\u00dfgeblich und Abendkurse seien definitiv unzul\u00e4ssig. Korrekt ist: Nach den sp\u00e4teren v2.2-/Entwurfsunterlagen und Maiers Empfehlung soll Lena Abendkurse bis zur unterschriebenen B-17-Fassung und schriftlichen Freigabe nicht durchf\u00fchren; ob die M\u00e4rz-Freigabe des aktiven v2.1 fortgilt, bleibt aufkl\u00e4rungsbed\u00fcrftig."
+			},
+			{
+				"case": "All Glasgow journeys and dog-care bookings align without cross-wiring",
+				"passed": false,
+				"escalated": true,
+				"outcome": "inconclusive: reviewer timeout",
+				"error": "Answer verification failed: TimeoutError: The operation timed out."
+			}
+		]
+	},
+	"openAIIntegration": {
+		"api": "Responses",
+		"store": false,
+		"liveCalculationRoundTripPassed": true,
+		"unitTests": "native reasoning, call IDs, parallel Qwen calls, compaction and per-conversation cache isolation"
+	},
+	"evaluationCost": {
+		"loggedEstimateUsd": 3.553244,
+		"earlierUnloggedAuditApproxUsd": 0.44,
+		"note": "Conservative token-price estimates; only completed requests with returned usage are logged."
+	}
+}

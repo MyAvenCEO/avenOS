@@ -54,6 +54,37 @@ export function validateName(value: string): 'NAME_INVALID' | 'NAME_RESERVED' | 
 	return reservedNames.has(value) ? 'NAME_RESERVED' : null
 }
 
+export function canonicalBrowserLanguage(value: string | null | undefined): string | undefined {
+	if (!value) return undefined
+	try {
+		return Intl.getCanonicalLocales(value.trim())[0]
+	} catch {
+		return undefined
+	}
+}
+
+/** Select the browser's highest-priority concrete language from Accept-Language. */
+export function preferredBrowserLanguage(header: string | null): string | undefined {
+	if (!header) return undefined
+	return header
+		.split(',')
+		.map((entry, index) => {
+			const [language = '', ...parameters] = entry.trim().split(';')
+			const qualityParameter = parameters.find((parameter) => parameter.trim().startsWith('q='))
+			const quality = qualityParameter ? Number.parseFloat(qualityParameter.trim().slice(2)) : 1
+			return {
+				language: canonicalBrowserLanguage(language),
+				quality: Number.isFinite(quality) ? quality : 0,
+				index
+			}
+		})
+		.filter(
+			(entry): entry is { language: string; quality: number; index: number } =>
+				Boolean(entry.language) && entry.quality > 0
+		)
+		.sort((left, right) => right.quality - left.quality || left.index - right.index)[0]?.language
+}
+
 export const secureNameSchema = z.object({
 	name: z.string().trim().toLowerCase().min(3).max(32),
 	email: emailAddress,
@@ -67,7 +98,18 @@ export const secureNameSchema = z.object({
 		)
 		.optional(),
 	salutation: z.string().trim().max(120).optional(),
-	idea: z.string().trim().max(2000).optional()
+	idea: z.string().trim().max(2000).optional(),
+	browserLanguage: z
+		.string()
+		.trim()
+		.max(255)
+		.transform((value, context) => {
+			const language = canonicalBrowserLanguage(value)
+			if (language) return language
+			context.addIssue({ code: 'custom', message: 'Invalid browser language.' })
+			return z.NEVER
+		})
+		.optional()
 })
 
 export function sanitizeError(value: unknown): string {

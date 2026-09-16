@@ -15,9 +15,10 @@ import {
 } from '@avenos/document-ingest/execution'
 import type { DocumentModelRequest } from '@avenos/document-ingest/model'
 import { DocumentProcessingRuntime } from '@avenos/document-ingest/runtime'
-import { createDocumentSkillExecutor } from '@avenos/document-ingest/server'
+import { createDocumentSkillExecutor, ServerDocumentDecoder } from '@avenos/document-ingest/server'
 import { describe, expect, test } from 'vitest'
 import { BrowserDocumentDecoder } from '../../../app/src/lib/artifacts/browser-document-decoder.js'
+import { textPdf } from '../../../libs/aven-document-ingest/tests/support/chunk-fixtures.js'
 import { MemoryPlanRunner } from '../src/memory-runner.js'
 import { GoldenInvoiceModel } from './support/golden-document-model.js'
 
@@ -166,7 +167,79 @@ class FailingModel extends GoldenInvoiceModel {
 	}
 }
 
+class ParallelGoldenInvoiceModel extends GoldenInvoiceModel {
+	active = 0
+	peak = 0
+	override async status() {
+		return { ...(await super.status()), maxParallelism: 5 }
+	}
+	override async complete(request: DocumentModelRequest) {
+		this.active++
+		this.peak = Math.max(this.peak, this.active)
+		await new Promise((resolve) => setTimeout(resolve, 12))
+		try {
+			return await super.complete(request)
+		} finally {
+			this.active--
+		}
+	}
+}
+
 describe('document execution lane conformance', () => {
+	test('client and server keep the same five-page result while both fill five model slots', async () => {
+		const bytes = textPdf(Array.from({ length: 5 }, (_, index) => [`Invoice page ${index + 1}`]))
+		const source = {
+			artifactId: SOURCE_ID,
+			originalName: 'parallel-invoice.pdf',
+			declaredMediaType: 'application/pdf',
+			base64: bytesToBase64(bytes)
+		}
+		const localModel = new ParallelGoldenInvoiceModel()
+		const localGateway = new RecordingGateway()
+		const decoder = new ServerDocumentDecoder()
+		const localActors = () => createDocumentActors(decoder, localModel)
+		const runtime = new DocumentProcessingRuntime(
+			localActors(),
+			localGateway,
+			() => localModel.status(),
+			{ executionEnvironment: 'local', runtimeHost: 'desktop' },
+			localActors
+		)
+		const local = await runtime.start(source)
+		await runtime.close()
+		const serverModel = new ParallelGoldenInvoiceModel()
+		const store = new FakeArtifactStore(source.originalName, source.declaredMediaType, bytes)
+		const runner = new MemoryPlanRunner(
+			createDocumentSkillExecutor({
+				model: serverModel,
+				artifactsFor: () => ({
+					client: store as unknown as ArtifactStoreClient,
+					scopeId: TENANT_ID,
+					userId: SECURITY.principal.subjectId
+				})
+			})
+		)
+		const command = documentPlanRunCommand(
+			documentRunStartRequest(
+				{
+					artifactId: SOURCE_ID,
+					originalName: source.originalName,
+					declaredMediaType: source.declaredMediaType
+				},
+				'server',
+				crypto.randomUUID()
+			)
+		)
+		const handle = await runner.start({ ...command, security: SECURITY })
+		await waitForRun(runner, handle.runId)
+		const record = await runner.status(handle.runId)
+		const server = record?.checkpoints.at(-1)?.output
+			?.presentation as ArtifactProcessingPresentation
+		expect(localModel.peak).toBe(5)
+		expect(serverModel.peak).toBe(5)
+		expect(canonicalPresentation(server)).toEqual(canonicalPresentation(local))
+		expect(canonicalServerRuns(store.publications)).toEqual(canonicalLocalRuns(localGateway.runs))
+	}, 120_000)
 	test('remote progress is visible before completion and a lost monitor cannot remain active', async () => {
 		const presentation: ArtifactProcessingPresentation = {
 			caseId: SOURCE_ID,
@@ -575,6 +648,14 @@ async function modelParityRun(model: () => GoldenInvoiceModel) {
 	return { localModel, serverModel, record }
 }
 
+// Independent page jobs publish in completion order. Compare their full results
+// as a multiset while preserving payloads, duplicates, and all within-run ordinals.
+function canonicalParallelResults<T>(values: T[]): T[] {
+	return [...values].sort((left, right) =>
+		JSON.stringify(left).localeCompare(JSON.stringify(right))
+	)
+}
+
 function canonicalPresentation(presentation: ArtifactProcessingPresentation) {
 	return {
 		state: presentation.state,
@@ -582,11 +663,13 @@ function canonicalPresentation(presentation: ArtifactProcessingPresentation) {
 		summary: presentation.summary,
 		warnings: presentation.warnings,
 		stages: presentation.stages,
-		derivedTypes: presentation.derivedArtifacts.map((artifact) => ({
-			typeKey: artifact.typeKey,
-			typeVersion: artifact.typeVersion,
-			stageKey: artifact.stageKey
-		})),
+		derivedTypes: canonicalParallelResults(
+			presentation.derivedArtifacts.map((artifact) => ({
+				typeKey: artifact.typeKey,
+				typeVersion: artifact.typeVersion,
+				stageKey: artifact.stageKey
+			}))
+		),
 		metadata: Object.fromEntries(
 			Object.entries(presentation.metadata).filter(
 				// Receipt IDs are store-local; the graph comparison below checks
@@ -598,62 +681,66 @@ function canonicalPresentation(presentation: ArtifactProcessingPresentation) {
 }
 
 function canonicalLocalRuns(runs: ClientRunPublication[]) {
-	return runs.map((run) => ({
-		procedureKey: run.procedureKey,
-		inputs: run.inputs.map(({ role, ordinal }) => ({ role, ordinal })),
-		parameters: run.parameters,
-		artifacts: run.artifacts.map((artifact) => ({
-			...artifact,
-			...(artifact.blob && {
-				blob: {
-					mediaType: artifact.blob.mediaType,
-					length: Buffer.from(artifact.blob.base64, 'base64').length,
-					sha256: createHash('sha256')
-						.update(Buffer.from(artifact.blob.base64, 'base64'))
-						.digest('hex')
-				}
-			})
-		})),
-		evidence: run.evidence
-	}))
+	return canonicalParallelResults(
+		runs.map((run) => ({
+			procedureKey: run.procedureKey,
+			inputs: run.inputs.map(({ role, ordinal }) => ({ role, ordinal })),
+			parameters: run.parameters,
+			artifacts: run.artifacts.map((artifact) => ({
+				...artifact,
+				...(artifact.blob && {
+					blob: {
+						mediaType: artifact.blob.mediaType,
+						length: Buffer.from(artifact.blob.base64, 'base64').length,
+						sha256: createHash('sha256')
+							.update(Buffer.from(artifact.blob.base64, 'base64'))
+							.digest('hex')
+					}
+				})
+			})),
+			evidence: run.evidence
+		}))
+	)
 }
 
 function canonicalServerRuns(publications: Array<Record<string, unknown>>) {
-	return publications.map((publication) => {
-		const run = record(publication.run)
-		return {
-			procedureKey: run.procedureKey,
-			inputs: array(run.inputs).map((value) => {
-				const input = record(value)
-				return { role: input.role, ordinal: input.ordinal }
-			}),
-			parameters: run.parameters,
-			artifacts: array(publication.artifacts).map((value) => {
-				const artifact = record(value)
-				const blob = artifact.blob
-				return {
-					localKey: artifact.localKey,
-					typeKey: artifact.typeKey,
-					typeVersion: artifact.typeVersion,
-					payload: artifact.payload,
-					output: artifact.output,
-					...(blob
-						? {
-								blob: {
-									mediaType:
-										artifact.typeKey === 'core.file-inspection'
-											? 'application/json'
-											: 'text/plain; charset=utf-8',
-									length: record(blob).length,
-									sha256: record(blob).sha256
+	return canonicalParallelResults(
+		publications.map((publication) => {
+			const run = record(publication.run)
+			return {
+				procedureKey: run.procedureKey,
+				inputs: array(run.inputs).map((value) => {
+					const input = record(value)
+					return { role: input.role, ordinal: input.ordinal }
+				}),
+				parameters: run.parameters,
+				artifacts: array(publication.artifacts).map((value) => {
+					const artifact = record(value)
+					const blob = artifact.blob
+					return {
+						localKey: artifact.localKey,
+						typeKey: artifact.typeKey,
+						typeVersion: artifact.typeVersion,
+						payload: artifact.payload,
+						output: artifact.output,
+						...(blob
+							? {
+									blob: {
+										mediaType:
+											artifact.typeKey === 'core.file-inspection'
+												? 'application/json'
+												: 'text/plain; charset=utf-8',
+										length: record(blob).length,
+										sha256: record(blob).sha256
+									}
 								}
-							}
-						: {})
-				}
-			}),
-			evidence: publication.evidence
-		}
-	})
+							: {})
+					}
+				}),
+				evidence: publication.evidence
+			}
+		})
+	)
 }
 
 function record(value: unknown): Record<string, unknown> {

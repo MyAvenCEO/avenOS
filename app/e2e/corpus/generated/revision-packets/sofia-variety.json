@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-sofia-morales-6-3",
+      "user": "El hotel de Oporto me ha cargado la liquidación final. ¿Puedes comprobar el importe y la tarjeta? Fue la escapada con mamá, no un gasto del estudio.",
+      "assistant": "La liquidación del Hotel Porto Central es de 127,20 EUR en la Visa acabada en 6418. La referencia HPC-20260324-11 corresponde al check-out de la estancia del 20 al 22 de marzo; la marco como gasto personal.",
+      "artifact": {
+        "title": "Justificante de Pago Hotel Porto Central",
+        "from": "Hotel Porto Central",
+        "to": null,
+        "language": "es",
+        "body": "JUSTIFICANTE DE PAGO\n\nComercio: Hotel Porto Central\nFecha: 24/03/2026\nHora: 16:45\nMétodo de pago: Visa terminada en 6418\nReferencia de transacción: HPC-20260324-11\n\nConcepto:\nReserva de habitación doble (2 noches)\nFechas de estancia: 20/03/2026 - 22/03/2026\nImporte: 120,00 EUR\nIVA (6%): 7,20 EUR\nTotal: 127,20 EUR\n\nEstado: Completado\nEstado de estancia: Finalizada. Factura del hotel: FHC-2026-0324-77. Incluye desayuno buffet; este cargo liquida la cuenta al hacer check-out."
+      },
+      "probe": {
+        "question": "¿Cuánto fue al final el cargo del hotel de Oporto?",
+        "answer": "Total: 127,20 EUR"
+      }
+    },
+    {
+      "id": "qwen-sofia-morales-9-3",
+      "user": "Inés, me he apuntado al 10K de San Vicente del 17 de mayo. te mando el ticket; ¿recogemos los dorsales juntas el sábado?",
+      "assistant": "Sí, quedamos el sábado 16 en Deportes Run Valencia. Tu referencia es CPV-2026-1042 y la salida del domingo es a las 09:30 en la Plaza de la Reina.",
+      "artifact": {
+        "title": "Pase digital · 10K San Vicente",
+        "from": "Deportes Run Valencia",
+        "to": null,
+        "language": "es",
+        "body": "PASE DIGITAL · CAV-10K-1042\n\nCORREDORA\nSofía Morales · Dorsal 4521\n\nCONTROL DE SALIDA\nCarrera Popular de San Vicente (10K)\nPlaza de la Reina, Valencia\n17 de mayo de 2026, 09:30\nCajón popular · acceso desde las 08:45\n\nIMPORTE COBRADO\n15,00 EUR · inscripción confirmada\nReferencia: CPV-2026-1042\n\nANTES DE CORRER\nRecoge el dorsal en Deportes Run Valencia el sábado 16, de 10:00 a 14:00. Presenta este pase y un documento de identidad; el chip va pegado al reverso del dorsal. No se admite cambio de titular después del 14 de mayo."
+      },
+      "probe": {
+        "question": "¿A qué hora sale mi 10K de San Vicente?",
+        "answer": "17 de mayo de 2026, 09:30"
+      }
+    },
+    {
+      "id": "qwen-sofia-morales-12-5",
+      "user": "Tengo el billete para ir a Sagunt el 4 de julio con Inés. ¿Me confirmas si compré ida y vuelta?",
+      "assistant": "Sí: el billete REN-20260628-8890 cubre ida y vuelta Valencia Nord–Sagunt el 4 de julio. Costó 4,80 EUR y no lleva asiento asignado.",
+      "artifact": {
+        "title": "Confirmación de Billete Renfe",
+        "from": "Renfe Cercanías",
+        "to": null,
+        "language": "es",
+        "body": "BILLETE MÓVIL CERCANÍAS\n\nOperador: Renfe Cercanías\nViajero: Sofía Morales\nFecha de viaje: 04/07/2026\nTrayecto: Valencia Nord - Sagunt (Ida y Vuelta)\nHora de salida: 08:00\nHora de llegada: 08:35\nTarifa: 4,80 EUR\nClase: Turista\nAsiento: No asignado (Cercanías)\nReferencia de reserva: REN-20260628-8890\n\nEstado: Emitido\nCondiciones: ida y vuelta el 04/07/2026; sin asiento reservado. Validar el código QR antes de cada trayecto. Cambios sujetos a la tarifa Cercanías."
+      },
+      "probe": {
+        "question": "¿Mi billete a Sagunt era solo ida o ida y vuelta?",
+        "answer": "Trayecto: Valencia Nord - Sagunt (Ida y Vuelta)"
+      }
+    },
+    {
+      "id": "qwen-sofia-morales-11-3",
+      "user": "Revisa el cierre de la Visa del estudio, porfa. Mar Azul devolvió algo y no quiero contar el ingreso de Stripe dos veces.",
+      "assistant": "En el extracto del 1 al 9 de junio aparecen 1.070,20 EUR de cargos y 930,00 EUR de abonos. Con el saldo anterior, el saldo actual es 1.380,20 EUR; el reembolso de Mar Azul incluido es 180,00 EUR.",
+      "artifact": {
+        "title": "Extracto de Tarjeta Visa - Estudio Morales",
+        "from": "Banco Comercial",
+        "to": null,
+        "language": "es",
+        "body": "EXTRACTO DE TARJETA DE CRÉDITO\n\nTitular: Sofía Morales\nTarjeta: Visa terminada en 6418\nPeriodo: 01/06/2026 - 09/06/2026\n\nMovimientos:\n1. 02/06/2026 - Mar Azul Importación - 320,00 EUR (Cargo)\n2. 03/06/2026 - Mar Azul Reembolso - 180,00 EUR (Abono)\n3. 05/06/2026 - Taller Alba Refrigeración - 750,20 EUR (Cargo)\n4. 08/06/2026 - Stripe Payout (Anticipo Clara 15%) - 750,00 EUR (Abono)\n\nSaldo Anterior: 1.240,00 EUR\nTotal Cargos: 1.070,20 EUR\nTotal Abonos: 930,00 EUR\nSaldo Actual: 1.380,20 EUR"
+      },
+      "probe": {
+        "question": "¿Qué saldo quedó en la Visa del estudio al 9 de junio?",
+        "answer": "Saldo Actual: 1.380,20 EUR"
+      }
+    }
+  ]
+}

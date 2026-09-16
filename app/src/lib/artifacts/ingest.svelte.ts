@@ -1,6 +1,7 @@
 import type { ExecutionEnvironment } from '@avenos/actors'
 import { invoke } from '@tauri-apps/api/core'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
+import { discardHeldForEnvironmentSwitch } from '$lib/actors/hitl.svelte'
 import { anonymousSpeakerFromPayload } from '$lib/chat/anonymous-speaker'
 import { intents, type PersistentIntentDetail } from '$lib/intents/intents.svelte'
 import {
@@ -8,11 +9,14 @@ import {
 	type ProjectionArtifact
 } from '$lib/intents/persistent-artifact-projection'
 import { shell } from '$lib/intents/talk.svelte'
+import { resetStudioForEnvironment } from '$lib/skills/studio.svelte'
 import {
+	clientDocumentParallelism,
 	clientDocumentProcessingStatus,
 	clientDocumentSourceExecutionEnvironment,
 	processClientDocument
 } from './client-document-processing'
+import { clientReconciliation } from './client-reconciliation'
 import { emailDocumentQueue } from './document-import-queue.svelte'
 import type { FileImportContext } from './email-import'
 import { type ArtifactProcessingLookup, isTerminalProcessing } from './processing'
@@ -55,6 +59,24 @@ export interface UploadedArtifactReceipt {
 /** One upload at a time — the composer shows a single upload's progress. */
 let uploadInFlight = false
 const processingWatchers = new Set<string>()
+let workspaceEpoch = 0
+
+export function resetCustomerWorkspace(): void {
+	workspaceEpoch++
+	persistentIntentPages.cursor = null
+	persistentIntentPages.loading = false
+	persistentIntentPages.hasMore = false
+	processingWatchers.clear()
+	emailDocumentQueue.discardPending()
+	discardHeldForEnvironmentSwitch()
+	clientReconciliation.resetForEnvironment()
+	resetStudioForEnvironment()
+	chat.resetForEnvironment()
+	intents.resetForEnvironment()
+	shell.tab = 'intents'
+	shell.detail = false
+	shell.rightOpen = false
+}
 
 /** Default placement for the next process. Each upload freezes its own value. */
 export const documentExecutionPreference = $state<{ environment: ExecutionEnvironment }>({
@@ -91,8 +113,10 @@ function persistentTurns(detail: PersistentIntentDetail) {
 }
 
 export async function refreshIntent(intentId: string): Promise<PersistentIntentDetail | null> {
+	const revision = intents.environmentRevision
 	try {
 		const detail = await invoke<PersistentIntentDetail>('intent_get', { intentId })
+		if (revision !== intents.environmentRevision) return null
 		intents.applyPersistent(detail)
 		chat.hydrate(detail.id, persistentTurns(detail))
 		// Bring the persisted source file back into the chat's in-memory
@@ -119,61 +143,122 @@ export async function refreshIntent(intentId: string): Promise<PersistentIntentD
 	}
 }
 
-export async function loadPersistentIntents(): Promise<void> {
-	const summaries = await invoke<Array<{ id: string }>>('intent_list')
-	const details = await Promise.all(summaries.map((intent) => refreshIntent(intent.id)))
+/** Walk bounded immutable publication pages independently of recent chat hydration. */
+async function discoverSources(revision: number) {
+	let cursor: string | null = null
+	let incomplete = false
 	try {
-		const browse = await invoke<{ artifacts: ProjectionArtifact[] }>('artifact_store_list')
-		const sources = await discoverIntentSources(browse.artifacts, (artifactId) =>
-			invoke<{ payload?: Record<string, unknown> }>('artifact_get', { artifactId })
-		)
-		for (const detail of details) {
-			if (
-				!detail ||
-				detail.sourceArtifactId ||
-				detail.artifacts.some((a) => a.relation === 'source')
+		do {
+			const page: { artifacts: ProjectionArtifact[]; nextCursor: string | null } = await invoke(
+				'artifact_inventory_page',
+				{ cursor }
 			)
-				continue
-			const source = sources.get(detail.id)
-			if (!source) continue
-			intents.attachFileSource(detail.id, source.artifactId, detail.title)
-			chat.adoptArtifact(source.artifactId, detail.title)
-		}
+			if (revision !== intents.environmentRevision) return
+			const sources = await discoverIntentSources(
+				page.artifacts,
+				(artifactId) =>
+					invoke<{ payload?: Record<string, unknown> }>('artifact_get', { artifactId }),
+				() => {
+					incomplete = true
+				}
+			)
+			if (revision !== intents.environmentRevision) return
+			for (const [intentId, source] of sources)
+				intents.registerDiscoveredSource(
+					intentId,
+					source.artifactId,
+					source.title ?? source.artifactId
+				)
+			cursor = page.nextCursor
+		} while (cursor)
+		intents.setSourceInventoryComplete(!incomplete)
 	} catch {
-		// Intent conversations remain usable if Artifact Store is temporarily unavailable.
-		// The next reload or a fresh processing watch will try the durable projection again.
+		if (revision === intents.environmentRevision) intents.setSourceInventoryComplete(false)
 	}
-	for (const detail of details) {
-		const source = detail
-			? (detail.artifacts.find((artifact) => artifact.relation === 'source') ??
-				intents.items
-					.find((intent) => intent.id === detail.id)
-					?.artifacts.find((artifact) => artifact.typeKey === 'core.file'))
-			: undefined
-		const executionEnvironment = source?.artifactId
-			? await clientDocumentSourceExecutionEnvironment(source.artifactId)
-			: null
-		if (detail && source?.artifactId && executionEnvironment) {
-			// Restoring history is not a new request to reconcile the entire account
-			// using each historical document's placement. New imports and the review
-			// tool explicitly start reconciliation against the current snapshot.
-			void processClientDocument(
-				source.artifactId,
-				detail.title,
-				undefined,
-				executionEnvironment,
-				false
+}
+
+export const persistentIntentPages = $state({
+	cursor: null as string | null,
+	loading: false,
+	hasMore: false
+})
+export async function loadPersistentIntents(more = false): Promise<void> {
+	if (persistentIntentPages.loading) return
+	const revision = intents.environmentRevision
+	persistentIntentPages.loading = true
+	try {
+		await intents.initializeSourceSearch().catch(() => {})
+		if (revision !== intents.environmentRevision) return
+		if (!more) intents.setSourceInventoryComplete(false)
+		const page = await invoke<{
+			intents: Array<{ id: string }>
+			nextCursor: string | null
+			hasMore: boolean
+		}>('intent_search', {
+			input: {
+				limit: 20,
+				...(more && persistentIntentPages.cursor ? { cursor: persistentIntentPages.cursor } : {})
+			}
+		})
+		if (revision !== intents.environmentRevision) return
+		const summaries = page.intents
+		const details: Array<PersistentIntentDetail | null> = []
+		// Avoid one concurrent network request per historical Intent at startup.
+		for (let i = 0; i < summaries.length; i += 6) {
+			if (revision !== intents.environmentRevision) return
+			details.push(
+				...(await Promise.all(summaries.slice(i, i + 6).map((intent) => refreshIntent(intent.id))))
 			)
-			void watchArtifactProcessing(source.artifactId, detail.id)
-			continue
 		}
-		if (
-			detail?.fileSkill &&
-			detail.sourceArtifactId &&
-			(!detail.fileSkill.presentation || !isTerminalProcessing(detail.fileSkill.presentation.state))
-		) {
-			void watchArtifactProcessing(detail.sourceArtifactId, detail.id)
+		if (revision !== intents.environmentRevision) return
+		if (details.some((detail) => !detail))
+			throw Error('Some recent intents could not be loaded. Retry to finish this page.')
+		if (!more) void discoverSources(revision)
+
+		for (const detail of details) {
+			if (revision !== intents.environmentRevision) return
+			const source = detail
+				? (detail.artifacts.find((artifact) => artifact.relation === 'source') ??
+					intents.items
+						.find((intent) => intent.id === detail.id)
+						?.artifacts.find((artifact) => artifact.typeKey === 'core.file'))
+				: undefined
+			const executionEnvironment = source?.artifactId
+				? await clientDocumentSourceExecutionEnvironment(source.artifactId)
+				: null
+			if (revision !== intents.environmentRevision) return
+			if (
+				detail &&
+				source?.artifactId &&
+				executionEnvironment &&
+				(!detail.fileSkill?.presentation ||
+					!isTerminalProcessing(detail.fileSkill.presentation.state))
+			) {
+				void processClientDocument(
+					source.artifactId,
+					detail.title,
+					undefined,
+					executionEnvironment,
+					false
+				)
+				void watchArtifactProcessing(source.artifactId, detail.id)
+				continue
+			}
+			if (
+				detail?.fileSkill &&
+				detail.sourceArtifactId &&
+				(!detail.fileSkill.presentation ||
+					!isTerminalProcessing(detail.fileSkill.presentation.state))
+			) {
+				void watchArtifactProcessing(detail.sourceArtifactId, detail.id)
+			}
 		}
+		if (revision === intents.environmentRevision) {
+			persistentIntentPages.cursor = page.nextCursor
+			persistentIntentPages.hasMore = page.hasMore
+		}
+	} finally {
+		if (revision === intents.environmentRevision) persistentIntentPages.loading = false
 	}
 }
 
@@ -181,12 +266,13 @@ export async function watchArtifactProcessing(
 	artifactId: string,
 	intentId?: string
 ): Promise<void> {
+	const epoch = workspaceEpoch
 	if (processingWatchers.has(artifactId)) return
 	processingWatchers.add(artifactId)
 	let delay = 300
 	let consecutiveFailures = 0
 	try {
-		while (chat.hasArtifact(artifactId)) {
+		while (epoch === workspaceEpoch && chat.hasArtifact(artifactId)) {
 			try {
 				const local = clientDocumentProcessingStatus(artifactId)
 				const lookup =
@@ -194,6 +280,7 @@ export async function watchArtifactProcessing(
 					(await invoke<ArtifactProcessingLookup>('artifact_processing_status', {
 						artifactId
 					}))
+				if (epoch !== workspaceEpoch) return
 				consecutiveFailures = 0
 				if (lookup.pending || !lookup.presentation) {
 					chat.markArtifactProcessingPending(artifactId)
@@ -210,6 +297,7 @@ export async function watchArtifactProcessing(
 					delay = 1_500
 				}
 			} catch (error) {
+				if (epoch !== workspaceEpoch) return
 				const failure = transportError(error)
 				consecutiveFailures += 1
 				chat.markArtifactProcessingUnavailable(
@@ -226,7 +314,7 @@ export async function watchArtifactProcessing(
 			await wait(delay)
 		}
 	} finally {
-		processingWatchers.delete(artifactId)
+		if (epoch === workspaceEpoch) processingWatchers.delete(artifactId)
 	}
 }
 
@@ -312,8 +400,10 @@ export async function ingestFile(
 			void watchArtifactProcessing(receipt.artifactId, receipt.intentId)
 			await processing
 		}
-		if (context?.background) emailDocumentQueue.enqueue(receipt.artifactId, startProcessing)
-		else void startProcessing()
+		if (context?.background) {
+			emailDocumentQueue.setMaxParallelism(await clientDocumentParallelism().catch(() => 1))
+			emailDocumentQueue.enqueue(receipt.artifactId, startProcessing)
+		} else void startProcessing()
 
 		return receipt
 	} catch (error) {

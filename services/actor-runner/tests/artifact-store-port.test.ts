@@ -54,6 +54,14 @@ describe('Artifact Store runtime port', () => {
 						payload: { text: 'source' }
 					})
 				}
+				if (path === `/v1/scopes/${scopeId}/artifacts/${resultArtifactId}`) {
+					return json({
+						artifactId: resultArtifactId,
+						typeKey: 'testing.result',
+						typeVersion: 1,
+						payload: { text: 'RESULT' }
+					})
+				}
 				if (request.method === 'PUT' && path.includes('/publications/')) {
 					publications.push(request)
 					return json({
@@ -87,7 +95,7 @@ describe('Artifact Store runtime port', () => {
 					schema: resultSchema,
 					typeKey: 'testing.result',
 					typeVersion: 1,
-					project: () => []
+					project: () => ['os.aven.testing.store_result(fixture_1)' as Predicate]
 				}
 			],
 			procedures: [

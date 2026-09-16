@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-lena-weber-6-5",
+      "user": "Amiras Nordblau-Teller ist zurück. Bitte die 42,50 € auf ihre ursprüngliche PayPal-Zahlung erstatten; die DHL-Entschädigung für uns läuft separat.",
+      "assistant": "Die Ware ist eingegangen und geprüft. Die 42,50 EUR habe ich auf Amiras ursprüngliche PayPal-Transaktion zurückgebucht; der DHL-Händlerfall CASE-2026-0209-DHL bleibt ein eigener Vorgang.",
+      "artifact": {
+        "title": "Rückerstattungsbestätigung #REF-2026-0328-AY",
+        "from": "Weber Keramik",
+        "to": null,
+        "language": "de",
+        "body": "Sehr geehrte Frau Yilmaz,\n\nwir bestätigen: Ihre Rücksendung ist bei uns eingegangen für die Bestellung WK-2026-0110-AY am 28.03.2026. Der beschädigte Teller 'Nordblau' wurde geprüft und als Transportschaden anerkannt.\n\nErstattungsbetrag: 42,50 EUR\nZahlungsmethode: PayPal (Originaltransaktion PAY-2026-0110-AY)\nStatus: Erstattung veranlasst\nBearbeitungszeit: 3-5 Werktage\n\nKundenerstattung: REF-2026-0328-AY\nSeparater DHL-Händlerfall: CASE-2026-0209-DHL\n\nMit freundlichen Grüßen\nLena Weber\nWeber Keramik"
+      },
+      "probe": {
+        "question": "Ist Amiras Rückzahlung für den kaputten Nordblau-Teller schon raus?",
+        "answer": "Status: Erstattung veranlasst"
+      }
+    },
+    {
+      "id": "qwen-lena-weber-7-1",
+      "user": "Hi Nora, quick check on the spring batch. Timo sent the code BLUE-271 on April 2nd. Can you confirm this is the active release for the kiln samples we are testing this week? Just want to be sure before I label the new stock.",
+      "assistant": "Hello Lena, yes, batch release code BLUE-271 is confirmed as active for the spring samples. Please ensure all kiln tests reference this code for quality tracking.",
+      "artifact": {
+        "title": "Nordton Quality Support Update #QSU-2026-0403-NW",
+        "from": "Nora Wells",
+        "to": null,
+        "language": "en",
+        "body": "Dear Ms. Weber,\n\nThank you for your inquiry regarding the spring glaze batch status.\n\nCase Reference: QSU-2026-0403-NW\nStatus: Verified\n\nWe confirm that the batch release code BLUE-271, communicated by Timo Falk on April 2, 2026, is the active identifier for the current spring sample kit. This code supersedes any previous provisional labels. Please apply this code to all kiln test records and inventory labels for the Matte Series.\n\nNext Step: Proceed with kiln testing using the BLUE-271 batch. No further action is required from your side at this time.\n\nBest regards,\nNora Wells\nNordton Quality Support"
+      },
+      "probe": {
+        "question": "Welche Freigabekennung gilt jetzt für die Frühjahrs-Glasurcharge?",
+        "answer": "BLUE-271"
+      }
+    },
+    {
+      "id": "qwen-lena-weber-10-4",
+      "user": "Nils, ich brauche den Status vom DHL-Fall für Amira. Die Erstattung ist raus, aber ich will wissen, ob die Entschädigung an mich als Verkäufer auch genehmigt ist. Die Rechnung für die Nachbestellung muss ich bald zahlen.",
+      "assistant": "Guten Tag Frau Weber, der Fall CASE-2026-0209-DHL ist abgeschlossen. Die Entschädigung an Weber Keramik wurde genehmigt und wird mit der nächsten Abrechnung ausgezahlt.",
+      "artifact": {
+        "title": "DHL Support Update #CASE-2026-0209-DHL",
+        "from": "Nils Hartmann",
+        "to": null,
+        "language": "de",
+        "body": "Guten Tag Frau Weber,\n\nvielen Dank für Ihre Nachricht. Wir haben den Fall CASE-2026-0209-DHL bezüglich der Sendung 00340434271234567890 überprüft.\n\nStatus: Abgeschlossen\nErgebnis: Die Entschädigung an Weber Keramik als Verkäufer wurde genehmigt.\nBetrag: 42,50 EUR\nAuszahlung: Die Gutschrift erfolgt auf Ihr hinterlegtes Geschäftskonto innerhalb von 7 Werktagen.\n\nHinweis: Die Erstattung an die Kundin Frau Yilmaz wurde separat am 28.03.2026 veranlasst. Dieser Vorgang betrifft ausschließlich die Händlerentschädigung.\n\nMit freundlichen Grüßen\nNils Hartmann\nDHL Customer Service"
+      },
+      "probe": {
+        "question": "Ist unser DHL-Schadensfall für Amiras Teller schon abgeschlossen?",
+        "answer": "Status: Abgeschlossen"
+      }
+    }
+  ]
+}

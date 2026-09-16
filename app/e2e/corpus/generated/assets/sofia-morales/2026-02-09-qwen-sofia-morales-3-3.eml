@@ -1,0 +1,22 @@
+From: "Soporte Interno" <soporte@estudiomorales.test>
+To: "Sofía Morales" <sofia@estudiomorales.test>
+Date: Mon, 09 Feb 2026 18:02:00 GMT
+Subject: =?UTF-8?B?VGlja2V0IGRlIFNvcG9ydGUgUlJISCAjSFItMjAyNi0wMjA5?=
+Message-ID: <qwen-sofia-morales-3-3@synthetic.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+X-Synthetic-Test-Record: true
+X-Intent-ID: sofia-morales:staff
+
+Estimada Sofía,
+
+Gracias por su contacto. Hemos revisado el registro de horas de Lucía Ferrer para el 11/02/2026. El sistema marcaba una entrada tardía. Hemos ajustado manualmente el inicio del turno a las 10:00 según su solicitud y la confirmación de la empleada. El estado del turno es ahora 'Confirmado' con horario modificado. No se generará alerta de ausencia.
+
+Referencia: HR-2026-0209
+Empleado: Lucía Ferrer
+Fecha: 11/02/2026
+Acción: Ajuste manual de horario (08:00 -> 10:00).
+Estado: Resuelto.
+
+Saludos cordiales,
+Equipo de Soporte

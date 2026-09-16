@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-06-18",
+        "intentId": "rowan-chen:foster-dog",
+        "kind": "document",
+        "user": "Jo, vet said Pip needs joint support. Can we add glucosamine to the care plan? Bea is free next weekend if approved.",
+        "assistant": "Noted. I will update the care plan to include the supplement. Please confirm Bea's availability with Jo before booking.",
+        "artifact": {
+          "title": "Foster Dog Care Plan Update - Pip",
+          "from": "Jo Harding",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "CARE PLAN UPDATE\nDate: 2026-06-18\nSubject: Pip (Foster ID: BR-2026-04)\n\n1. Medical: Vet advised adding glucosamine supplement to daily diet for joint support. Start date: 2026-06-20.\n2. Exercise: Maintain 30-minute walk twice daily. Avoid steep hills.\n3. Weekend Cover: Bea Fox is approved for weekend sitting on 2026-06-27/28. Please send her the updated feeding schedule.\n4. Supplies: Glucosamine tablets (£12.50) to be purchased by foster carer. Reimbursement available upon receipt submission.\n\nPlease acknowledge receipt of this update."
+        },
+        "probe": {
+          "question": "What is the cost of the glucosamine tablets?",
+          "answer": "£12.50"
+        }
+      },
+      {
+        "date": "2026-06-21",
+        "intentId": "rowan-chen:migration",
+        "kind": "calendar",
+        "user": "Calendar invite for the migration dry run review. Need to check if Sam has access yet.",
+        "assistant": "Sam's access is still pending DPA-42. The meeting will focus on source file validation using the RIO-588 reference.",
+        "artifact": {
+          "title": "Calendar: Migration Dry Run Review",
+          "from": "Rowan Chen",
+          "to": "Sam Patel, Lucía Ortega, Mary Evans",
+          "language": "en",
+          "body": "Event: Migration Dry Run Review\nDate: 2026-06-21\nStart: 10:00\nEnd: 11:30\nPlace: Zoom (Link in invite)\nAttendees: Rowan Chen, Lucía Ortega, Sam Patel, Mary Evans\nStatus: Confirmed\nNotes: Review RIO-588 test batch results. Sam to provide access logs if DPA-42 is signed (currently pending). Lucía to confirm Spanish source file integrity. No production data transfer until DPA-42 is countersigned. Agenda: 1. Row count comparison. 2. Error log review. 3. Next steps for cutover."
+        },
+        "probe": {
+          "question": "What is the test batch reference for the dry run?",
+          "answer": "RIO-588"
+        }
+      },
+      {
+        "date": "2026-06-24",
+        "intentId": "rowan-chen:foster-dog",
+        "kind": "todo",
+        "user": "Add task: buy glucosamine for Pip. Also, remind me to send the updated care plan to Bea.",
+        "assistant": "Task added. Due date set for 2026-06-26 to ensure supplies are ready before Bea's weekend sit.",
+        "artifact": {
+          "title": "Task: Foster Dog Supplies & Care Plan",
+          "from": "Rowan Chen",
+          "to": null,
+          "language": "en",
+          "body": "Task: Purchase Glucosamine & Update Care Plan\nOwner: Rowan Chen\nAction: Buy glucosamine tablets (£12.50) and email updated care plan to Bea Fox.\nDue Date: 2026-06-26\nStatus: Pending\nLinked Matter: rowan-chen:foster-dog\nNotes: Vet advised joint support starting 2026-06-20. Bea Fox approved for weekend sit 2026-06-27/28. Ensure she has the new feeding schedule."
+        },
+        "probe": {
+          "question": "When is the task due?",
+          "answer": "2026-06-26"
+        }
+      },
+      {
+        "date": "2026-06-27",
+        "intentId": "rowan-chen:atlas-contract",
+        "kind": "receipt",
+        "user": "Malik, did the renewal appendix get signed? Need to invoice Atlas with the 7% rebate.",
+        "assistant": "Still draft. I cannot apply the 7% rebate until the document is countersigned. I will bill at the standard rate for now.",
+        "artifact": {
+          "title": "Payment Receipt: Atlas Ltd Invoice",
+          "from": "Rowan Chen Consultancy",
+          "to": "Atlas Ltd",
+          "language": "en",
+          "body": "PAYMENT RECEIPT\nDate: 2026-06-27\nPayer: Atlas Ltd\nPayee: Rowan Chen Consultancy\nAmount: £1,500.00 GBP\nMethod: Bank Transfer\nReference: INV-2026-06-001\nStatus: Paid\nNote: Invoice issued at standard rate. 7% rebate not applied as Renewal Appendix v2.1 remains in DRAFT state and unsigned by Atlas Legal. Rebate will be adjusted in future invoices upon signature."
+        },
+        "probe": {
+          "question": "Why was the 7% rebate not applied?",
+          "answer": "Renewal Appendix v2.1 remains in DRAFT state and unsigned by Atlas Legal"
+        }
+      },
+      {
+        "date": "2026-06-28",
+        "intentId": "rowan-chen:household",
+        "kind": "transport-ticket",
+        "user": "Ellis, booked the train for the kitchen supplier pickup. Need to check the fare against the reserve.",
+        "assistant": "Ticket confirmed. Fare is £45.00. I've noted it against the renovation reserve. Tess needs the measurements before fitting.",
+        "artifact": {
+          "title": "GWR E-Ticket Confirmation",
+          "from": "GWR",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Operator: GWR\nTraveller: Rowan Chen\nRoute: Bristol Temple Meads to London Paddington\nTravel Date: 2026-06-30\nDeparture: 09:15\nArrival: 11:10\nClass: Standard\nFare: £45.00\nBooking Reference: GWR-2026-0628-771\nStatus: Confirmed\nPayment Method: Monzo Household Debit ending 5526\nNote: Valid for the specified date only. Please arrive 15 minutes before departure."
+        },
+        "probe": {
+          "question": "What is the booking reference for the train ticket?",
+          "answer": "GWR-2026-0628-771"
+        }
+      }
+    ],
+    "continuity": "Open: Atlas Renewal Appendix v2.1 remains unsigned draft; 7% rebate application blocked. Open: DPA-42 v3.0 unsigned; production data exchange blocked. Open: Invoice INV-ES-2026-0603 (£145.00) issued to Rowan Chen Consultancy, unpaid. Resolved: Bristol Nonprofit invoice INV-2026-04-002 (£1,200.00) paid on 2026-05-28. Resolved: Weekend dog sitting paid to Bea Fox (£60.00). New: Company Mastercard May statement shows £92.50 due. New: Business account closing balance £1,475.00. New: Glucosamine supplement added to Pip's care plan; Bea Fox approved for weekend sit 2026-06-27/28. New: Atlas invoice INV-2026-06-001 (£1,500.00) paid at standard rate; rebate adjustment pending signature. New: GWR ticket booked for 2026-06-30 (£45.00) from renovation reserve."
+  }
+}

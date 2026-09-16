@@ -81,8 +81,11 @@ export async function verifyTenantGrant(
 	})
 	if (protectedHeader.typ !== 'JWT') throw new Error('invalid tenant grant type')
 	const claims = tenantGrantClaimsSchema.parse(payload)
-	if (claims.componentRef !== input.audience || !claims.actions.includes(input.action) ||
-		!membershipAllows(claims.membershipRole, claims.componentRef, claims.actions))
+	if (
+		claims.componentRef !== input.audience ||
+		!claims.actions.includes(input.action) ||
+		!membershipAllows(claims.membershipRole, claims.componentRef, claims.actions)
+	)
 		throw new Error('tenant grant does not authorize this action')
 	return claims
 }

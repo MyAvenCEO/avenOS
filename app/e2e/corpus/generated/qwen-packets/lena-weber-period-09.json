@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-05-03",
+        "intentId": "lena-weber:classes",
+        "kind": "receipt",
+        "user": "Olivia hat sich beschwert, dass die Teller noch nicht da sind. Ich hab ihr gerade die Ersatzlieferung geschickt. Kannst du die Zahlung für die neue Sendung bestätigen? Und Eva, bist du am 10. da?",
+        "assistant": "Zahlung ist raus, Olivia bekommt die Tracking-Nummer gleich. Eva, bitte kurz bestätigen, ob du den Kurs am 10.5. übernehmen kannst, Jonas ist ja noch im Urlaub.",
+        "artifact": {
+          "title": "Payment Receipt - Replacement Order",
+          "from": "Stripe",
+          "to": "Lena Weber",
+          "language": "en",
+          "body": "Payment Receipt\n\nMerchant: Weber Keramik\nCustomer: Olivia Grant\nDate: 2026-05-03\nDescription: Replacement shipment for damaged ceramic plates (Order #WK-2026-0415-OG)\nAmount: 0.00 EUR (Shipping cost covered by merchant)\nPayment Method: Visa Debit ****4821\nStatus: Completed\nReference: STR-2026-0503-REPL-01\n\nNote: This receipt confirms the transaction for the replacement items. The original refund to the customer's card was processed on 2026-04-28."
+        },
+        "probe": {
+          "question": "How much did the replacement shipment cost us?",
+          "answer": "0.00 EUR"
+        }
+      },
+      {
+        "date": "2026-05-06",
+        "intentId": "lena-weber:father-clinic",
+        "kind": "transport-ticket",
+        "user": "Papa, dein Termin ist am 8. Ich hab das Ticket für den 7. gebucht, damit wir in Ruhe ankommen. Barrierefreier Zugang am Nord-Eingang ist bestätigt.",
+        "assistant": "Danke, Lena. Ich treffe dich am Nord-Eingang. Der Shuttle sollte dort stehen. Ich hab die Zeiten gespeichert.",
+        "artifact": {
+          "title": "DB Ticket Confirmation",
+          "from": "Deutsche Bahn",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Fahrkartenbestätigung\n\nReisedaten:\nDatum: 07.05.2026\nStrecke: Berlin Hbf -> Potsdam Hbf\nZug: RE 1\nAbfahrt: 10:30 Uhr\nAnkunft: 11:00 Uhr\nReisender: Klaus Weber\nKlasse: 2. Klasse\nSitzplatz: Rollstuhlplatz, Wagen 2\nBarrierefreiheit: Aufzug am Gleis verfügbar, barrierefreier Zugang\n\nBuchungsreferenz: DB-2026-0506-CLIN-04\nPreis: 12,50 EUR\nZahlungsmethode: Visa Debit ****4821\n\nHinweis: Bitte nutzen Sie den barrierefreien Zugang am Nord-Eingang des Bahnhofs Potsdam Hbf."
+        },
+        "probe": {
+          "question": "Which train did we book for Papa?",
+          "answer": "RE 1"
+        }
+      },
+      {
+        "date": "2026-05-09",
+        "intentId": "lena-weber:flat-move",
+        "kind": "event-ticket",
+        "user": "Britta, danke für die Hilfe bei den Kartons. Hier ist der Eintritt für die Besichtigung der neuen Wohnung. Mira, ich bin um 15:00 da.",
+        "assistant": "Cool, danke! Ich bin da. Mal sehen, ob die Küche wirklich so groß ist wie auf den Fotos.",
+        "artifact": {
+          "title": "Event Ticket: Open House Viewing",
+          "from": "Berlin Hausverwaltung",
+          "to": "Britta Seidel",
+          "language": "de",
+          "body": "Eintrittskarte\n\nVeranstaltung: Besichtigungstermin Wohnung Prenzlauer Berg\nDatum: 17.03.2026\nUhrzeit: 15:00 - 15:30 Uhr\nOrt: Prenzlauer Berg, Berlin\nInhaber: Britta Seidel\nKategorie: Gast\nPreis: 0,00 EUR\nTicket-ID: BHV-2026-03-15-VIEW-09\n\nHinweis: Bitte pünktlich erscheinen. Der Zugang erfolgt über den Hinterhof."
+        },
+        "probe": {
+          "question": "What is the ticket ID for the viewing?",
+          "answer": "BHV-2026-03-15-VIEW-09"
+        }
+      },
+      {
+        "date": "2026-05-12",
+        "intentId": "lena-weber:family-weekend",
+        "kind": "voucher",
+        "user": "Mira, hast du den Gutschein für die Ostsee noch? Ich will die Rückfahrt buchen.",
+        "assistant": "Ja, hab ihn gefunden. 50 Euro Rabatt auf die Bahnfahrt. Läuft bis Ende April.",
+        "artifact": {
+          "title": "DB Gutschein Bestätigung",
+          "from": "Deutsche Bahn",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Sehr geehrte Frau Weber,\n\nvielen Dank für Ihre Treue. Anbei erhalten Sie einen Reisegutschein im Wert von 50,00 EUR.\n\nGutschein-Referenz: DB-VOUCH-2026-8821\nWert: 50,00 EUR\nGültig bis: 30.04.2026\nEinlösbar für: Fernverkehrstickets (ICE, IC, EC) innerhalb Deutschlands.\nNicht einlösbar für: Reservierungen, Sitzplatzreservierungen und Nahverkehr.\n\nMit freundlichen Grüßen\nIhre Deutsche Bahn"
+        },
+        "probe": {
+          "question": "What is the value of the voucher?",
+          "answer": "50,00 EUR"
+        }
+      },
+      {
+        "date": "2026-05-15",
+        "intentId": "lena-weber:family-weekend",
+        "kind": "booking",
+        "user": "Mira, Fahrkarten sind gebucht. Papa, bitte den Nord-Eingang nicht vergessen.",
+        "assistant": "Alles klar. Ich hab die Zeiten gespeichert. Barrierefreier Zugang ist bestätigt.",
+        "artifact": {
+          "title": "DB Buchungsbestätigung",
+          "from": "Deutsche Bahn",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Buchungsbestätigung\n\nReise: Berlin Hbf -> Stralsund Hbf\nDatum: 24.04.2026\nZug: IC 2110\nAbfahrt: 09:15 Uhr\nAnkunft: 12:45 Uhr\nReisende: Lena Weber, Mira, Klaus Weber\nKlasse: 2. Klasse\nSitzplatz: Barrierefreier Bereich, Wagen 4\nPreis: 120,00 EUR (nach Gutscheinabzug)\nZahlungsmethode: Visa Debit ****4821\nBuchungsreferenz: DB-2026-03-21-9902\n\nStornierungsbedingungen: Kostenlos stornierbar bis 24 Stunden vor Abfahrt."
+        },
+        "probe": {
+          "question": "What is the booking reference for the Ostsee trip?",
+          "answer": "DB-2026-03-21-9902"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit NT-SMP-2026-04 dispatch scheduled for Feb 10 (Apr 3). Fire safety report B-17 under review by Berlin Hausverwaltung (Apr 6). Nordton invoice NT-2026-04-09 issued for 60,57 EUR (Apr 9). Family weekend DB tickets booked for Apr 24 (DB-2026-03-21-9902) (Apr 12). PayPal refund case for Amira Yilmaz still pending investigation (Apr 15). Lease version 2.2 awaiting signature for evening classes (Apr 21). Move reserve balance check pending final April figures (Apr 28). Closed: Studio lease fire-safety fee paid (Mar 9). Klaus's clinic ticket booked for Mar 14 (Mar 12). Apartment viewing attended with Britta (Mar 17). Move reserve transfer completed (Mar 24). Lease signed and § 4.2 approved (Mar 27). DHL damage claim for Amira under review (CASE-2026-0328-DHL) (Mar 28)."
+  }
+}

@@ -184,12 +184,39 @@ onMount(() => {
 			<section class="flow-card" aria-live="polite">
 				<div class="flow-card-crest">
 					{#if busy}
-						<svg viewBox="0 0 24 24" width="1.75rem" height="1.75rem" fill="none" class="animate-spin">
-							<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".25" stroke-width="1.8" />
-							<path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-linecap="round" stroke-width="1.8" />
+						<svg
+							viewBox="0 0 24 24"
+							width="1.75rem"
+							height="1.75rem"
+							fill="none"
+							class="animate-spin"
+						>
+							<circle
+								cx="12"
+								cy="12"
+								r="9"
+								stroke="currentColor"
+								stroke-opacity=".25"
+								stroke-width="1.8"
+							/>
+							<path
+								d="M12 3a9 9 0 0 1 9 9"
+								stroke="currentColor"
+								stroke-linecap="round"
+								stroke-width="1.8"
+							/>
 						</svg>
 					{:else}
-						<svg viewBox="0 0 24 24" width="1.75rem" height="1.75rem" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6">
+						<svg
+							viewBox="0 0 24 24"
+							width="1.75rem"
+							height="1.75rem"
+							fill="none"
+							stroke="currentColor"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="1.6"
+						>
 							<path d="M14.5 5.5a4.5 4.5 0 1 0-3.2 7.7L14 16h2v2h2v2h3v-3l-6.3-6.3" />
 							<circle cx="10" cy="10" r=".7" fill="currentColor" stroke="none" />
 						</svg>
@@ -229,9 +256,7 @@ onMount(() => {
 					{/if}
 				</div>
 
-				<p class="flow-card-trust">
-					Passkey und Sitzung bleiben durch dein Gerät geschützt
-				</p>
+				<p class="flow-card-trust">Passkey und Sitzung bleiben durch dein Gerät geschützt</p>
 			</section>
 		</div>
 	</main>

@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-06-03",
+        "intentId": "lena-weber:orders",
+        "kind": "invoice",
+        "user": "Nora, die Sample-Kit-Rechnung ist da. Bitte prüfen, ob die Freigabe BLUE-271 für den Versand der Proben an Jonas gilt.",
+        "assistant": "Invoice INV-2026-0603-NW is issued. The sample kit dispatch is approved under reference BLUE-271. Please arrange pickup via DHL.",
+        "artifact": {
+          "title": "Nordton Export Invoice INV-2026-0603-NW",
+          "from": "Nora Wells <nora.wells@nordton-export.test>",
+          "to": "Lena Weber <lena@weber-keramik.test>",
+          "language": "en",
+          "body": "Dear Ms. Weber,\n\nPlease find attached the invoice for the Spring Glaze Sample Kit (Ref: NK-2026-SPR-09). The batch release code BLUE-271 has been verified and applied to this order.\n\nInvoice Number: INV-2026-0603-NW\nDate: 2026-06-03\nClient: Weber Keramik\nLine Items:\n- Spring Glaze Sample Kit (5 units): 120.00 EUR\n- Shipping (DHL Express): 15.00 EUR\nSubtotal: 135.00 EUR\nVAT (19%): 25.65 EUR\nTotal Due: 160.65 EUR\n\nPayment Terms: Net 14 days.\nStatus: Unpaid\n\nThe sample kit is ready for dispatch. Please confirm the pickup address for your instructor Jonas Beck.\n\nBest regards,\nNora Wells\nQuality Support, Nordton Export Desk"
+        },
+        "probe": {
+          "question": "Welche Freigabenummer steht in der Rechnung für das Sample Kit?",
+          "answer": "BLUE-271"
+        }
+      },
+      {
+        "date": "2026-06-06",
+        "intentId": "lena-weber:flat-move",
+        "kind": "payment",
+        "user": "Mira, ich hab die Kaution für die neue Wohnung überwiesen. Ref ist UMW-2026-0606. Passt das so?",
+        "assistant": "Ja, hab ich gesehen. Die 2.400,00 EUR sind raus. Britta fragt, ob wir die Kartons schon bestellen können.",
+        "artifact": {
+          "title": "Zahlungsbestätigung SEPA-Überweisung",
+          "from": "Sparkasse Berlin Online Banking",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Zahlungsbestätigung\n\nAuftraggeber: Lena Weber\nEmpfänger: Hausverwaltung Prenzlauer Berg\nBetrag: 2.400,00 EUR\nVerwendungszweck: Kaution Wohnung Prenzlauer Berg\nBuchungsdatum: 06.06.2026\nStatus: Ausgeführt\nReferenznummer: UMW-2026-0606\nKonto: ****4821\n\nHinweis: Die Überweisung wurde am 06.06.2026 ausgeführt. Der Betrag wurde dem Empfängerkonto gutgeschrieben."
+        },
+        "probe": {
+          "question": "Wie hoch war die überwiesene Kaution?",
+          "answer": "2.400,00 EUR"
+        }
+      },
+      {
+        "date": "2026-06-09",
+        "intentId": "lena-weber:cashflow",
+        "kind": "card-statement",
+        "user": "Kontoauszug checken. Die Nordton-Rechnung und die PayPal-Gebühren sind drauf. Eva muss ihre Rechnung noch kriegen.",
+        "assistant": "Die Visa ****4821 zeigt die Abbuchungen. Nordton ist bezahlt, aber die PayPal-Rückerstattung für Amira ist noch nicht da.",
+        "artifact": {
+          "title": "Visa Debit Kartenabrechnung Juni 2026",
+          "from": "Sparkasse Berlin",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Kartenabrechnung\nKonto: Visa Debit ****4821\nZeitraum: 01.06.2026 - 09.06.2026\n\nBuchungen:\n03.06.2026 | Nordton Export | 160,65 EUR | Soll\n05.06.2026 | DHL Paket | 12,40 EUR | Soll\n07.06.2026 | PayPal Business | 15,00 EUR | Soll\n\nGesamtbetrag: 188,05 EUR\nFälligkeit: 15.06.2026\nStatus: Offen\n\nHinweis: Bitte prüfen Sie die offenen Posten. Die Rückerstattung von PayPal (Case PP-2026-0527-AY) ist noch nicht verbucht."
+        },
+        "probe": {
+          "question": "Welcher Betrag wurde am 03.06. an Nordton gezahlt?",
+          "answer": "160,65 EUR"
+        }
+      },
+      {
+        "date": "2026-06-12",
+        "intentId": "lena-weber:cashflow",
+        "kind": "bank-statement",
+        "user": "Kontoauszug checken. Die Nordton-Rechnung und die PayPal-Gebühren sind drauf. Eva muss ihre Rechnung noch kriegen.",
+        "assistant": "Die Visa ****4821 zeigt die Abbuchungen. Nordton ist bezahlt, aber die PayPal-Rückerstattung für Amira ist noch nicht da.",
+        "artifact": {
+          "title": "Kontoauszug Weber Keramik Geschäftskonto",
+          "from": "Sparkasse Berlin",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Kontoauszug\nKonto: Weber Keramik Geschäftskonto ****4821\nZeitraum: 01.06.2026 - 12.06.2026\n\nSaldo am Anfang: 1.450,00 EUR\n\nBuchungen:\n03.06.2026 | SEPA-Lastschrift | Nordton Export | -160,65 EUR\n05.06.2026 | Gutschrift | Stripe Payout | +320,00 EUR\n08.06.2026 | SEPA-Überweisung | Eva Richter | -350,00 EUR\n\nSaldo am Ende: 1.259,35 EUR\n\nHinweis: Die Zahlung an Eva Richter wurde am 08.06. ausgeführt. Die PayPal-Rückerstattung (Case PP-2026-0527-AY) ist weiterhin ausstehend."
+        },
+        "probe": {
+          "question": "Welcher Betrag wurde an Eva Richter überwiesen?",
+          "answer": "-350,00 EUR"
+        }
+      },
+      {
+        "date": "2026-06-15",
+        "intentId": "lena-weber:studio-lease",
+        "kind": "email",
+        "user": "Frau Becker, Paul hat B-17 noch nicht unterschrieben. Können wir die Abendkurse trotzdem schon planen?",
+        "assistant": "Sehr geehrte Frau Weber, ohne den unterschriebenen Bericht B-17 von Paul Neumann bleibt die Klausel § 4.2 gesperrt. Wir können keine Abendkurse genehmigen.",
+        "artifact": {
+          "title": "RE: Mietvertrag Prenzlauer Berg - Version 2.2",
+          "from": "Frau Becker <f.becker@berlin-hausverwaltung.test>",
+          "to": "Lena Weber <lena@weber-keramik.test>",
+          "language": "de",
+          "body": "Sehr geehrte Frau Weber,\n\nwir haben Ihre Anfrage bezüglich der Abendkurse erhalten.\n\nWie bereits besprochen, ist die Freigabe für Abendkurse gemäß § 4.2 des Mietvertrags (Version 2.2, Referenz BHV-2026-LEASE-045) an die unterzeichnete Bestätigung des Brandschutzberichts B-17 durch Paul Neumann gebunden.\n\nHerr Neumann hat uns mitgeteilt, dass der Bericht noch nicht final unterschrieben ist. Ohne diese Unterschrift können wir die Klausel nicht aktivieren.\n\nBitte senden Sie uns den unterschriebenen Bericht B-17 zu, sobald er vorliegt. Wir werden dann die Freigabe sofort erteilen.\n\nMit freundlichen Grüßen\nFrau Becker\nBerlin Hausverwaltung"
+        },
+        "probe": {
+          "question": "Welcher Bericht muss unterschrieben sein, damit die Abendkurse freigegeben werden?",
+          "answer": "B-17"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit dispatch approved (BLUE-271) but shipping pending confirmation (Jun 3). Move deposit paid (UMW-2026-0606) (Jun 6). PayPal refund case PP-2026-0527-AY still pending investigation (Jun 9). Lease version 2.2 blocked by unsigned fire-safety report B-17 (Jun 15). Closed: Nordton invoice INV-2026-0603-NW paid via Visa ****4821 (Jun 3). Instructor Eva Richter paid 350,00 EUR (Jun 8)."
+  }
+}

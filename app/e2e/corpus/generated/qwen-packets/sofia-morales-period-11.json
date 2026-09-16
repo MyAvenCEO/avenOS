@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-06-03",
+        "intentId": "sofia-morales:flower-supplier",
+        "kind": "invoice",
+        "user": "Isabel, necesito la factura final de la sustitución de peonías para cuadrar el IVA. ¿Incluye el reembolso de los tallos defectuosos?",
+        "assistant": "Sofía, aquí tienes la factura proforma ajustada. El reembolso de 180,00 EUR ya se ha aplicado como abono en la Visa terminada en 6418 según el caso MA-EXP-2026-0527.",
+        "artifact": {
+          "title": "Factura Proforma Ajustada - Sustitución Peonías",
+          "from": "Oliver Kent <export@marazul.test>",
+          "to": "Sofía Morales <sofia@estudiomorales.test>",
+          "language": "en",
+          "body": "Dear Sofía,\n\nPlease find attached the adjusted proforma invoice for the peony substitution order MA-2026-0510.\n\nCase Reference: MA-EXP-2026-0527\nOriginal Order Total: 320.00 EUR\nRefund Applied (RMA RA-2026-0524): -180.00 EUR\nNet Amount Due: 140.00 EUR\n\nThe refund of 180.00 EUR has been processed to your original payment method, the Visa ending in 6418. Please allow 3-5 business days for the funds to appear in your statement. We appreciate your patience.\n\nBest regards,\nOliver Kent\nMar Azul Export Support"
+        },
+        "probe": {
+          "question": "¿Cuánto queda por pagar tras aplicar el reembolso?",
+          "answer": "140.00 EUR"
+        }
+      },
+      {
+        "date": "2026-06-06",
+        "intentId": "sofia-morales:home-budget",
+        "kind": "payment",
+        "user": "Tomás, te paso el Bizum de la cuota de Nico. He usado el voucher de Stripe para no duplicar el pago. Confírmame cuando lo veas.",
+        "assistant": "Recibido. Veo el Bizum y el abono del voucher en el extracto compartido. Buen ojo con el cargo duplicado.",
+        "artifact": {
+          "title": "Confirmación de Transferencia Bizum",
+          "from": "Sistema Bizum",
+          "to": "Tomás Vidal",
+          "language": "es",
+          "body": "CONFIRMACIÓN DE TRANSFERENCIA BIZUM\n\nFecha: 06/06/2026\nHora: 11:20\nEmisor: Sofía Morales\nReceptor: Tomás Vidal\nImporte: 45,00 EUR\nConcepto: Cuota colegio Nico - Junio\nReferencia: BZM-20260606-882\nEstado: Completado\n\nNota adicional: Se ha aplicado el voucher de compensación STR-2026-0318-CLARA (45,00 EUR) para cubrir la diferencia del cargo duplicado anterior."
+        },
+        "probe": {
+          "question": "¿Qué referencia tiene el Bizum enviado a Tomás?",
+          "answer": "BZM-20260606-882"
+        }
+      },
+      {
+        "date": "2026-06-09",
+        "intentId": "sofia-morales:quotes",
+        "kind": "card-statement",
+        "user": "Elena, reviso el extracto antes de facturar a Clara. ¿Ves el cargo del suplemento de transporte de la adenda v2.1?",
+        "assistant": "Sofía, en el extracto solo aparece el anticipo original. El suplemento de 150,00 EUR sigue pendiente de cobro hasta que Clara firme la adenda.",
+        "artifact": {
+          "title": "Extracto de Tarjeta Visa - Estudio Morales",
+          "from": "Banco Emisor",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "EXTRACTO DE TARJETA DE CRÉDITO\n\nTitular: Sofía Morales\nTarjeta: Visa terminada en 6418\nPeriodo: 01/05/2026 - 09/06/2026\n\nMovimientos:\n1. 02/05/2026 - Mar Azul Importación - 320,00 EUR (Cargo)\n2. 03/05/2026 - Mar Azul Reembolso - 180,00 EUR (Abono)\n3. 15/05/2026 - Hotel Porto Central - 120,00 EUR (Cargo)\n4. 28/05/2026 - Anticipo Clara Beltrán (Stripe) - 500,00 EUR (Abono)\n\nSaldo Pendiente: 260,00 EUR\nFecha de Vencimiento: 25/06/2026"
+        },
+        "probe": {
+          "question": "¿Cuánto se abonó por el anticipo de Clara Beltrán?",
+          "answer": "500,00 EUR"
+        }
+      },
+      {
+        "date": "2026-06-12",
+        "intentId": "sofia-morales:flower-supplier",
+        "kind": "bank-statement",
+        "user": "Isabel, ¿ha entrado ya el abono de la devolución de las peonías en la cuenta comercial? Quiero cerrar el asiento contable.",
+        "assistant": "Sofía, el abono de 180,00 EUR figura en el extracto del día 27/05. Ya puedes conciliar la factura MA-2026-0510.",
+        "artifact": {
+          "title": "Extracto de Cuenta Comercial Estudio Morales",
+          "from": "Banco Comercial",
+          "to": "Estudio Morales",
+          "language": "es",
+          "body": "EXTRACTO DE CUENTA COMERCIAL\n\nTitular: Estudio Morales (Sofía Morales)\nCuenta: ES**...6418 (Etiqueta: Estudio Morales)\nPeriodo: 20/05/2026 - 12/06/2026\nSaldo Inicial: 1.240,00 EUR\n\nMovimientos:\n1. 25/05/2026 - Pago Nómina Lucía Ferrer - 450,00 EUR (Cargo)\n2. 27/05/2026 - Mar Azul Reembolso RMA RA-2026-0524 - 180,00 EUR (Abono)\n3. 01/06/2026 - Alquiler Furgoneta Refrigerada - 85,00 EUR (Cargo)\n4. 05/06/2026 - Anticipo Clara Beltrán - 500,00 EUR (Abono)\n\nSaldo Final: 1.385,00 EUR"
+        },
+        "probe": {
+          "question": "¿Qué concepto tiene el abono de Mar Azul?",
+          "answer": "Mar Azul Reembolso RMA RA-2026-0524"
+        }
+      },
+      {
+        "date": "2026-06-15",
+        "intentId": "sofia-morales:staff",
+        "kind": "email",
+        "user": "Lucía, Mario, aquí está el turno confirmado para la boda de Clara el 15/05. Lucía, tú a las 07:00 con la clave SOL-983. Mario, carga a las 06:30.",
+        "assistant": "Recibido Sofía. Yo llevo las tijeras y el material de montaje. Mario, ¿tienes la furgoneta lista?",
+        "artifact": {
+          "title": "Turnos Confirmados - Boda Clara Beltrán",
+          "from": "Sofía Morales <sofia@estudiomorales.test>",
+          "to": "Lucía Ferrer <lucia@estudiomorales.test>; Mario Costa <mario@estudiomorales.test>",
+          "language": "es",
+          "body": "Hola equipo,\n\nAdjunto los turnos definitivos para el evento de Clara Beltrán del 15/05/2026.\n\nLUCÍA FERRER:\n- Hora: 07:00 - 14:00\n- Tarea: Montaje en venue. Acceso puerta carga con clave SOL-983.\n- Notas: Revisar tallos de peonías sustitutas (Ref ORANGE-64).\n\nMARIO COSTA:\n- Hora: 06:30 - 10:30\n- Tarea: Carga y transporte. Verificar temperatura cámara fría antes de salir.\n- Notas: Llevar hoja de relevo firmada.\n\nRecordad que el suplemento de transporte de 150,00 EUR está pendiente de cobro a la clienta, así que no se aceptan cambios de última hora sin mi visto bueno.\n\nUn saludo,\nSofía"
+        },
+        "probe": {
+          "question": "¿A qué hora empieza Mario la carga?",
+          "answer": "06:30"
+        }
+      }
+    ],
+    "continuity": "Open: Legal Addendum v2.1 for Clara Beltrán pending signature (May 28). Final invoice INV-2026-0427 payment still outstanding. Cold room invoice INV-2026-0409-ALBA issued Apr 9, due Apr 24. Resolved: Mar Azul refund of 180.00 EUR processed May 25, visible on card statement May 27. Bizum payment of 45.00 EUR to Tomás for school costs confirmed Apr 12. Stripe voucher VCH-2026-0318-45 applied to school fees. New: Wedding date changed to May 15, 2026, requiring 150.00 EUR transport surcharge. Venue access key SOL-983 remains valid for new date. Bank statement May 18 confirms 120 EUR payment to Hotel Porto Central. Email May 21 confirms venue access with key SOL-983. Document May 24 updates clinic transport pickup to 09:45 for Apr 28. Calendar Apr 27 schedules flower delivery with ref ORANGE-64. Todo Apr 28 sets deadline Apr 30 for Porto custody confirmation. May 3: Paid 50.00 EUR for Nico's school trip (ESC-2026-0503-PT). May 6: Booked Renfe ticket REN-20260506-7721 for training. May 9: Registered for Carrera Popular (CPV-2026-0991). May 12: Received Stripe voucher VCH-2026-0512-45 (45.00 EUR, expires 30/06/2026). May 15: Confirmed Porto trip VIA-2026-0515-PT (135.00 EUR, May 20-23). J"
+  }
+}

@@ -63,7 +63,14 @@ actor manifest ID, so listing that directory is the authoritative at-a-glance ca
 | `statement-transaction-fanout/` | `document_fanout_statement_transactions` | Deterministic |
 | `reconciliation-ranker/` | `reconciliation_rank_invoice_transactions` | Deterministic |
 
-Each directory exports a named factory and can be imported directly, for example:
+Each directory exports its release-owned manifest as data and a named factory. The
+`DOCUMENT_ACTOR_MANIFESTS` list under `actors/registry` includes all 18 methods,
+including model-backed methods when no model host is currently available. Listing it
+does not construct Actors or call a decoder/model. A conformance test compares these
+exports with the actual constructed manifests. These descriptors are not yet complete
+generic Studio installations: mode/retry, projector/procedure, authorization and
+durable publication contracts still need to be supplied before a method is runnable.
+Factories can be imported directly, for example:
 
 ```ts
 import { createDocumentInspectorActor } from '@avenos/document-ingest/actors/document-inspector'

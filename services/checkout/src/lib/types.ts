@@ -65,6 +65,8 @@ export interface HoldOrigin {
 	tier?: string
 	salutation?: string
 	idea?: string
+	/** The browser's canonical, preferred BCP 47 language tag at signup. */
+	browserLanguage?: string
 }
 
 /**

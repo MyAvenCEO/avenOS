@@ -30,12 +30,19 @@ the working intelligence assembled through use.
 | customer environment | The stable authorization and lifecycle boundary for one entitled product context |
 | customer database | The physical database currently holding one customer environment's durable domain data |
 
-A customer environment is not automatically synonymous with an Aven. The current
-implementation routes one selected environment at a time and stores its domain state
-in one database. Any future mapping that permits several Avens in one environment or
-one account to own several environments must be an explicit product contract; it must
-not be inferred from an email address, purchased name, database name, or identity
-subject.
+A customer environment is not automatically synonymous with an Aven. One identity
+account may now own several environments by purchasing different globally unique
+platform names. Each name creates a separate environment and customer database; the
+client works in one selected environment at a time without changing the identity
+session. Changing that selection clears customer-scoped client projections and
+unsubmitted review actions; a customer write already being saved must finish first.
+A mapping that permits several Avens in one environment remains future
+product work. Environment identity is the stable UUID, not the email address,
+purchased name, database name, or identity subject.
+The former checkout limit of one name per account was removed because it blocked
+additional entitled environments despite the identity and customer-directory models
+already supporting one owner across several. Global uniqueness still applies to each
+platform name, and each paid name remains an independent entitlement.
 
 ## Working intelligence
 

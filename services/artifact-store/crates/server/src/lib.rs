@@ -429,6 +429,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/v1/scopes/{scope_id}/publications", get(read_feed))
         .route("/v1/scopes/{scope_id}/artifacts", get(query_artifacts))
+        .route("/v1/scopes/{scope_id}/library", get(read_library))
         .route(
             "/v1/scopes/{scope_id}/artifacts/{artifact_id}",
             get(get_artifact),
@@ -750,6 +751,17 @@ struct FeedQuery {
 
 const fn default_feed_limit() -> u32 {
     100
+}
+
+async fn read_library(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(scope_id): Path<Uuid>,
+    Query(query): Query<aven_artifact_store_postgres::LibraryQuery>,
+) -> Result<Response, ApiError> {
+    state.auth.authorize(&headers, scope_id)?;
+    let store = scoped_store(&state, &headers, scope_id).await?;
+    Ok(Json(store.library(scope_id, query).await?).into_response())
 }
 
 #[derive(Deserialize)]
@@ -1094,6 +1106,11 @@ impl From<StoreError> for ApiError {
             StoreError::InputUnavailable => Self::new(
                 StatusCode::CONFLICT,
                 ErrorCode::InputUnavailable,
+                error.to_string(),
+            ),
+            StoreError::InvalidLibraryQuery(_) => Self::new(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::MalformedRequest,
                 error.to_string(),
             ),
             StoreError::Database(_)

@@ -25,8 +25,9 @@ competes for those sources in the current implementation.
 The desktop IMAP prototype in **Settings → Email** also calls `ingestFile()` for
 selected PDF attachments and autonomous whole-folder imports. Whole-folder jobs
 order messages by IMAP received date. Downloads and Artifact Store uploads advance
-independently of a separate document-processing queue, which runs one PDF pipeline
-at a time while the desktop app remains open. Both queues survive settings navigation. It binds stable publication IDs to the signed-in account,
+independently of a bounded document-processing queue while the desktop app remains
+open. Its capacity follows the selected model catalog's `maxParallelism`; both queues
+survive settings navigation. The import binds stable publication IDs to the signed-in account,
 source occurrence, and chosen execution placement, and retains email context in the
 Intent. The PDFs use the same `client-actor-ingest` source kind and execution adapter
 as dropped files. Raw emails remain in a local cache; immutable email artifacts and
@@ -252,9 +253,11 @@ The client lane preserves the document-processing behavior that matters:
 - target-relative JSON-pointer evidence tied to exact page regions; and
 - invoice arithmetic/identity plus statement balance/period/receipt validation.
 
-One scheduling difference is intentional: the local actor mailbox serializes work. A
-headless actor host can later parallelize independent page actors without changing their
-method contracts or artifact lineage.
+Both hosts use the generic observation solver to run independent ready operations in
+parallel. Each document host creates up to the catalog's `maxParallelism` independent
+actor lanes; the solver admits their receipts in deterministic frontier order. The
+desktop mailbox queue can process that many documents concurrently, and the API
+gateway bounds aggregate model calls from desktop and Actor Runner in one process.
 
 ## Configuration
 

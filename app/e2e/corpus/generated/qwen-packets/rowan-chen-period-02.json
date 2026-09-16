@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-01-18",
+        "intentId": "rowan-chen:household",
+        "kind": "transport-ticket",
+        "user": "Ellis, did the train ticket for the supplier visit come through? Need to check the reserve impact.",
+        "assistant": "Yes, booked. GWR Bristol to London. Cost £42.50. Added to renovation expenses, not the protected reserve.",
+        "artifact": {
+          "title": "GWR E-Ticket Confirmation",
+          "from": "GWR Customer Services",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Booking Reference: GWR-8821-KITCH\nTraveller: Rowan Chen\nRoute: Bristol Temple Meads to London Paddington\nTravel Date: 2026-01-19\nDeparture: 09:15\nArrival: 11:10\nClass: Standard\nFare: £42.50\nStatus: Confirmed\nPayment Method: Monzo Household Debit ending 5526\nNote: This ticket is valid for the specified date only. Changes subject to fare rules."
+        },
+        "probe": {
+          "question": "What is the booking reference for the supplier visit ticket?",
+          "answer": "GWR-8821-KITCH"
+        }
+      },
+      {
+        "date": "2026-01-21",
+        "intentId": "rowan-chen:kitchen",
+        "kind": "event-ticket",
+        "user": "Tess sent the invoice. Did we pay the deposit for the cabinets?",
+        "assistant": "Paid via Mastercard 3074. Ref INV-MJ-2026-004. Also booked the kitchen showroom tour for next week.",
+        "artifact": {
+          "title": "Showroom Tour Admission Ticket",
+          "from": "Kitchen Supplier Events",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Event: Premium Kitchen Design Workshop\nVenue: Bristol Showroom, Unit 4, Industrial Estate\nDate: 2026-01-28\nTime: 14:00 - 16:00\nHolder: Rowan Chen\nCategory: Professional Consultation\nPrice: £0.00 (Complimentary for registered contractors)\nTicket Reference: KS-2026-0128-RC\nTerms: Non-transferable. Please arrive 10 minutes early for check-in."
+        },
+        "probe": {
+          "question": "What is the ticket reference for the kitchen workshop?",
+          "answer": "KS-2026-0128-RC"
+        }
+      },
+      {
+        "date": "2026-01-24",
+        "intentId": "rowan-chen:garden",
+        "kind": "voucher",
+        "user": "Asha, did you leave the shed key? Also, check the garden voucher for the seed order.",
+        "assistant": "Key is in the usual spot. Voucher for £15.00 is valid until March. Use it for the spring bulbs.",
+        "artifact": {
+          "title": "Community Garden Supply Voucher",
+          "from": "Bristol Community Garden Trust",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Voucher Code: CGT-SPRING-26\nValue: £15.00 GBP\nCurrency: GBP\nExpiry Date: 2026-03-31\nIssuer: Bristol Community Garden Trust\nReason: Volunteer Service Credit (Q4 2025)\nRedemption Limits: Valid only for seed and tool purchases at the garden shop. Cannot be exchanged for cash. One use per transaction."
+        },
+        "probe": {
+          "question": "What is the expiry date for the garden voucher?",
+          "answer": "2026-03-31"
+        }
+      },
+      {
+        "date": "2026-01-27",
+        "intentId": "rowan-chen:family-visit",
+        "kind": "booking",
+        "user": "Jamie, is the dog sitter confirmed for the Glasgow trip? Need to finalise the booking.",
+        "assistant": "Bea is confirmed. Jo signed the consent form yesterday. Booking ref: BEA-DOG-2026-01. All set.",
+        "artifact": {
+          "title": "Dog Sitting Booking Confirmation",
+          "from": "Bea Fox",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Booking Reference: BEA-DOG-2026-01\nProvider: Bea Fox (Private Foster Approved)\nClient: Rowan Chen\nPet: Pip (Foster Dog)\nDates: 2026-01-30 to 2026-02-02\nService: Full-day care and overnight stay\nPrice: £25.00 per day\nDeposit Status: Paid via PayPal\nCancellation Terms: Full refund if cancelled 48 hours prior. Foster coordinator consent (Jo Harding) on file."
+        },
+        "probe": {
+          "question": "What is the booking reference for the dog sitting?",
+          "answer": "BEA-DOG-2026-01"
+        }
+      },
+      {
+        "date": "2026-01-28",
+        "intentId": "rowan-chen:household",
+        "kind": "transaction",
+        "user": "Check the bank statement. Did the refund from the kitchen supplier come through?",
+        "assistant": "Yes, £120.00 credited to Monzo 5526. Ref: REF-KS-9921. Matches the faulty tap claim.",
+        "artifact": {
+          "title": "Monzo Transaction Detail",
+          "from": "Monzo Bank",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Transaction ID: MON-2026-0128-9921\nDate: 2026-01-28\nMerchant: Kitchen Supplier Ltd\nAmount: +£120.00 GBP\nCurrency: GBP\nMethod: Refund to Original Card (Monzo Debit ending 5526)\nStatus: Completed\nReference: REF-KS-9921\nDescription: Refund for faulty mixer tap (Order #KS-4421). Case closed."
+        },
+        "probe": {
+          "question": "What is the transaction ID for the refund?",
+          "answer": "MON-2026-0128-9921"
+        }
+      }
+    ],
+    "continuity": "Open: DPA-42 v3.0 awaiting countersignature from Malik Ahmed (Atlas Legal); production data exchange blocked. Open: Kitchen renovation reserve remains untouched; no new contractor invoices for Morgan Joinery yet. Resolved: Train tickets booked (Ref: GWR-9921-ATLAS) for 16 Jan. Resolved: £450 deposit paid to Sam Patel (Ref: INV-SP-2026-001), enabling contractor onboarding. Resolved: Jo Harding approved Bea Fox's dog-sitting consent (Ref: BEA-DOG-2026-01). Resolved: Refund for faulty tap received (Ref: REF-KS-9921)."
+  }
+}

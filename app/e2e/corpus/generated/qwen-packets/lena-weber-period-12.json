@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-06-18",
+        "intentId": "lena-weber:flat-move",
+        "kind": "document",
+        "user": "Mira, hab den Umzugsplan aktualisiert. Britta kann am 12.7. helfen. Transporter ist gebucht. Passt das mit den Kursen?",
+        "assistant": "Ja, passt. Ich hab die Kurse am 11.7. schon auf Eva umgelegt. Britta bekommt die Liste für die Kartons. Wir sind bereit.",
+        "artifact": {
+          "title": "Umzugsplan Prenzlauer Berg - Version 3.2",
+          "from": "Lena Weber",
+          "to": "Mira",
+          "language": "de",
+          "body": "Status: Finalisiert\nDatum: 2026-06-18\n\n1. Kaution: Überwiesen am 06.06.2026 (Ref: UMW-2026-0606, 2.400,00 EUR).\n2. Transporter: Gebucht für den 12.07.2026, 08:00 Uhr. Firma: Umzugshelfer Berlin.\n3. Helfer: Britta Seidel bestätigt für 12.07. (Kartons & Tragen). Keine Studio-Absprachen nötig.\n4. Übergabeprotokoll: Termin mit Hausverwaltung am 15.07.2026, 14:00 Uhr.\n5. Offene Punkte: Strom/Umweltzähler ablesen am 11.07.2026."
+        },
+        "probe": {
+          "question": "Wann ist der Termin für das Übergabeprotokoll?",
+          "answer": "15.07.2026, 14:00 Uhr"
+        }
+      },
+      {
+        "date": "2026-06-21",
+        "intentId": "lena-weber:classes",
+        "kind": "calendar",
+        "user": "Jonas, Eva ist im Urlaub. Kannst du den Kurs am 27.6. übernehmen? Olivia wartet noch auf Ersatz.",
+        "assistant": "Klar, ich mach den Kurs. Olivia hat die Tracking-Nummer für die Ersatzlieferung bekommen, DHL ist dran.",
+        "artifact": {
+          "title": "Kalendereintrag: Kursvertretung Samstag",
+          "from": "Lena Weber",
+          "to": "Jonas Beck",
+          "language": "de",
+          "body": "Event: Samstagskurs Drehen & Glasieren\nDatum: 2026-06-27\nStart: 10:00\nEnde: 14:00\nOrt: Weber Keramik Studio\nStatus: Bestätigt\nTeilnehmer: Jonas Beck (Vertretung für Eva Richter)\nNotiz: Eva im Urlaub. Jonas übernimmt. Kursliste finalisiert. 8 Teilnehmer. Nordton-Glasurpreis 4,65 EUR/kg."
+        },
+        "probe": {
+          "question": "Wer übernimmt den Kurs am 27. Juni?",
+          "answer": "Jonas Beck (Vertretung für Eva Richter)"
+        }
+      },
+      {
+        "date": "2026-06-24",
+        "intentId": "lena-weber:flat-move",
+        "kind": "todo",
+        "user": "Britta, danke für die Kartons. Ich muss noch die Kaution für den Transporter zahlen. Ist das in der Liste?",
+        "assistant": "Ja, steht drin. Ich hab die Rechnung von der Hausverwaltung für die Kaution schon bezahlt. Ref UMW-2026-0606.",
+        "artifact": {
+          "title": "Aufgabe: Umzugsorganisation",
+          "from": "Lena Weber",
+          "to": "Britta Seidel",
+          "language": "de",
+          "body": "Aufgabe: Kaution für neue Wohnung bestätigen\nOwner: Lena Weber\nDue Date: 2026-06-24\nStatus: Erledigt\nLinked Matter: Wohnungswechsel im Sommer\nDetails: SEPA-Überweisung an Hausverwaltung Prenzlauer Berg. Betrag: 2.400,00 EUR. Referenz: UMW-2026-0606. Ausgeführt am 06.06.2026. Britta hat 20 Kartons gebracht."
+        },
+        "probe": {
+          "question": "Welche Referenznummer hat die Kautionsüberweisung?",
+          "answer": "UMW-2026-0606"
+        }
+      },
+      {
+        "date": "2026-06-27",
+        "intentId": "lena-weber:studio-lease",
+        "kind": "receipt",
+        "user": "Frau Becker, hier ist die Quittung für die Brandschutzprüfung. Paul hat B-17 noch nicht unterschrieben, aber die Gebühr ist fällig.",
+        "assistant": "Danke Lena. Wir haben die Zahlung erhalten. Bitte senden Sie den unterschriebenen Bericht B-17 nach, sobald Paul ihn freigegeben hat.",
+        "artifact": {
+          "title": "Zahlungsbestätigung: Brandschutzprüfung B-17",
+          "from": "Neumann Brandschutz",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Zahlungsbestätigung\n\nAuftraggeber: Weber Keramik\nEmpfänger: Neumann Brandschutz\nBetrag: 180,00 EUR\nVerwendungszweck: Prüfung Brandschutzbericht B-17\nBuchungsdatum: 2026-06-27\nStatus: Ausgeführt\nReferenznummer: NB-2026-0627-B17\nKonto: Visa Debit ****4821\n\nHinweis: Die Prüfung ist abgeschlossen. Die Unterschrift von Paul Neumann steht noch aus."
+        },
+        "probe": {
+          "question": "Welche Referenznummer hat die Zahlung für die Brandschutzprüfung?",
+          "answer": "NB-2026-0627-B17"
+        }
+      },
+      {
+        "date": "2026-06-28",
+        "intentId": "lena-weber:father-clinic",
+        "kind": "transport-ticket",
+        "user": "Papa, dein Termin ist am 30.6. Ich hab das Ticket für den 29.6. gebucht. Barrierefreier Zugang am Nord-Eingang ist bestätigt.",
+        "assistant": "Danke, Lena. Ich treffe dich am Nord-Eingang. Der Shuttle sollte dort stehen. Ich hab die Zeiten gespeichert.",
+        "artifact": {
+          "title": "DB Ticket Confirmation: Berlin Hbf to Potsdam Hbf",
+          "from": "Deutsche Bahn",
+          "to": "Klaus Weber",
+          "language": "de",
+          "body": "Fahrkartenbestätigung\n\nReisedaten:\nDatum: 2026-06-29\nStrecke: Berlin Hbf -> Potsdam Hbf\nZug: RE 1\nAbfahrt: 09:30 Uhr\nAnkunft: 10:00 Uhr\nReisender: Klaus Weber\nKlasse: 2. Klasse\nSitzplatz: Rollstuhlplatz, Wagen 2\nBarrierefreiheit: Aufzug am Gleis verfügbar, barrierefreier Zugang\n\nBuchungsreferenz: DB-2026-0628-KW\nPreis: 12,40 EUR\nStatus: Bestätigt"
+        },
+        "probe": {
+          "question": "Welche Buchungsreferenz hat das Ticket für Papa?",
+          "answer": "DB-2026-0628-KW"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit dispatch approved (BLUE-271) but shipping pending confirmation (Jun 3). Move deposit paid (UMW-2026-0606) (Jun 6). PayPal refund case PP-2026-0527-AY still pending investigation (Jun 9). Lease version 2.2 blocked by unsigned fire-safety report B-17 (Jun 15). Closed: Nordton invoice INV-2026-0603-NW paid via Visa ****4821 (Jun 3). Instructor Eva Richter paid 350,00 EUR (Jun 8). New: Move plan finalized with Britta for July 12 (Jun 18). Jonas confirmed for June 27 class (Jun 21). Brandschutz fee paid (NB-2026-0627-B17) but B-17 signature still missing (Jun 27). DB ticket booked for Klaus for June 29 (Jun 28)."
+  }
+}

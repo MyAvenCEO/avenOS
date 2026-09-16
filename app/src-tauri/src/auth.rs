@@ -55,6 +55,50 @@ struct PendingPasskeyAuthentication {
 struct NativeSession {
 	token: String,
 	user: AuthUser,
+	selected_environment_id: Option<String>,
+}
+
+#[derive(Clone)]
+pub(crate) struct CustomerSession {
+	pub token: String,
+	pub environment_id: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomerEnvironmentChoice {
+	id: String,
+	purchased_name: String,
+	role: String,
+	desired_state: String,
+	observed_state: String,
+	components: Vec<CustomerComponentChoice>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomerComponentChoice {
+	component_ref: String,
+	observed_state: String,
+}
+
+#[derive(Deserialize)]
+struct CustomerEnvironmentList {
+	environments: Vec<CustomerEnvironmentChoice>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomerEnvironmentSelection {
+	environments: Vec<CustomerEnvironmentChoice>,
+	selected_environment_id: Option<String>,
+}
+
+fn environment_ready(environment: &CustomerEnvironmentChoice) -> bool {
+	environment.role == "owner"
+		&& environment.desired_state == "ready"
+		&& environment.observed_state == "ready"
+		&& environment.components.iter().all(|component| component.observed_state == "ready")
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -663,10 +707,59 @@ pub(crate) fn session_token(state: &tauri::State<'_, AuthState>) -> Result<Strin
 		.ok_or_else(|| "No session is signed in.".to_string())
 }
 
-pub(crate) fn session_identity(state: &tauri::State<'_, AuthState>) -> Result<(String, String), String> {
-	state.0.lock().map_err(|_| "Authentication state is unavailable.".to_string())?
-		.session.as_ref().map(|session| (session.token.clone(), session.user.id.clone()))
-		.ok_or_else(|| "No session is signed in.".to_string())
+pub(crate) fn customer_session(state: &tauri::State<'_, AuthState>) -> Result<CustomerSession, String> {
+	Ok(customer_session_identity(state)?.0)
+}
+
+pub(crate) fn customer_session_identity(state: &tauri::State<'_, AuthState>) -> Result<(CustomerSession, String), String> {
+	let inner = state.0.lock().map_err(|_| "Authentication state is unavailable.".to_string())?;
+	let session = inner.session.as_ref().ok_or_else(|| "No session is signed in.".to_string())?;
+	let environment_id = session.selected_environment_id.clone()
+		.ok_or_else(|| "Select a customer environment before using customer data.".to_string())?;
+	Ok((CustomerSession { token: session.token.clone(), environment_id }, session.user.id.clone()))
+}
+
+fn customer_environment_list(token: String) -> Result<Vec<CustomerEnvironmentChoice>, String> {
+	let response = application_api_call(token, "GET", "/api/environments", None)?;
+	let list: CustomerEnvironmentList = serde_json::from_value(response)
+		.map_err(|error| format!("Invalid customer environment list: {error}"))?;
+	Ok(list.environments)
+}
+
+#[tauri::command]
+pub async fn auth_environments(state: tauri::State<'_, AuthState>) -> Result<CustomerEnvironmentSelection, String> {
+	let token = session_token(&state)?;
+	let lookup_token = token.clone();
+	let environments = tauri::async_runtime::spawn_blocking(move || customer_environment_list(lookup_token))
+		.await.map_err(|error| format!("Environment list task failed: {error}"))??;
+	let mut inner = state.0.lock().map_err(|_| "Authentication state is unavailable.".to_string())?;
+	let session = inner.session.as_mut().ok_or_else(|| "No session is signed in.".to_string())?;
+	if session.token != token { return Err("The signed-in session changed while listing environments.".to_string()); }
+	if session.selected_environment_id.as_ref().is_some_and(|id| !environments.iter().any(|environment| environment.id == *id && environment_ready(environment))) {
+		session.selected_environment_id = None;
+	}
+	if session.selected_environment_id.is_none() {
+		let ready = environments.iter().filter(|environment| environment_ready(environment)).collect::<Vec<_>>();
+		if ready.len() == 1 { session.selected_environment_id = Some(ready[0].id.clone()); }
+	}
+	Ok(CustomerEnvironmentSelection { environments, selected_environment_id: session.selected_environment_id.clone() })
+}
+
+#[tauri::command]
+pub async fn auth_environment_select(environment_id: String, state: tauri::State<'_, AuthState>) -> Result<CustomerEnvironmentSelection, String> {
+	if !valid_uuid(&environment_id) { return Err("The environment ID is invalid.".to_string()); }
+	let token = session_token(&state)?;
+	let lookup_token = token.clone();
+	let environments = tauri::async_runtime::spawn_blocking(move || customer_environment_list(lookup_token))
+		.await.map_err(|error| format!("Environment selection task failed: {error}"))??;
+	if !environments.iter().any(|environment| environment.id == environment_id && environment_ready(environment)) {
+		return Err("That customer environment is not available to this owner.".to_string());
+	}
+	let mut inner = state.0.lock().map_err(|_| "Authentication state is unavailable.".to_string())?;
+	let session = inner.session.as_mut().ok_or_else(|| "No session is signed in.".to_string())?;
+	if session.token != token { return Err("The signed-in session changed during selection.".to_string()); }
+	session.selected_environment_id = Some(environment_id.clone());
+	Ok(CustomerEnvironmentSelection { environments, selected_environment_id: Some(environment_id) })
 }
 
 /// Exchange the long-lived, revocable Better Auth session for a short-lived,
@@ -1107,6 +1200,7 @@ pub async fn auth_passkey_finish(
 	inner.session = Some(NativeSession {
 		token,
 		user: user.clone(),
+		selected_environment_id: None,
 	});
 	Ok(AuthStatus {
 		authenticated: true,
@@ -1165,6 +1259,7 @@ pub async fn auth_poll(state: tauri::State<'_, AuthState>) -> Result<PollAuthori
 			inner.session = Some(NativeSession {
 				token,
 				user: user.clone(),
+				selected_environment_id: None,
 			});
 			Ok(PollAuthorization {
 				status: "authenticated",

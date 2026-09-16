@@ -32,7 +32,7 @@ try {
 		'127.0.0.1::5432',
 		'--env',
 		'POSTGRES_PASSWORD=synthetic-email-proof',
-		'postgres:17-alpine'
+		'postgres:18-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2'
 	)
 	const port = docker('port', postgres, '5432/tcp').split(':').at(-1)
 	for (let attempt = 0; ; attempt++) {

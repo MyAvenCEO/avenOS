@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//avenOS//Synthetic Corpus//EN
+BEGIN:VEVENT
+UID:qwen-rowan-chen-8-4@synthetic.test
+DTSTAMP:20260427T180200Z
+DTSTART;TZID=Europe/London:20260427T100000
+DTEND;TZID=Europe/London:20260427T113000
+SUMMARY:Calendar: Migration Dry Run Review
+DESCRIPTION:Event: Migration Dry Run Review\nDate: 2026-04-27\nStart: 10:00\nEnd: 11:30\nPlace: Zoom (Link in invite)\nAttendees: Rowan Chen\, Lucía Ortega\, Sam Patel\nStatus: Confirmed\nNotes: Review RIO-588 test batch results. Sam to provide access logs. Lucía to confirm Spanish source file integrity. No production data exchange until DPA-42 v3.0 is signed.
+X-SYNTHETIC-TEST-RECORD:TRUE
+END:VEVENT
+END:VCALENDAR

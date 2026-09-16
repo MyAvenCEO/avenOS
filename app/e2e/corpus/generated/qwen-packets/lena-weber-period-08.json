@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-04-18",
+        "intentId": "lena-weber:cashflow",
+        "kind": "bank-statement",
+        "user": "Cashflow checken. Die PayPal-Rückerstattung für die Teller ist noch nicht da. Und die Rechnung von Eva muss raus.",
+        "assistant": "PayPal Case ist noch offen, Sara Lenz hat nachgefragt. Ich schick die Rechnung an Eva, damit sie das Geld vor dem 28. hat.",
+        "artifact": {
+          "title": "Kontoauszug Weber Keramik",
+          "from": "Sparkasse Berlin",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Konto: Weber Keramik Geschäftskonto ****4821\nZeitraum: 15.02.2026 - 24.02.2026\n\nBuchungen:\n18.02.2026 | SEPA-Lastschrift | Visa Business | -82,50 EUR\n20.02.2026 | Gutschrift | Stripe Payout | +120,00 EUR\n22.02.2026 | SEPA-Überweisung | Eva Richter | -350,00 EUR\n\nSaldo am Ende: 1.450,00 EUR\n\nHinweis: Die Rückerstattung für Fallreferenz PP-2026-0415-8892 (Amira Yilmaz) ist noch nicht verbucht."
+        },
+        "probe": {
+          "question": "Welche Fallreferenz hat die ausstehende PayPal-Rückerstattung?",
+          "answer": "PP-2026-0415-8892"
+        }
+      },
+      {
+        "date": "2026-04-21",
+        "intentId": "lena-weber:studio-lease",
+        "kind": "email",
+        "user": "Frau Becker, wegen Werkstatt-Mietvertrag und Brandschutz: Offene Klausel zu Abendkursen prüfen.",
+        "assistant": "Okay, Vermieterin um den Vertragsentwurf bitten ist notiert. Dann die fehlende Freigabe mit Paul und der Vermieterin klären.",
+        "artifact": {
+          "title": "RE: Mietvertrag Prenzlauer Berg - Version 2.2",
+          "from": "Frau Becker <f.becker@berlin-hausverwaltung.test>",
+          "to": "Lena Weber <lena@weber-keramik.test>",
+          "language": "de",
+          "body": "Sehr geehrte Frau Weber,\n\nwir haben die Klausel § 4.2 (Abendkurse) in Version 2.2 des Mietvertrags (Referenz BHV-2026-LEASE-045) angepasst. Die Freigabe für Abendkurse ist an die unterzeichnete Bestätigung des Brandschutzberichts B-17 durch Paul Neumann gebunden.\n\nBitte senden Sie das unterschriebene Dokument bis zum 30.04.2026 zurück, damit wir die Schlüsselübergabe für den 01.05.2026 terminieren können.\n\nMit freundlichen Grüßen\nFrau Becker\nBerlin Hausverwaltung"
+        },
+        "probe": {
+          "question": "Welche Vertragsversion muss für die Abendkurse unterschrieben werden?",
+          "answer": "Version 2.2"
+        }
+      },
+      {
+        "date": "2026-04-24",
+        "intentId": "lena-weber:bike",
+        "kind": "document",
+        "user": "Bei Rad und täglicher Arbeitsweg: Schlechtwetter-Route planen. Was ist jetzt dran?",
+        "assistant": "Erfasst. Als Nächstes den Werkstatttermin und die Pendelroute festhalten.",
+        "artifact": {
+          "title": "Umzugs-Fahrradroute Plan v1.1",
+          "from": "Lena Weber",
+          "to": null,
+          "language": "de",
+          "body": "Plan für die Fahrradfahrt zum neuen Studio am 05.05.2026\n\nStatus: Entwurf\nDatum: 24.04.2026\n\n1. Start: Alte Wohnung (Prenzlauer Berg)\n2. Route A (Empfohlen): Über den Volkspark Friedrichshain. Vorteil: Beleuchtet, breite Wege. Nachteil: Umweg 15 Min.\n3. Route B (Kürzer): Durch die Karl-Marx-Allee. Vorteil: Schnell. Nachteil: Schmal, dunkel bei Regen.\n\nEntscheidung: Route A bei Regen, Route B bei trockenem Wetter.\n\nNotiz: Bremsen sind neu (Radwerk Prenzlberg, 18.02.2026). Gutschein RW-2026-01-24-7788 wurde verrechnet."
+        },
+        "probe": {
+          "question": "Welche Route ist bei Regen empfohlen?",
+          "answer": "Route A"
+        }
+      },
+      {
+        "date": "2026-04-27",
+        "intentId": "lena-weber:classes",
+        "kind": "calendar",
+        "user": "Frühlingskurse und Dozentenplan: Samstagskurs auf freie Plätze prüfen. Bitte den Stand prüfen.",
+        "assistant": "Erfasst. Als Nächstes den Kursplan mit Eva und Jonas bestätigen.",
+        "artifact": {
+          "title": "Kalendereintrag: Samstagskurs Deckung",
+          "from": "Lena Weber",
+          "to": "Eva Richter; Jonas Beck",
+          "language": "de",
+          "body": "Event: Samstagskurs Deckung\nDatum: 2026-05-02\nStart: 10:00\nEnde: 14:00\nOrt: Weber Keramik Studio\nStatus: Bestätigt\nTeilnehmer: Lena Weber, Eva Richter\n\nNotiz: Eva übernimmt den Kurs am 02.05. Jonas ist verhindert. Kursliste: 8 Teilnehmer, 2 Plätze frei. Nordton Glasurpreis aktualisiert auf 4,65 EUR pro Kilo."
+        },
+        "probe": {
+          "question": "Wer übernimmt den Samstagskurs am 02.05.?",
+          "answer": "Eva Richter"
+        }
+      },
+      {
+        "date": "2026-04-28",
+        "intentId": "lena-weber:home-budget",
+        "kind": "todo",
+        "user": "Gemeinsame Ausgaben des Monats sortieren. Wie geht's bei Haushaltsbudget und Rücklage weiter?",
+        "assistant": "Der Punkt ist offen für die nächste Runde: die Rücklage mit dem tatsächlichen Kontostand abstimmen.",
+        "artifact": {
+          "title": "Aufgabe: Umzugspuffer neu berechnen",
+          "from": "Lena Weber",
+          "to": "Mira",
+          "language": "de",
+          "body": "Aufgabe: Umzugspuffer neu berechnen\nFälligkeitsdatum: 2026-04-30\nStatus: Offen\nZugehöriges Thema: Haushaltsbudget und Rücklage\n\nBeschreibung: Prüfen, ob die Rücklage nach den Ostsee-Kosten und der Miete noch über 2.000 Euro liegt. Wenn ja, Umzugskartons bestellen. Wenn nein, Sparplan anpassen.\n\nNotiz: Dauerauftrag Miete 850,00 EUR ist raus. Rücklage Stand 24.03.: 2.100,00 EUR."
+        },
+        "probe": {
+          "question": "Welcher Betrag muss in der Rücklage bleiben, um Kartons zu bestellen?",
+          "answer": "2.000 Euro"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit NT-SMP-2026-04 dispatch scheduled for Feb 10 (Apr 3). Fire safety report B-17 under review by Berlin Hausverwaltung (Apr 6). Nordton invoice NT-2026-04-09 issued for 60,57 EUR (Apr 9). Family weekend DB tickets booked for Apr 24 (DB-2026-03-21-9902) (Apr 12). PayPal refund case for Amira Yilmaz still pending investigation (Apr 15). Lease version 2.2 awaiting signature for evening classes (Apr 21). Move reserve balance check pending final April figures (Apr 28). Closed: Studio lease fire-safety fee paid (Mar 9). Klaus's clinic ticket booked for Mar 14 (Mar 12). Apartment viewing attended with Britta (Mar 17). Move reserve transfer completed (Mar 24). Lease signed and § 4.2 approved (Mar 27). DHL damage claim for Amira under review (CASE-2026-0328-DHL) (Mar 28)."
+  }
+}

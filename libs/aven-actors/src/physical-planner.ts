@@ -14,6 +14,10 @@ import type { ExecutionEnvironment } from './registry'
 
 export interface PhysicalPlanStep extends PlanStep {
 	target: AuthorizedActorTarget
+	/** Exact public values bound by a saved Skill; solver-created plans leave these empty. */
+	parameters?: Record<string, unknown>
+	/** Exact public factory configuration admitted for this step. */
+	configuration?: Record<string, unknown>
 }
 
 export interface PhysicalProgram extends Omit<AdHocProgram, 'steps'> {

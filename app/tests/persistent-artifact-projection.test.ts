@@ -91,3 +91,30 @@ describe('persistent intent artifact projection', () => {
 		expect(preserveLiveFileProjection(persisted, undefined, false)).toBe(persisted)
 	})
 })
+
+test('historical source discovery bounds concurrent reads and reports partial failures', async () => {
+	let running = 0,
+		peak = 0,
+		unavailable = 0
+	const records = Array.from({ length: 40 }, (_, n) => [
+		artifact(`f${n}`, `p${n}`, 'file', 'core.file'),
+		artifact(`i${n}`, `p${n}`, 'intent', 'intent.declaration')
+	]).flat()
+	const sources = await discoverIntentSources(
+		records,
+		async (id) => {
+			running++
+			peak = Math.max(peak, running)
+			await new Promise((r) => setTimeout(r, 1))
+			running--
+			if (id === 'i3') throw Error('unavailable')
+			return { payload: { intentId: id } }
+		},
+		() => {
+			unavailable++
+		}
+	)
+	expect(peak).toBe(6)
+	expect(sources.size).toBe(39)
+	expect(unavailable).toBe(1)
+})

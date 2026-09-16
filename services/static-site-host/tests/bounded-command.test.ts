@@ -13,16 +13,22 @@ describe('repository resource budgets', () => {
 	test('rejects links, submodules and excessive path depth', () => {
 		expect(() => validateArtifactTree(row(1, 'dist/link', '120000'), 1, 12)).toThrow(/regular/)
 		expect(() => validateArtifactTree(row(1, 'dist/submodule', '160000'), 1, 12)).toThrow(/regular/)
-		expect(() => validateArtifactTree(row(1, 'dist/' + 'a/'.repeat(21) + 'file'), 1, 12)).toThrow(/path/)
+		expect(() => validateArtifactTree(row(1, 'dist/' + 'a/'.repeat(21) + 'file'), 1, 12)).toThrow(
+			/path/
+		)
 	})
 	test('terminates a stalled child on its deadline', async () => {
 		const start = Date.now()
-		await expect(boundedCommand([process.execPath, '-e', 'setInterval(() => {}, 1000)'], { timeoutMs: 100 }))
-			.rejects.toThrow(/timed out/)
+		await expect(
+			boundedCommand([process.execPath, '-e', 'setInterval(() => {}, 1000)'], { timeoutMs: 100 })
+		).rejects.toThrow(/timed out/)
 		expect(Date.now() - start).toBeLessThan(2000)
 	})
 	test('bounds captured output without reporting it as an error', async () => {
-		await expect(boundedCommand([process.execPath, '-e', "process.stdout.write('fixture'.repeat(1000))"],
-			{ maxOutputBytes: 100 })).rejects.toThrow(/output budget/)
+		await expect(
+			boundedCommand([process.execPath, '-e', "process.stdout.write('fixture'.repeat(1000))"], {
+				maxOutputBytes: 100
+			})
+		).rejects.toThrow(/output budget/)
 	})
 })

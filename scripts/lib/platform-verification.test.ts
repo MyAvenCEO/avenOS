@@ -59,7 +59,7 @@ test('CI and release require the same full verification without deployment crede
 			if (step.if !== undefined) {
 				// Only failure diagnostics are conditional; verification cannot be skipped.
 				expect(step.if).toBe('failure()')
-				expect(step.uses).toBe('actions/upload-artifact@v4')
+				expect(step.uses).toBe('actions/upload-artifact@v7')
 				expect(step.with?.name).toBe('diagnostic-linux-package-check')
 				expect(step.with?.path).toBe('dist/client-release/*.AppImage\ndist/client-release/*.deb\n')
 			}
@@ -88,7 +88,7 @@ test('CI and release require the same full verification without deployment crede
 		expect(commands.filter((c) => c === required)).toHaveLength(1)
 	const publication = release.jobs.build.steps
 	const scan = publication.findIndex((step: Step) => step.run?.includes('scan-container-os.sh'))
-	const manifest = publication.findIndex((step: Step) => step.uses === 'actions/upload-artifact@v4')
+	const manifest = publication.findIndex((step: Step) => step.uses === 'actions/upload-artifact@v7')
 	expect(scan).toBeGreaterThan(-1)
 	expect(scan).toBeLessThan(manifest)
 	expect(publication[scan].run).toContain("jq -r '.images[]' release.json")

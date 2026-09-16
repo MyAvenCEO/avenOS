@@ -927,6 +927,7 @@ export interface ArtifactEvidence {
 }
 
 export interface ArtifactBrowseResult {
+	nextCursor?: string | null
 	storeEpoch: string
 	artifacts: BrowsedArtifact[]
 	truncated: boolean
@@ -1095,6 +1096,15 @@ export class ArtifactFileService {
 		return this.#client(databaseName, scopeId, routingGeneration).queryArtifacts(scopeId, query)
 	}
 
+	async library(
+		databaseName: string,
+		scopeId: string,
+		query: Record<string, string | number | undefined>,
+		routingGeneration = 1
+	) {
+		return this.#client(databaseName, scopeId, routingGeneration).library(scopeId, query)
+	}
+
 	async content(
 		databaseName: string,
 		scopeId: string,
@@ -1149,20 +1159,60 @@ export class ArtifactFileService {
 		}
 	}
 
+	async browsePage(
+		databaseName: string,
+		scopeId: string,
+		routingGeneration = 1,
+		cursor?: string
+	): Promise<ArtifactBrowseResult> {
+		const binding = createHash('sha256')
+			.update(JSON.stringify([databaseName, scopeId, routingGeneration]))
+			.digest('hex')
+		let after = 0,
+			epoch: string | undefined
+		if (cursor) {
+			try {
+				if (cursor.length > 2048) throw Error()
+				const value = JSON.parse(Buffer.from(cursor, 'base64url').toString())
+				if (
+					value.binding !== binding ||
+					!Number.isSafeInteger(value.after) ||
+					value.after < 0 ||
+					typeof value.epoch !== 'string'
+				)
+					throw Error()
+				after = value.after
+				epoch = value.epoch
+			} catch {
+				throw new AppError(400, 'INVALID_CURSOR', 'Restart source discovery with a fresh cursor.')
+			}
+		}
+		const result = await this.#browse(databaseName, scopeId, routingGeneration, {
+			after,
+			epoch,
+			binding
+		})
+		return result
+	}
+
 	async #browse(
 		databaseName: string,
 		scopeId: string,
-		routingGeneration: number
+		routingGeneration: number,
+		paging?: { after: number; epoch?: string; binding: string }
 	): Promise<ArtifactBrowseResult> {
 		const client = this.#client(databaseName, scopeId, routingGeneration)
 		const context = record(await client.context(), 'context')
 		const storeEpoch = stringField(context, 'storeEpoch', 'context')
+		if (paging?.epoch && paging.epoch !== storeEpoch)
+			throw new AppError(409, 'STALE_CURSOR', 'Artifact Store was reset. Restart discovery.')
 		const artifacts: BrowsedArtifact[] = []
-		let afterSequence = 0
+		let afterSequence = paging?.after ?? 0
+		let pageNext: number | null = null
 		let publicationsRead = 0
 		let truncated = false
-		const pageLimit = 1_000
-		const maximumPublications = 10_000
+		const pageLimit = paging ? 50 : 1_000
+		const maximumPublications = paging ? 50 : 10_000
 		const maximumArtifacts = 2_000
 
 		while (publicationsRead < maximumPublications) {
@@ -1203,18 +1253,22 @@ export class ArtifactFileService {
 					})
 				}
 			}
-			if (artifacts.length > maximumArtifacts) {
+			if (!paging && artifacts.length > maximumArtifacts) {
 				artifacts.splice(0, artifacts.length - maximumArtifacts)
 			}
 			publicationsRead += items.length
 			const next = page.nextAfterSequence
 			if (typeof next !== 'number' || next <= afterSequence || items.length === 0) break
 			afterSequence = next
+			if (paging) {
+				pageNext = next
+				break
+			}
 			if (publicationsRead >= maximumPublications) truncated = true
 		}
 
 		const representativeByRun = new Map<string, BrowsedArtifact>()
-		for (const artifact of artifacts) {
+		for (const artifact of paging ? [] : artifacts) {
 			if (artifact.producerRunId && !representativeByRun.has(artifact.producerRunId)) {
 				representativeByRun.set(artifact.producerRunId, artifact)
 			}
@@ -1243,7 +1297,21 @@ export class ArtifactFileService {
 				: []
 		}
 
-		return { storeEpoch, artifacts: artifacts.reverse(), truncated }
+		return {
+			storeEpoch,
+			artifacts: artifacts.reverse(),
+			truncated,
+			...(paging
+				? {
+						nextCursor:
+							pageNext === null
+								? null
+								: Buffer.from(
+										JSON.stringify({ binding: paging.binding, epoch: storeEpoch, after: pageNext })
+									).toString('base64url')
+					}
+				: {})
+		}
 	}
 
 	/**

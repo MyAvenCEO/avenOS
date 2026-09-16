@@ -6,6 +6,7 @@ import {
 	cancelClientDocument,
 	retryClientDocument
 } from '$lib/artifacts/client-document-processing'
+import { loadPersistentIntents, persistentIntentPages } from '$lib/artifacts/ingest.svelte'
 import '@xyflow/svelte/dist/style.css'
 import AvenVibeEngine from '$lib/actors/AvenVibeEngine.svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
@@ -591,7 +592,7 @@ const DOT: Record<string, string> = {
 			<button
 				type="button"
 				onclick={() => {
-					intents.selectedId = intent.id
+					intents.select(intent.id)
 					preview = null
 					skillView = null
 					shell.detail = true
@@ -667,7 +668,7 @@ const DOT: Record<string, string> = {
 				<button
 					type="button"
 					onclick={() => {
-						intents.selectedId = intent.id
+						intents.select(intent.id)
 						preview = null
 						skillView = null
 						shell.detail = true
@@ -691,6 +692,16 @@ const DOT: Record<string, string> = {
 					</div>
 				</button>
 			{/each}
+		{/if}
+		{#if isTauri() && persistentIntentPages.hasMore}
+			<button
+				type="button"
+				disabled={persistentIntentPages.loading}
+				onclick={() => loadPersistentIntents(true).catch(error => { console.error('Could not load older intents', error) })}
+				class="rounded-full border border-foreground/10 px-3 py-2 text-xs text-foreground/70 disabled:opacity-50"
+			>
+				{persistentIntentPages.loading ? 'Wird geladen…' : 'Ältere Vorgänge laden'}
+			</button>
 		{/if}
 	</aside>
 

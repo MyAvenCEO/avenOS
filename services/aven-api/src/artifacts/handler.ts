@@ -1,3 +1,4 @@
+import { ArtifactStoreProblem } from '@avenos/artifact-store'
 import type { TenantGrantClaims } from '@avenos/aven-customer-contracts'
 import type { IdentityClaims } from '@avenos/aven-identity'
 import { BodyLimitError } from '@avenos/http-boundary'
@@ -65,6 +66,69 @@ export class ArtifactHandler {
 	): Promise<Response> {
 		try {
 			const segments = suffix.replace(/^\//, '').replace(/\/$/, '').split('/').filter(Boolean)
+			if (segments.length === 1 && segments[0] === 'inventory' && request.method === 'GET') {
+				const cursor = z
+					.string()
+					.max(2048)
+					.optional()
+					.parse(new URL(request.url).searchParams.get('cursor') ?? undefined)
+				return json(
+					200,
+					await this.service.browsePage(
+						tenant.databaseName,
+						tenant.environmentId,
+						tenant.routingGeneration,
+						cursor
+					)
+				)
+			}
+			if (segments[0] === 'library' && segments.length === 1 && request.method === 'GET') {
+				const query = z
+					.object({
+						collection: z.enum([
+							'documents',
+							'invoices',
+							'statements',
+							'transactions',
+							'line-items'
+						]),
+						category: z
+							.enum([
+								'all',
+								'email',
+								'invoice',
+								'credit-note',
+								'receipt',
+								'statement',
+								'voucher',
+								'contract',
+								'contract-summary',
+								'transport-ticket',
+								'booking-confirmation',
+								'delivery-notification',
+								'other',
+								'unknown'
+							])
+							.optional(),
+						search: z.string().max(512).optional(),
+						sourceId: uuid.optional(),
+						sort: z.string().min(1).max(64).optional(),
+						direction: z.enum(['asc', 'desc']).optional(),
+						after: z.string().max(4096).optional(),
+						limit: z.coerce.number().int().min(1).max(100).optional()
+					})
+					.strict()
+					.parse(Object.fromEntries(new URL(request.url).searchParams))
+				return json(
+					200,
+					await this.service.library(
+						tenant.databaseName,
+						tenant.environmentId,
+						query,
+						tenant.routingGeneration
+					)
+				)
+			}
 			if (segments[0] === 'query' && segments.length === 1 && request.method === 'GET') {
 				const query = z
 					.object({
@@ -207,6 +271,8 @@ export class ArtifactHandler {
 			}
 			return json(404, { code: 'ROUTE_NOT_FOUND' })
 		} catch (error) {
+			if (error instanceof ArtifactStoreProblem && error.status === 404)
+				return json(404, { code: 'ARTIFACT_NOT_FOUND', message: 'Artifact not found.' })
 			if (error instanceof BodyLimitError) return bodyLimitResponse(error)
 			if (error instanceof AppError)
 				return json(error.status, { code: error.code, message: error.message })

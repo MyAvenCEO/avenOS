@@ -260,9 +260,9 @@ async function tauriAcceptance(
 		let intentId = ''
 		const intentDeadline = Date.now() + 30_000
 		while (Date.now() < intentDeadline) {
-			const intents = (await json(
-				await fetch(intentBase, { headers: authorizedHeaders })
-			)) as Array<{
+			const intents = (
+				await json(await fetch(`${intentBase}/search`, { headers: authorizedHeaders }))
+			).intents as Array<{
 				id: string
 				title: string
 			}>
@@ -294,12 +294,30 @@ async function tauriAcceptance(
 			expect(content.status).toBe(200)
 			expect(await content.text()).toBe(expected)
 		}
+		// Exercise authenticated source extraction and the native read bound in the signed-in shell.
+		await session.click(await session.find('[data-testid="e2e-check-source"]'))
+		await expect
+			.poll(
+				async () => {
+					const result = await session.execute<string>(
+						`return document.querySelector('[data-testid="e2e-source-state"]').getAttribute('data-result')`
+					)
+					return result ? JSON.parse(result) : null
+				},
+				{ timeout: 30_000 }
+			)
+			.toMatchObject({
+				scope: expect.stringMatching(/^[a-f0-9]{64}$/),
+				content: fixture,
+				complete: true,
+				bounded: true
+			})
 		const localIntentId = intentId
 		const serverIntentDeadline = Date.now() + 30_000
 		while (Date.now() < serverIntentDeadline) {
-			const intents = (await json(
-				await fetch(intentBase, { headers: authorizedHeaders })
-			)) as Array<{ id: string; title: string }>
+			const intents = (
+				await json(await fetch(`${intentBase}/search`, { headers: authorizedHeaders }))
+			).intents as Array<{ id: string; title: string }>
 			intentId =
 				intents.find((intent) => intent.title === 'e2e-document.txt' && intent.id !== localIntentId)
 					?.id ?? ''
@@ -340,6 +358,26 @@ async function tauriAcceptance(
 		if (!typedExchangePersisted)
 			throw new Error('Tauri chat exchange was not persisted to the customer intent')
 
+		await session.click(await session.find('[data-testid="e2e-check-messages"]'))
+		await expect
+			.poll(
+				async () => {
+					const value = await session.execute<string>(
+						`return document.querySelector('[data-testid="e2e-message-state"]').getAttribute('data-result')`
+					)
+					return value ? JSON.parse(value) : null
+				},
+				{ timeout: 30000 }
+			)
+			.toMatchObject({
+				content: 'Hello from Tauri E2E',
+				sourceId: expect.stringMatching(/^[a-f0-9-]{36}$/),
+				createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+				evidenceAccepted: true,
+				hasGenericSend: false,
+				lookupNames: ['workspace_read', 'workspace_search']
+			})
+
 		const duplex = silentDuplexFixture()
 		await session.execute(
 			"window.dispatchEvent(new KeyboardEvent('keydown', { key: 'S', bubbles: true }))"
@@ -350,6 +388,7 @@ async function tauriAcceptance(
 		await session.type(narrationComposer, 'tart E2E narrated answer')
 		await session.click(await session.find('button[aria-label="Senden"]'))
 		await session.waitForBodyText('E2E narration begins.')
+		expect(await session.bodyText()).not.toContain('E2E narration tail must be cancelled.')
 		await session.click(await session.find('[data-testid="e2e-begin-narration"]'))
 		await waitForE2eSpeaking(session, true)
 		await session.click(await session.find('[data-testid="e2e-interrupt-narration"]'))
@@ -709,6 +748,111 @@ async function tauriReconciliation(
 		}
 	}
 	return remoteCandidateId
+}
+
+async function tauriEnvironmentSwitchAcceptance(
+	page: import('@playwright/test').Page,
+	first: { id: string; priorSources: string[] },
+	second: { id: string },
+	authorizedHeaders: Record<string, string>
+): Promise<void> {
+	const session = await TauriSession.launch(tauriApplication, tauriDriver)
+	async function waitForSelectedEnvironment(id: string): Promise<void> {
+		await session.findEventually(
+			`[data-testid="environment-choice-${id}"][aria-current="page"]`,
+			30_000
+		)
+	}
+	async function workspaceScope(): Promise<{ scopeId: string; searchScope: string }> {
+		await session.execute(`
+			window.__avenE2EStudioScope = { status: 'pending' };
+			Promise.all([
+				window.__TAURI_INTERNALS__.invoke('studio_request', { command: { operation: 'state', data: {} } }),
+				window.__TAURI_INTERNALS__.invoke('artifact_search_scope'),
+				window.__TAURI_INTERNALS__.invoke('intent_search', { input: { limit: 1 } }),
+				window.__TAURI_INTERNALS__.invoke('artifact_inventory_page', { cursor: null }),
+				window.__TAURI_INTERNALS__.invoke('artifact_library', { query: { collection: 'documents', limit: 1 } })
+			])
+				.then(([value, searchScope]) => window.__avenE2EStudioScope = { status: 'done', scopeId: value.scopeId, searchScope })
+				.catch(error => window.__avenE2EStudioScope = { status: 'error', error: String(error) });
+			return true;
+		`)
+		const deadline = Date.now() + 30_000
+		while (Date.now() < deadline) {
+			const result = await session.execute<{
+				status: string
+				scopeId?: string
+				searchScope?: string
+				error?: string
+			} | null>('return window.__avenE2EStudioScope || null')
+			if (result?.status === 'done' && result.scopeId && result.searchScope)
+				return { scopeId: result.scopeId, searchScope: result.searchScope }
+			if (result?.status === 'error')
+				throw new Error(`Studio state request failed: ${result.error}`)
+			await new Promise((resolve) => setTimeout(resolve, 200))
+		}
+		throw new Error('Studio state did not complete after environment selection')
+	}
+	try {
+		await session.waitForBodyText('GERÄTECODE')
+		const code = (await session.bodyText()).match(/\b([A-Z0-9]{4})-([A-Z0-9]{4})\b/)
+		if (!code) throw new Error('Tauri switch proof displayed no device code')
+		await page.goto(`${identityBrowser}/device?user_code=${code[1]}${code[2]}`)
+		await expect(page.getByRole('button', { name: 'Authorize' })).toBeVisible()
+		await page.getByRole('button', { name: 'Authorize' }).click()
+		await session.click(
+			await session.findEventually(`[data-testid="environment-choice-${first.id}"]`)
+		)
+		await waitForSelectedEnvironment(first.id)
+		const firstScope = await workspaceScope()
+		expect(firstScope.scopeId).toBe(first.id)
+		await session.click(
+			await session.findEventually(`[data-testid="environment-choice-${second.id}"]`)
+		)
+		await waitForSelectedEnvironment(second.id)
+		const secondScope = await workspaceScope()
+		expect(secondScope.scopeId).toBe(second.id)
+		expect(secondScope.searchScope).not.toBe(firstScope.searchScope)
+
+		const dashboard = new URL(await session.url())
+		dashboard.pathname = '/dashboard'
+		dashboard.searchParams.set('e2eFixture', tauriFixture)
+		dashboard.searchParams.set('e2ePlacement', 'local')
+		await session.navigate(dashboard.toString())
+		await session.click(await session.findEventually('[data-testid="e2e-import-fixture"]'))
+		const secondBase = `${api}/api/environments/${second.id}/artifacts`
+		const secondDocument = await waitForDocumentGraph(secondBase, authorizedHeaders, new Set())
+		expect(
+			(
+				await fetch(`${api}/api/environments/${first.id}/artifacts/${secondDocument.sourceId}`, {
+					headers: authorizedHeaders
+				})
+			).status
+		).toBe(404)
+
+		await session.click(
+			await session.findEventually(`[data-testid="environment-choice-${first.id}"]`)
+		)
+		await waitForSelectedEnvironment(first.id)
+		expect(await workspaceScope()).toEqual(firstScope)
+		const firstBase = `${api}/api/environments/${first.id}/artifacts`
+		const firstBrowse = (await json(await fetch(firstBase, { headers: authorizedHeaders }))) as {
+			artifacts: BrowsedArtifact[]
+		}
+		for (const sourceId of first.priorSources) {
+			expect(firstBrowse.artifacts.some((artifact) => artifact.artifactId === sourceId)).toBe(true)
+			expect(
+				(
+					await fetch(`${api}/api/environments/${second.id}/artifacts/${sourceId}`, {
+						headers: authorizedHeaders
+					})
+				).status
+			).toBe(404)
+		}
+		expect(await session.bodyText()).not.toContain('Too many requests')
+	} finally {
+		await session.close()
+	}
 }
 
 async function json(response: Response) {
@@ -1083,19 +1227,6 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 	await secondPage.getByRole('button', { name: 'Continue with passkey' }).click()
 	await expect(secondPage.getByRole('heading', { name: 'Your account' })).toBeVisible()
 
-	const secondName = `${name}-other`.slice(0, 28)
-	const secondNameHold = await fetch(`${checkout}/api/names/hold`, {
-		method: 'POST',
-		headers: {
-			'content-type': 'application/json',
-			origin: checkoutBrowser,
-			'x-proof-of-work': await proofOfWork('secure-name')
-		},
-		body: JSON.stringify({ name: secondName, email, tier: 'aven-name' })
-	})
-	expect(secondNameHold.status).toBe(409)
-	expect(await secondNameHold.json()).toMatchObject({ code: 'NAME_LIMIT_REACHED' })
-
 	const sessionToken = await deviceSession(secondPage)
 	const tokenBody = (await json(
 		await fetch(`${identity}/api/auth/token`, {
@@ -1123,17 +1254,20 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 	}
 	const llmModels = await fetch(`${api}/api/llm/models`, { headers: authorizedHeaders })
 	expect(llmModels.status).toBe(200)
+	const maxParallelism = Number(process.env.E2E_LLM_MAX_PARALLELISM || '5')
 	expect(await llmModels.json()).toEqual({
 		models: [
 			{
 				id: 'deepseek/deepseek-v4-flash-0731',
 				label: 'E2E Chat',
-				capabilities: ['streaming', 'text-generation', 'tool-calling']
+				capabilities: ['streaming', 'text-generation', 'tool-calling'],
+				maxParallelism
 			},
 			{
 				id: 'e2e/document',
 				label: 'E2E Documents',
-				capabilities: ['structured-output', 'text-generation', 'vision']
+				capabilities: ['structured-output', 'text-generation', 'vision'],
+				maxParallelism
 			}
 		]
 	})
@@ -1192,21 +1326,22 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 	}
 	if (!environment) throw new Error('customer environment did not reconcile')
 	const tauri = await tauriAcceptance(secondPage, environment.id, authorizedHeaders)
-	const secondEntitlement = await fetch(`${api}/internal/v1/customer-entitlement-events`, {
+	const secondName = `${name}-other`.slice(0, 28)
+	const secondNameHold = await fetch(`${checkout}/api/names/hold`, {
 		method: 'POST',
 		headers: {
-			authorization: 'Bearer customer-entitlement-token-for-e2e',
-			'content-type': 'application/json'
+			'content-type': 'application/json',
+			origin: checkoutBrowser,
+			'x-proof-of-work': await proofOfWork('secure-name')
 		},
-		body: JSON.stringify({
-			eventId: crypto.randomUUID(),
-			eventType: 'purchase_granted',
-			subjectId: claims.sub,
-			purchasedName: `${name}-second`,
-			occurredAt: new Date().toISOString()
-		})
+		body: JSON.stringify({ name: secondName, email, tier: 'aven-name' })
 	})
-	expect(secondEntitlement.status).toBe(201)
+	expect(secondNameHold.status).toBe(201)
+	const secondClaimMail = await waitForMail(new RegExp(`Checkout link for ${secondName}`))
+	await page.goto(linkFrom(secondClaimMail, new URL(checkoutBrowser).host))
+	await expect(page.getByText(`${secondName}.aven.ceo`)).toBeVisible()
+	await page.getByRole('button', { name: 'Pay' }).click()
+	await expect(page).toHaveURL(/\/purchase\/success/)
 	let secondEnvironment: typeof environment | undefined
 	const secondEnvironmentDeadline = Date.now() + 60_000
 	while (Date.now() < secondEnvironmentDeadline) {
@@ -1223,6 +1358,15 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 		await new Promise((resolve) => setTimeout(resolve, 250))
 	}
 	if (!secondEnvironment) throw new Error('second customer environment did not reconcile')
+	await tauriEnvironmentSwitchAcceptance(
+		secondPage,
+		{
+			id: environment.id,
+			priorSources: [tauri.sourceArtifactId, tauri.serverSourceArtifactId]
+		},
+		{ id: secondEnvironment.id },
+		authorizedHeaders
+	)
 
 	const intentBase = `${api}/api/environments/${environment.id}/intents`
 	const targetIntentId = crypto.randomUUID()
@@ -1248,11 +1392,13 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 			})
 		).status
 	).toBe(201)
-	const firstList = (await json(await fetch(intentBase, { headers: authorizedHeaders }))) as {
+	const firstList = (
+		await json(await fetch(`${intentBase}/search`, { headers: authorizedHeaders }))
+	).intents as {
 		id: string
 	}[]
 	expect(firstList.map((intent) => intent.id)).not.toContain(secondIntentId)
-	// The same still-valid identity token must obey current database membership.
+	// The same still-valid identity token must obey the current owner-only WIP policy.
 	const membershipDatabase = new pg.Pool({
 		connectionString: databaseUrl.replace(/\/postgres$/, '/aven_api'),
 		max: 1
@@ -1262,7 +1408,7 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 			'UPDATE customer_environment_memberships SET role=$1 WHERE environment_id=$2 AND subject_id=$3',
 			['member', environment.id, claims.sub]
 		)
-		expect((await fetch(intentBase, { headers: authorizedHeaders })).status).toBe(200)
+		expect((await fetch(`${intentBase}/search`, { headers: authorizedHeaders })).status).toBe(404)
 		expect(
 			(
 				await fetch(`${intentBase}/${targetIntentId}`, {
@@ -1270,19 +1416,19 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 					headers: authorizedHeaders
 				})
 			).status
-		).toBe(403)
+		).toBe(404)
 		expect(
 			(await fetch(`${intentBase}/${targetIntentId}`, { headers: authorizedHeaders })).status
-		).toBe(200)
+		).toBe(404)
 		await membershipDatabase.query(
 			'DELETE FROM customer_environment_memberships WHERE environment_id=$1 AND subject_id=$2',
 			[environment.id, claims.sub]
 		)
-		expect((await fetch(intentBase, { headers: authorizedHeaders })).status).toBe(404)
+		expect((await fetch(`${intentBase}/search`, { headers: authorizedHeaders })).status).toBe(404)
 		// Membership in the other environment is unaffected.
 		expect(
 			(
-				await fetch(`${api}/api/environments/${secondEnvironment.id}/intents`, {
+				await fetch(`${api}/api/environments/${secondEnvironment.id}/intents/search`, {
 					headers: authorizedHeaders
 				})
 			).status
@@ -1295,7 +1441,7 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 		)
 		await membershipDatabase.end()
 	}
-	expect((await fetch(intentBase, { headers: authorizedHeaders })).status).toBe(200)
+	expect((await fetch(`${intentBase}/search`, { headers: authorizedHeaders })).status).toBe(200)
 	const voiceFixture = silentVoiceFixture()
 	const anonymousSpeaker = {
 		session_id: voiceFixture.session_id,
@@ -1600,7 +1746,7 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 			expect(
 				(await secondCustomer.query('SELECT count(*)::int AS count FROM aven_intents.intents'))
 					.rows[0].count
-			).toBe(1)
+			).toBe(2)
 		} finally {
 			await secondCustomer.end()
 		}

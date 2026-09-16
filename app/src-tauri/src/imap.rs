@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tauri::Manager;
 
-use crate::auth::{api_endpoint, session_identity, session_token, AuthState};
+use crate::auth::{api_endpoint, customer_session_identity, AuthState, CustomerSession};
 
 const CONNECTOR: &str = include_str!("../../../prototypes/imap-pdf/imap_pdf.py");
 static RUNNING: AtomicBool = AtomicBool::new(false);
@@ -22,15 +22,19 @@ fn account_scope(user_id: &str) -> String {
     )
 }
 
+fn workspace_scope(user_id: &str, environment_id: &str) -> String {
+    format!("{}-{environment_id}", account_scope(user_id))
+}
+
 pub(crate) fn session_for_scope(
     state: &tauri::State<'_, AuthState>,
     scope: Option<&str>,
-) -> Result<String, String> {
-    let (session, user_id) = session_identity(state)?;
-    if scope.is_some_and(|expected| expected != account_scope(&user_id)) {
-        return Err("Your Aven account changed. Scan your mailbox again before importing.".into());
+) -> Result<CustomerSession, String> {
+    let (customer, user_id) = customer_session_identity(state)?;
+    if scope.is_some_and(|expected| expected != workspace_scope(&user_id, &customer.environment_id)) {
+        return Err("Your Aven account or environment changed. Scan your mailbox again before importing.".into());
     }
-    Ok(session)
+    Ok(customer)
 }
 
 #[derive(Deserialize, Serialize)]
@@ -155,8 +159,8 @@ fn execute(request: EmailRequest, output: &Path) -> Result<serde_json::Value, St
 
 #[tauri::command]
 pub fn imap_account_scope(state: tauri::State<'_, AuthState>) -> Result<String, String> {
-    let (_, user_id) = session_identity(&state)?;
-    Ok(account_scope(&user_id))
+    let (customer, user_id) = customer_session_identity(&state)?;
+    Ok(workspace_scope(&user_id, &customer.environment_id))
 }
 
 #[tauri::command]
@@ -168,15 +172,15 @@ pub async fn imap_scan(
     if cfg!(any(target_os = "android", target_os = "ios")) {
         return Err("Email import is available in the Linux and macOS desktop prototype.".into());
     }
-    let (session, user_id) = session_identity(&state)?;
-    // Stable per-account and deployment cache; credentials are never an identity key.
-    let scope = account_scope(&user_id);
+    let (customer, user_id) = customer_session_identity(&state)?;
+    // Cache snapshots for the selected customer environment; credentials are never a scope key.
+    let scope = workspace_scope(&user_id, &customer.environment_id);
     if request
         .expected_scope
         .as_ref()
         .is_some_and(|expected| expected != &scope)
     {
-        return Err("Your Aven account changed. Start a new mailbox import.".into());
+        return Err("Your Aven account or environment changed. Start a new mailbox import.".into());
     }
     let output = app
         .path()
@@ -194,8 +198,9 @@ pub async fn imap_scan(
     })
     .await
     .map_err(|_| "Email scan was interrupted.")??;
-    if session_token(&state)? != session {
-        return Err("Your Aven session changed. Connect to the mailbox again.".into());
+    let (current, _) = customer_session_identity(&state)?;
+    if current.token != customer.token || current.environment_id != customer.environment_id {
+        return Err("Your Aven session or environment changed. Connect to the mailbox again.".into());
     }
     result["scope"] = scope.into();
     Ok(result)
@@ -241,5 +246,13 @@ mod tests {
         assert_eq!(value["attachments"].as_array().unwrap().len(), 2);
         assert!(value["issues"].as_array().unwrap().is_empty());
         std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn mailbox_cache_and_import_scope_are_separate_for_each_customer_environment() {
+        let first = workspace_scope("one-subject", "00000000-0000-4000-8000-000000000001");
+        let second = workspace_scope("one-subject", "00000000-0000-4000-8000-000000000002");
+        assert_ne!(first, second);
+        assert!(first.starts_with(&account_scope("one-subject")));
     }
 }

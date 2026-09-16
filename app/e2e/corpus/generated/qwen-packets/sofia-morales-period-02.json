@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-01-18",
+        "intentId": "sofia-morales:porto-visit",
+        "kind": "transport-ticket",
+        "user": "Tomás, ya tengo los billetes para Oporto. Renfe Valencia-Madrid y luego bus a Valença + Celta a Porto. ¿Confirmas que te quedas con Nico del 20 al 23? Necesito saber si pillo el tren de las 7:30.",
+        "assistant": "Vale, me quedo con Nico esos días. Confirma la hora exacta de llegada a Porto para organizar la recogida de Beatriz. Y avisa a mamá que ese finde no la llevo al médico.",
+        "artifact": {
+          "title": "Confirmación de reserva Renfe - Trayecto Valencia-Madrid",
+          "from": "Renfe",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Estimada Sofía Morales,\n\nAdjuntamos su billete electrónico para el trayecto Valencia Joaquín Sorolla - Madrid Atocha.\n\nOperador: Renfe\nViajero: Sofía Morales\nFecha de viaje: 20 de enero de 2026\nHora de salida: 07:30\nDuración: 1h 30min\nTarifa: 45,00 EUR\nClase: Turista\nAsiento: 12A (Ventanilla)\nReferencia de reserva: RNF-8821-XK\n\nNota: Este billete cubre únicamente el tramo doméstico. El trayecto posterior a Porto requiere conexión independiente (Bus Vigo-Valença + CP Celta)."
+        },
+        "probe": {
+          "question": "¿A qué hora sale el tren de Valencia?",
+          "answer": "Hora de salida: 07:30"
+        }
+      },
+      {
+        "date": "2026-01-21",
+        "intentId": "sofia-morales:running",
+        "kind": "event-ticket",
+        "user": "Inés, mira esto. Me he apuntado a la carrera popular del barrio para hacer series. Es el domingo 25. ¿Te apuntas? Así no hago la tirada larga sola y luego vamos a desayunar.",
+        "assistant": "Uy, el domingo tengo el turno de la abuela pero si es por la mañana temprano me apunto. ¿Cuánto cuesta? Y avísame si hay que llevar dorsal impreso.",
+        "artifact": {
+          "title": "Entrada Carrera Popular Barrio del Carmen",
+          "from": "Ayuntamiento de Valencia",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Confirmación de inscripción\n\nEvento: Carrera Popular Barrio del Carmen\nLugar: Salida desde Plaza de la Virgen\nTitular: Sofía Morales\nFecha y hora: 25 de enero de 2026, 09:00\nCategoría: 5K Popular\nPrecio: 12,00 EUR\nReferencia de ticket: CPV-2026-0991\n\nInstrucciones: Presentar este código QR en la bolsa de salida. Recogida de dorsales el sábado 24 de 10:00 a 14:00 en el pabellón municipal."
+        },
+        "probe": {
+          "question": "¿Cuánto cuesta la inscripción?",
+          "answer": "Precio: 12,00 EUR"
+        }
+      },
+      {
+        "date": "2026-01-24",
+        "intentId": "sofia-morales:running",
+        "kind": "voucher",
+        "user": "Inés, me han dado un vale por la cancelación de la carrera de la semana pasada. 15 euros para la tienda de deportes. ¿Te vale para comprar geles o algo? Yo no necesito nada ahora.",
+        "assistant": "Genial, me lo quedo. Así compro los calcetines que me pediste. Gracias Sofi, me viene de perlas para la media.",
+        "artifact": {
+          "title": "Vale de descuento por cancelación de evento",
+          "from": "Deportes Run Valencia",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Estimada cliente,\n\nDebido a la cancelación de la 'Carrera Nocturna de Enero', le emitimos un vale de compensación.\n\nEmisor: Deportes Run Valencia\nMotivo original: Cancelación de inscripción por condiciones meteorológicas\nValor: 15,00 EUR\nMoneda: EUR\nCaducidad: 24 de julio de 2026\nRestricciones de canje: Válido únicamente para productos de nutrición deportiva y textil técnico en tienda física. No acumulable con otras ofertas.\nReferencia: VCH-2026-4421"
+        },
+        "probe": {
+          "question": "¿Cuándo caduca el vale?",
+          "answer": "Caducidad: 24 de julio de 2026"
+        }
+      },
+      {
+        "date": "2026-01-27",
+        "intentId": "sofia-morales:mother-clinic",
+        "kind": "booking",
+        "user": "Hola, necesito reservar transporte adaptado para mi madre, Pilar Morales, para el martes 3 de febrero a las 10:00. Es para la clínica de rehabilitación. ¿Me confirman el precio y la cancelación?",
+        "assistant": "Reserva confirmada. El conductor pasará a recoger a la Sra. Morales a las 09:45. El precio es de 25 euros, pagadero en efectivo o Bizum al conductor. Puede cancelar sin coste hasta 24h antes.",
+        "artifact": {
+          "title": "Confirmación de reserva Transporte Adaptado",
+          "from": "Taxi Adaptado Valencia",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Confirmación de servicio\n\nProveedor: Taxi Adaptado Valencia\nParticipante: Pilar Morales\nFecha: 3 de febrero de 2026\nHora de recogida: 09:45\nServicio: Transporte puerta a puerta a Centro de Rehabilitación\nPrecio: 25,00 EUR\nEstado del pago: Pendiente (pago en destino)\nCondiciones de cancelación: Cancelación gratuita hasta 24 horas antes del servicio. Después, se cobra el 50%.\nReferencia de reserva: TAV-2026-0203-P"
+        },
+        "probe": {
+          "question": "¿Hasta cuándo puedo cancelar gratis?",
+          "answer": "Cancelación gratuita hasta 24 horas antes del servicio."
+        }
+      },
+      {
+        "date": "2026-01-28",
+        "intentId": "sofia-morales:porto-visit",
+        "kind": "transaction",
+        "user": "Tomás, te paso el Bizum de mi parte del hotel en Oporto. Son 60 euros. Ya he pagado los trenes con la Visa. Revisa que te ha llegado bien.",
+        "assistant": "Recibido. Gracias. Así cuadramos los gastos del viaje. Mañana te paso el desglose de la comida de Nico.",
+        "artifact": {
+          "title": "Extracto de movimiento bancario",
+          "from": "Banco Santander",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Movimientos recientes en cuenta ES**...6418\n\n1. Fecha: 28/01/2026\n   Concepto: Bizum a Tomás Vidal\n   Importe: -60,00 EUR\n   Estado: Completado\n   Referencia: BZM-20260128-099\n\n2. Fecha: 28/01/2026\n   Concepto: Pago Hotel Porto Central\n   Importe: -120,00 EUR\n   Estado: Pendiente de liquidación\n   Referencia: VISA-6418-8821\n\n3. Fecha: 27/01/2026\n   Concepto: Compra Mar Azul\n   Importe: -450,00 EUR\n   Estado: Completado\n   Referencia: SEPA-MA-2026-01\n\nSaldo disponible: 1.240,50 EUR"
+        },
+        "probe": {
+          "question": "¿Cuánto he enviado a Tomás por Bizum?",
+          "answer": "Importe: -60,00 EUR"
+        }
+      }
+    ],
+    "continuity": "Open: Cold room diagnosis pending final temperature confirmation from Alba (Jan 9). Legal agreement with Elena Soler for corporate clients unsigned. Resolved: Peony substitution shipment scheduled for Jan 8. Training plan adjusted for delivery conflicts. School fee Bizum sent to Tomás. Staff extra hours paid via SEPA. Oporto travel booked: Renfe ticket issued Jan 18, Hotel payment pending Jan 28. Clinic transport for Pilar booked Jan 27. Running voucher received Jan 24."
+  }
+}

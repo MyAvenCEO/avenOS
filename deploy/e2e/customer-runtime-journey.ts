@@ -157,7 +157,7 @@ try {
 			'127.0.0.1::5432',
 			'--env',
 			'POSTGRES_PASSWORD=journey-test',
-			'postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73'
+			'postgres:18-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2'
 		])
 		const port = (await command(['docker', 'port', name, '5432/tcp'])).split(':').at(-1)
 		assert.ok(port)
@@ -469,7 +469,7 @@ try {
 		destinationRuntimeId: 'green',
 		expectedGeneration: 1
 	})
-	assert.equal((await request(a)).status, 503)
+	assert.equal((await request(a, '/search')).status, 503)
 	// Interrupt after each physical phase succeeds but before its durable transition.
 	for (const phase of [
 		'fence',
@@ -550,8 +550,8 @@ try {
 		201
 	)
 	await publishRoutes(['primary'])
-	assert.equal((await request(a)).status, 503)
-	assert.equal((await request(b)).status, 200)
+	assert.equal((await request(a, '/search')).status, 503)
+	assert.equal((await request(b, '/search')).status, 200)
 	await publishRoutes(['primary', 'green'])
 	const rollback = await movementStore.begin({
 		environmentId: a,
@@ -678,7 +678,7 @@ try {
 			}
 		}
 		await assert.rejects(resumeMovement(movementStore, id, interrupted, true), /interrupted return/)
-		assert.equal((await request(env)).status, 503)
+		assert.equal((await request(env, '/search')).status, 503)
 		assert.equal((await resumeMovement(movementStore, id, driver)).phase, 'cancelled')
 		assert.equal((await resumeMovement(movementStore, id, driver, true)).phase, 'cancelled')
 		const route = await customers.authorize(claims, env, component, ['intents:read'])

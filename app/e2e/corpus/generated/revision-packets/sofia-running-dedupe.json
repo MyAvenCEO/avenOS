@@ -1,0 +1,37 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-sofia-morales-5-5",
+      "user": "Inés, mira esto. Me he apuntado a la Media Maratón de Alboraya para el 29 de marzo. Es la única que me cuadra con la boda de Clara. ¿Te apuntas? Así hacemos la tirada larga allí y luego comemos.",
+      "assistant": "¡Genial! Me apunto también. Recogemos los dorsales el viernes 27 por la tarde; salgo de la floristería a las seis.",
+      "artifact": {
+        "title": "Confirmación de Inscripción - Media Maratón de Alboraya",
+        "from": "Alboraya Running Club",
+        "to": null,
+        "language": "es",
+        "body": "CONFIRMACIÓN DE INSCRIPCIÓN\n\nEvento: Media Maratón de Alboraya\nLugar: Salida desde Paseo de la Playa, Alboraya\nTitular: Sofía Morales\nFecha y hora: 29 de marzo de 2026, 09:00\nCategoría: 21K Popular\nPrecio: 22,00 EUR\nReferencia de ticket: MMA-2026-0329\n\nInstrucciones: Presentar este código QR en la bolsa de salida. Recogida de dorsales el viernes 27 de 16:00 a 20:00 en el Pabellón Municipal de Alboraya. Prohibido auriculares."
+      },
+      "probe": {
+        "question": "¿Cuál es la referencia de mi media maratón de Alboraya?",
+        "answer": "MMA-2026-0329"
+      }
+    },
+    {
+      "id": "qwen-sofia-morales-9-2",
+      "user": "Inés, para el día 9 tengo billete a Xàtiva. Es un regional de las 8:15. ¿Te vale para hacer el entrenamiento allí? Vuelvo a las 14:00 para recoger a Nico.",
+      "assistant": "Perfecto. Yo cojo el mismo. ¿Nos vemos en la estación?",
+      "artifact": {
+        "title": "Pase móvil C2 · Valencia–Xàtiva",
+        "from": "Renfe",
+        "to": null,
+        "language": "es",
+        "body": "RENFE CERCANÍAS · PASE MÓVIL\n\nViajera: Sofía Morales\nLocalizador: REN-20260506-7721\nEstado del QR: emitido\n\nSÁBADO 09 MAY 2026\n08:15  Valencia Nord\n  C2 dirección Moixent\n09:05  Xàtiva\n\nTarifa zona C · 6,50 EUR\nAsiento libre, sin reserva.\n\nUso: valida el QR antes de subir y consérvalo hasta salir en Xàtiva. El pase cubre solo este trayecto de ida. Consulta la pantalla de la estación por si cambia la vía."
+      },
+      "probe": {
+        "question": "¿A qué hora sale mi C2 a Xàtiva?",
+        "answer": "08:15  Valencia Nord"
+      }
+    }
+  ]
+}

@@ -150,9 +150,7 @@ async function preview(voice: Voice) {
 					</div>
 
 					{#if !isTauri()}
-						<p
-							class="surface surface--raised text-xs opacity-60"
-						>
+						<p class="surface surface--raised text-xs opacity-60">
 							The voice only runs in the app — there is nothing to hear in the browser.
 						</p>
 					{/if}
@@ -217,9 +215,7 @@ async function preview(voice: Voice) {
 					</ul>
 
 					{#if failure}
-						<p
-							class="rounded-xl border border-error/25 bg-error-surface text-xs text-error-ink"
-						>
+						<p class="rounded-xl border border-error/25 bg-error-surface text-xs text-error-ink">
 							{failure}
 						</p>
 					{/if}
@@ -229,9 +225,7 @@ async function preview(voice: Voice) {
 			     is configuration, not something to stare at all day. -->
 				<section class="flex flex-col gap-3">
 					<h2 class="text-sm">Model</h2>
-					<p
-						class="surface surface--raised font-mono text-xs opacity-70"
-					>
+					<p class="surface surface--raised font-mono text-xs opacity-70">
 						deepseek/deepseek-v4-flash-0731 · RedPill TEE
 					</p>
 				</section>

@@ -144,7 +144,7 @@ def prepare(bundle, destination, runtime_id, target, database_port, provisioner_
                                    'read_only': True}]
         if name == 'database':
             service['healthcheck']['test'] = ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres -d postgres']
-            service['volumes'].insert(0, {'type': 'bind', 'source': str(storage / 'postgres'), 'target': '/var/lib/postgresql/data'})
+            service['volumes'].insert(0, {'type': 'bind', 'source': str(storage / 'postgres'), 'target': '/var/lib/postgresql'})
         if name == 'database-access':
             service['command'] = ['TCP-LISTEN:5432,reuseaddr,fork', f'TCP:{names["database"]}:5432']
             service['ports'] = [{'target': 5432, 'published': str(database_port), 'host_ip': '127.0.0.1', 'protocol': 'tcp'}]

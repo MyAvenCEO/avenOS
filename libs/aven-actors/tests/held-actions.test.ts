@@ -72,3 +72,44 @@ test('failed rejection remains retryable, and missing UI fails closed', async ()
 	await bus.rejectHeld(held.id)
 	expect(rejected).toBe(2)
 })
+
+test('an environment transition blocks review execution and discards captured callbacks', async () => {
+	const bus = new MessageBus()
+	const resolved: string[] = []
+	let confirmed = 0
+	bus.onHold = () => undefined
+	bus.onHeldResolved = (id) => resolved.push(id)
+	bus.holdAction(held, {
+		confirm: async () => {
+			confirmed++
+			return success
+		}
+	})
+
+	expect(bus.suspendHeldActions()).toBe(true)
+	expect(JSON.parse((await bus.confirmHeld(held.id)).record).ok).toBe(false)
+	bus.discardHeldActions()
+	bus.resumeHeldActions()
+	expect(JSON.parse((await bus.confirmHeld(held.id)).record).ok).toBe(false)
+	expect(confirmed).toBe(0)
+	expect(resolved).toEqual([held.id])
+})
+
+test('an environment transition cannot start while a review is being saved', async () => {
+	const bus = new MessageBus()
+	bus.onHold = () => undefined
+	let release!: () => void
+	const pending = new Promise<void>((resolve) => {
+		release = resolve
+	})
+	bus.holdAction(held, {
+		confirm: async () => {
+			await pending
+			return success
+		}
+	})
+	const saving = bus.confirmHeld(held.id)
+	expect(bus.suspendHeldActions()).toBe(false)
+	release()
+	await saving
+})

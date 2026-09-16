@@ -5,10 +5,10 @@ export const customerComponentCatalog = [
 		componentRef: 'ceo.aven:component:data:artifacts@1',
 		contractVersion: 1,
 		schema: 'artifact_store',
-		targetSchemaVersion: 3,
-		migrationSetDigest: 'd0f56d78fac8732d7340caf4079d7d63616e4a1599c56cddbe821326569cf72f',
+		targetSchemaVersion: 4,
+		migrationSetDigest: '6de72cc9378f7e98733f02d8cd449db490c3df19002419b4226013903bc78119',
 		minimumRuntimeSchemaVersion: 1,
-		maximumRuntimeSchemaVersion: 3,
+		maximumRuntimeSchemaVersion: 4,
 		ownerRoleSuffix: 'art_owner',
 		functionRoles: [
 			{
@@ -26,7 +26,7 @@ export const customerComponentCatalog = [
 		contractVersion: 1,
 		schema: 'aven_intents',
 		targetSchemaVersion: 1,
-		migrationSetDigest: 'f3a492c6ace83c96f9f2fb73ad0b45d567c6fca894bd02f5af237a342bfe968c',
+		migrationSetDigest: '542889603d4eb7c3532f694bd69f58888bcc5463bb2c178d5a65bab0bb5e81e0',
 		minimumRuntimeSchemaVersion: 1,
 		maximumRuntimeSchemaVersion: 1,
 		ownerRoleSuffix: 'int_owner',
@@ -45,10 +45,10 @@ export const customerComponentCatalog = [
 		componentRef: 'os.aven:component:actors:run-repository@1',
 		contractVersion: 1,
 		schema: 'aven_actor_runs',
-		targetSchemaVersion: 1,
-		migrationSetDigest: 'db8feebbeb4514adcf0c0b2a04601b712ea8e00b436d6fbfc67a17958193732c',
+		targetSchemaVersion: 2,
+		migrationSetDigest: 'b530598772310c113ad47cf732fbbb2ceb93e72c128e42f5abf53819f3840b45',
 		minimumRuntimeSchemaVersion: 1,
-		maximumRuntimeSchemaVersion: 1,
+		maximumRuntimeSchemaVersion: 2,
 		ownerRoleSuffix: 'act_owner',
 		functionRoles: [
 			{

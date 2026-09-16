@@ -41,6 +41,259 @@ Run the application unit tests separately:
 (cd app && bun test)
 ```
 
+Agent context now presents the on-screen Intent plus seven recently used Intents,
+up to 24 recent completed chat messages (kept in valid turn groups) plus the
+active tool round, and the latest 20
+attachments in the on-screen Intent. Full histories remain stored. The agent can
+use `workspace_search` with kind `intent`, `message`, or `document` to find older records,
+and `workspace_read` with the returned kind and ID to read them. These are the only
+lookup tools exposed to the model; the previous overlapping list, search, and detail
+names are private storage adapters. The model also no longer receives a generic
+`send` wrapper over the same registered methods; named tools retain their argument
+schemas. Internal actor envelopes still use the normal message bus. Lookup tools
+return bounded pages so searching a crowded workspace does not recreate the
+large default prompt. Selecting recent messages reads only the bounded tail; a warm
+Intent selection uses the reactive ID index instead of rebuilding it every round.
+
+Document research uses a per-turn evidence checklist with source-validated quotes,
+one `calculate` tool for signed currency sums or evidence-backed ledger reconciliation,
+`check_coverage` for gaps between required and confirmed time intervals, and a separate per-checklist-item model review before
+speaking or saving the final answer. The reviewer receives source text and requirements
+without the writer's checklist conclusions, preserves source timestamps, and records its reasoning for each item. The review has a 2,048-token JSON budget with reasoning disabled.
+There are 32 tool rounds, followed by at most four rounds restricted to the checklist,
+calculator, and final answer. An incomplete completion gets one retry; a rejected
+answer gets at most two repairs. Rejection clears the earlier checklist conclusions
+while retaining requirements and quoted evidence. Search completeness is tracked per
+query and scope, so exhausting a page chain clears its incomplete status. Exhaustion, invalid review output, and truncation
+are failures, not accepted partial answers. Ordinary conversation still streams
+without the document review.
+
+Source search uses a rebuildable IndexedDB token index, including document body
+text and an Intent-scoped token index. Each page examines at most 200 metadata rows
+and returns at most 20 passages of 650 characters. Keyset cursors avoid offset scans;
+a changed index requires restarting pagination. Source bodies are stored separately
+and loaded only for returned candidates. Full reads return 12,000-character pages;
+the native reader limits search documents to 1 MiB. Larger, unavailable, and partly
+extracted sources remain an explicit coverage gap. Unknown source dates remain
+candidates and require checking the dates within the document.
+
+The local cache is partitioned by authenticated user and customer environment.
+The native host checks current access before exposing search results. Background
+indexing waits for processing to finish, has two readers, reuses unchanged cached text across restarts and sign-ins for the same
+user and environment, and updates changed projections. Removing an Intent removes its indexed
+sources. HTTP rate limiting pauses the background queue for one minute before retrying; it is not recorded as a missing source. The cache is disposable local data, not an authoritative store or backup.
+Caches for other users or environments remain inaccessible through the application
+and consume browser storage until that site data is cleared. Startup hydrates one
+page of 20 recent Intents, each with at most 40 recent contributions. The sidebar
+can load another page. Historical intent and message searches query the customer
+database directly, without loading every conversation into the app. Source discovery
+runs separately through 50-publication cursor pages at `/artifacts/inventory`, without
+the legacy debug browser's 10,000-publication/2,000-artifact cap or lineage fan-out.
+A source inventory cursor is bound to the database, environment, routing generation
+and Artifact Store epoch. Metadata discovery currently replays the publication feed
+on restart; the cold source-index build remains proportional to the corpus size.
+This does not establish constant-time discovery or bounded metadata memory for an
+arbitrarily large document archive.
+Incomplete discovery is reported as partial search coverage. Native identity-token exchanges are single-flight and cached in memory for at most sixty seconds per session, shortened to expire at least fifteen seconds before JWT expiry and cleared on logout. Every product request still undergoes identity and customer authorization at the facade.
+
+The initial Intent schema includes normalized full-text projections and indexes for
+owner-scoped searches and keyset pagination. Provisioning installs this schema
+directly; there is no older-schema upgrade or backfill path. The browser index also
+starts at schema 1 without importing or upgrading earlier development caches. Searches
+use all query terms, fold accents and German ß, preserve original source text, and
+return at most 20 message excerpts or 50 Intent summaries. No total-count scan is
+required. A bounded unordered candidate probe prevents PostgreSQL from scanning
+an entire ordered history when a rare or absent search term is combined with LIMIT.
+Archived records remain searchable; merged/deleted Intents are excluded from search.
+Full message reads are authorized independently and return 12,000-character pages.
+
+Run the optional real-PostgreSQL proof against a disposable server. The runner creates
+and removes its own fresh database; it does not clear an existing customer's schemas:
+
+```sh
+INTENT_RETRIEVAL_TEST_DATABASE_URL='postgresql://test-user:test-password@127.0.0.1:5432/postgres' \
+bun run --cwd services/intent-service test
+INTENT_RETRIEVAL_TEST_DATABASE_URL='postgresql://test-user:test-password@127.0.0.1:5432/postgres' \
+bun services/intent-service/bench/retrieval.ts
+```
+
+The integration proof installs the initial schema and checks ownership, search, and
+full-message paging. The benchmark exercises recent, common, rare, absent, and scoped searches at 10,000,
+100,000 and 1,000,000 synthetic messages. It checks result bounds and fails if a query
+class exceeds a 250 ms p95. This is database query latency, not end-to-end model latency.
+The default evidence path is `/tmp/intent-retrieval-scale.json`; override it with
+`INTENT_RETRIEVAL_EVIDENCE_PATH`.
+
+Measure actual browser index performance separately from model latency and server
+startup. This benchmark uses real Chromium and IndexedDB with 1,000, 10,000 and
+100,000 synthetic documents, exact-reference queries, common terms and scoped queries:
+
+```sh
+SOURCE_INDEX_EVIDENCE_PATH='/tmp/source-index-scale.json' \
+bun app/e2e/source-index-scale.ts
+```
+
+It records build time, query median and 95th percentile, checks returned targets and
+fixed page bounds, and fails above a 250 ms query p95. It does not benchmark network
+access, initial server inventory loading, or production document-size distributions.
+
+For a live model check of Intent and message retrieval, run the optional synthetic
+probe against a trusted OpenAI-compatible endpoint. Use the exact model ID returned
+by that endpoint's `/v1/models` response:
+
+```sh
+LIVE_LLM_BASE_URL='http://model-host:8000' \
+LIVE_LLM_MODEL='exact-model-id' \
+LIVE_LLM_EVIDENCE_PATH='app/e2e/live-context-retrieval-results.json' \
+bun app/e2e/live-context-retrieval.ts
+```
+
+The probe creates 260 synthetic Intents and more than 10,000 synthetic conversation
+messages, then asks English, German, and Spanish questions that require older
+history. It uses the application's chat turn loop and stream parser, but sends
+requests directly to the configured model endpoint with synthetic lookup tools.
+It does not exercise customer authentication, databases, or the deployed facade.
+It exits nonzero if the model does not use retrieval when needed or gives an
+incorrect answer under its rubric. The evidence file records questions, answers,
+successful distinct source reads, tool arguments/results, completion reasons, usage,
+review decisions, routing, and timing. The probe shares the production index, source
+resolver, pagination and chat loop; its data provider remains synthetic. Regex checks
+are regression signals, not a complete semantic accuracy proof: inspect contradictory
+claims in the saved answers and source evidence before reporting correctness.
+
+For long-horizon tests, regenerate the fictional three-person, 180-day corpus.
+Its deterministic scaffold has crowded chat and Intent histories; a live Qwen
+generation adds 180 connected episodes with people, emails, documents, tickets,
+bookings, orders, returns, support threads, legal drafts, and financial records:
+
+```sh
+LIVE_LLM_BASE_URL='http://model-host:8000' \
+LIVE_LLM_MODEL='exact-model-id' \
+bun app/e2e/corpus/enrich-with-qwen.ts
+LIVE_LLM_BASE_URL='http://model-host:8000' \
+LIVE_LLM_MODEL='exact-model-id' \
+bun app/e2e/corpus/revise-with-qwen.ts
+bun app/e2e/corpus/materialize-assets.ts
+bun app/e2e/corpus/build.ts
+bun test app/tests/persona-corpus.test.ts app/tests/enriched-persona-corpus.test.ts
+```
+
+The connected Qwen revision pass repairs selected contradictions and recycled
+records against a dated story canon; the builders overlay accepted revisions.
+The corpus format and scenarios are described in `app/e2e/corpus/README.md`. To
+run its six English, German, and Spanish source-retrieval cases against a live
+model, set `LIVE_LLM_CORPUS=personas` along with the live-model variables above.
+Set `LIVE_LLM_CORPUS=persona-temporal` for nine natural follow-up questions
+asked at their simulated dates; later records are withheld in that mode.
+Use a separate `LIVE_LLM_EVIDENCE_PATH` for this run so earlier probe evidence is
+preserved. This live mode checks that the model opens the requested email or
+document through `workspace_read` with kind `document` before answering. Generated financial and
+legal sources are fictional fixtures, and the live checks do not exercise
+customer databases or production ingestion.
+
+Run the twelve multi-document breaking-point cases (English, German and Spanish)
+with `LIVE_LLM_CORPUS=persona-breaking`. Set `LIVE_LLM_CASE_FILTER` to a regular
+expression to run a named subset. `LIVE_LLM_MAX_TOKENS` defaults to 8,192 for answer
+rounds; the separate review keeps its own smaller budget. `LIVE_LLM_REPLAY_PATH`
+regrades an existing evidence file and marks the output as a regrade, not a new live
+run. Missing cases are errors, and old traces without successful-source identities
+cannot pass the updated evidence checks. All twelve breaking-point cases use an
+independent factual rubric withheld from the answering agent. Each criterion cites a numbered passage of the answer; the evaluator resolves that
+reference to the original text so quotation-formatting mistakes do not affect the score.
+Every criterion must pass. This model judge can itself make mistakes; inspect its
+reasoning and the saved sources. Answer latency and grading latency are separate.
+Replay reuses only judgments bound to the exact question, answer, rubric, evaluator model and evaluator
+version. Set `LIVE_LLM_REGRADE_MODEL=true` to call the model again for fresh grading;
+this does not rerun the answering agent.
+
+Set `LIVE_LLM_CORPUS=persona-heldout` for three frozen counterfactual cases in the same
+crowded corpus: English timezone-aware care handoffs, German split-tender returns,
+and a Spanish executed date amendment with a separate pending capacity permit.
+Their outcomes deliberately differ from the original failing cases. They add 27
+hand-authored source records; they are not another Qwen-generated life history.
+
+Independent evaluation is optional and sends only the synthetic question, answer,
+and rubric to OpenAI. A fixture audit sends the synthetic persona's source corpus
+as well. Set `OPENAI_API_KEY_FILE` to a protected local key file (or use
+`OPENAI_API_KEY`); never put the credential in tracked files or evidence. Set
+`OPENAI_EVALUATION_MODEL=gpt-5.6-terra` to grade Qwen with that independent model.
+Set `LIVE_LLM_INDEPENDENT_REVIEW=true` as well to use it for the application loop's
+review, which includes the retrieved synthetic source text; Qwen remains the answering model. These opt-in evaluation credentials do
+not configure or ship in the production app. The evaluator uses the Responses API
+with storage disabled and retains encrypted reasoning only for calls still in the
+current conversation. It preserves tool call IDs and respects compacted checklists. `OPENAI_EVALUATION_BUDGET_USD` defaults
+to 3 per stream instance; requests reserve a conservative cost bound before sending,
+record actual token usage and estimated cost, and stop if the bound would be exceeded.
+The cost log defaults to `/tmp/aven-evaluation-cost.jsonl` and contains no credentials.
+
+Audit question validity independently of the answering model's draft:
+
+```sh
+AUDIT_INPUT='/tmp/live-results.json' \
+OPENAI_API_KEY_FILE='/path/to/protected-key-file' \
+bun app/e2e/audit-retrieval-cases.ts
+```
+
+The audit receives all sources for the persona and checks whether the question and
+rubric are answerable. Every returned source quotation is checked against the actual
+body before the result is accepted. It checkpoints after each case. `AUDIT_CASE_FILTER`
+selects names; `OPENAI_AUDIT_MODEL` defaults to `gpt-5.6-terra`; `OPENAI_AUDIT_OUTPUT`
+defaults to `/tmp/aven-case-audit-verified.json`. Models without explicitly recorded
+pricing are rejected. Neither a model's self-review nor an independent model judge
+is sufficient proof by itself: inspect the saved sources and contradictions.
+
+The artifact library's scoped SQL projection has a disposable PostgreSQL 18
+regression. It checks tenant isolation, validated revision selection, source-backed
+financial rows, paging, and a synthetic first page beyond the former browser tail:
+
+```sh
+python3 services/artifact-store/tests/library-query.py
+```
+
+The script starts and removes a checksum-pinned `postgres:18-alpine` Docker container. Its synthetic
+documents contain no customer files. The timing it prints describes that fixture,
+not production-scale search latency.
+
+Skill Studio's compiler and service tests run in the customer-platform suite.
+Its `studio.persistence.e2e.test.ts` is included in the Actor Runner persistence
+stage of the full-stack gate and requires both its disposable PostgreSQL database
+and production Artifact Store. The v2 journey proves a synthetic email → exact
+nested Skill → committed brief path, output-to-activation-to-Skill provenance,
+duplicate-delivery replay, connection catch-up after Runner restart, and draft
+conflicts. It does not contact a mailbox or call a model.
+
+Persistence test files run sequentially because they share one Artifact Store
+with its production two-upload admission limit. Tests still exercise concurrent
+claims, dispatch, and execution within each file; fixture setup from unrelated
+files must not compete for those same slots.
+
+For the Studio browser interaction check, start an isolated worktree preview and
+run the test in a second terminal:
+
+```sh
+(cd app && bunx vite --host 127.0.0.1 --port 1449 --strictPort)
+bun app/tests/studio-ui.mjs
+```
+
+`AVEN_STUDIO_UI_URL` overrides the preview origin. If the workstation has exhausted
+its file-watch limit, prefix the preview command with `CHOKIDAR_USEPOLLING=true`.
+The browser test uses the real component and compiler, simulates only native IPC,
+and writes desktop/mobile screenshots under `/tmp/aven-studio-*.png`; it is not a
+replacement for the database-backed proof.
+
+The artifact library browser check exercises its category filter, financial table,
+on-demand source preview, and exact-ID handoff to Studio. Start an isolated app
+preview, then run the test in a second terminal:
+
+```sh
+(cd app && bunx vite build && bunx vite preview --host 127.0.0.1 --port 1463 --strictPort)
+bun app/tests/artifact-library-ui.mjs
+```
+
+`AVEN_LIBRARY_UI_URL` overrides its default preview origin. The test simulates the
+native IPC boundary and writes `/tmp/aven-artifact-library-invoice.png`; the scoped
+PostgreSQL regression above verifies the server projection separately.
+
 Format and lint changed files before committing:
 
 ```sh
@@ -183,11 +436,18 @@ bun run test:e2e:platform
 
 The harness builds an optimized Rust/Tauri application and every service image, starts
 fresh databases on dynamic loopback ports, and proves the public journey:
+When `CARGO_TARGET_DIR` is set for an isolated worktree, the harness uses that
+directory for both the native build and its application executable.
+The raw test binary loads the fetched ONNX Runtime from this worktree; installed
+application packages use their bundled resource path.
 
 - checkout, email, fake payment, signup, and raw Polar webhook retention;
 - first and second passkey enrollment and login;
 - native Tauri device authorization and short-lived service-token exchange;
+- native workspace message search/read, exact evidence quotes, and absence of removed lookup aliases;
 - customer database provisioning and per-schema isolation;
+- two unique name purchases by one identity subject, native environment selection
+  and same-session switching, with reads isolated to each customer database;
 - live membership downgrade/removal with an unchanged identity token, while another
   environment remains independently accessible;
 - artifact upload and exact readback;
@@ -406,6 +666,10 @@ the local stack remains disposable through `local:down`. Run this lane manually 
 from a secret-equipped scheduled runner with an authenticated webhook tunnel. Do not
 add it to the required per-pull-request gate: external availability, Sandbox rate
 limits, and hosted checkout changes are deliberately outside the deterministic proof.
+
+The deployment checks also start the pinned PostgreSQL 18 image, verify persisted
+rows after restart, and confirm that an older cluster layout is refused without
+initializing a replacement cluster. These checks use disposable Docker volumes.
 
 ## Complete pre-deployment gate
 

@@ -17,26 +17,49 @@ async function withinDiskBudget(root: string, maxBytes: number, maxEntries: numb
 	}
 }
 
-export async function boundedCommand(args: string[], options: {
-	timeoutMs?: number; maxOutputBytes?: number;
-	disk?: { root: string; maxBytes: number; maxEntries: number }
-} = {}): Promise<string> {
-	const child = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe', detached: true,
-		env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1',
-			GIT_CONFIG_GLOBAL: '/dev/null' } })
+export async function boundedCommand(
+	args: string[],
+	options: {
+		timeoutMs?: number
+		maxOutputBytes?: number
+		disk?: { root: string; maxBytes: number; maxEntries: number }
+	} = {}
+): Promise<string> {
+	const child = Bun.spawn(args, {
+		stdout: 'pipe',
+		stderr: 'pipe',
+		detached: true,
+		env: {
+			...process.env,
+			GIT_TERMINAL_PROMPT: '0',
+			GIT_CONFIG_NOSYSTEM: '1',
+			GIT_CONFIG_GLOBAL: '/dev/null'
+		}
+	})
 	let failure: Error | undefined
 	const stop = (error: Error) => {
 		failure ??= error
-		try { process.kill(-child.pid, 'SIGKILL') } catch { child.kill('SIGKILL') }
+		try {
+			process.kill(-child.pid, 'SIGKILL')
+		} catch {
+			child.kill('SIGKILL')
+		}
 	}
-	const deadline = setTimeout(() => stop(new Error('repository command timed out')), options.timeoutMs ?? 120_000)
+	const deadline = setTimeout(
+		() => stop(new Error('repository command timed out')),
+		options.timeoutMs ?? 120_000
+	)
 	let checking = false
 	const diskCheck = setInterval(async () => {
 		if (!options.disk || checking || failure) return
 		checking = true
-		try { await withinDiskBudget(options.disk.root, options.disk.maxBytes, options.disk.maxEntries) }
-		catch { stop(new Error('repository disk budget exceeded')) }
-		finally { checking = false }
+		try {
+			await withinDiskBudget(options.disk.root, options.disk.maxBytes, options.disk.maxEntries)
+		} catch {
+			stop(new Error('repository disk budget exceeded'))
+		} finally {
+			checking = false
+		}
 	}, 250)
 	const capture = async (stream: ReadableStream<Uint8Array>) => {
 		let size = 0
@@ -52,10 +75,15 @@ export async function boundedCommand(args: string[], options: {
 		return Buffer.concat(chunks).toString('utf8')
 	}
 	try {
-		const [code, stdout] = await Promise.all([child.exited, capture(child.stdout), capture(child.stderr)])
+		const [code, stdout] = await Promise.all([
+			child.exited,
+			capture(child.stdout),
+			capture(child.stderr)
+		])
 		if (failure) throw failure
 		if (code !== 0) throw new Error(`repository command failed (exit ${code})`)
-		if (options.disk) await withinDiskBudget(options.disk.root, options.disk.maxBytes, options.disk.maxEntries)
+		if (options.disk)
+			await withinDiskBudget(options.disk.root, options.disk.maxBytes, options.disk.maxEntries)
 		return stdout
 	} catch (error) {
 		stop(new Error('repository command failed'))
@@ -73,7 +101,11 @@ export function validateArtifactTree(listing: string, maxFiles: number, maxBytes
 		const match = /^(100644|100755) blob [0-9a-f]{40,64}\s+(\d+)\t(.+)$/.exec(row)
 		if (!match) throw new Error('site artifacts must contain only regular files')
 		const path = match[3]
-		if (path.length > 1024 || path.split('/').length > 20 || path.split('/').some((part) => part === '..'))
+		if (
+			path.length > 1024 ||
+			path.split('/').length > 20 ||
+			path.split('/').some((part) => part === '..')
+		)
 			throw new Error('site artifact path exceeds its limit')
 		bytes += Number(match[2])
 		if (++count > maxFiles || bytes > maxBytes) throw new Error('site artifact exceeds its limit')

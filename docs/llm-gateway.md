@@ -2,12 +2,9 @@
 
 Status: public `ceo.aven` service contract consumed by the Tauri client
 
-The gateway is a standalone downstream. In the current split architecture,
-`services/aven-api` is only the authenticated `api.aven.ceo` facade; it does
-not contain the gateway implementation or model catalog. The desktop client and wire
-types are present and still call the paths below. An integrated deployment must route
-those fixed paths to a dedicated `ceo.aven` LLM downstream that satisfies this
-contract. Statements below describe that downstream, not code inside the facade.
+The authenticated facade and provider-neutral gateway are implemented together in
+`services/aven-api`. Both the desktop client and Actor Runner use its model catalog
+and completion routes. Provider credentials remain server-side.
 
 An Aven is not one language model. The [product model](product-model.md) treats models
 as replaceable capabilities; durable working context belongs in Intents, Artifacts,
@@ -31,6 +28,7 @@ not an opaque server-side winner. Each model has:
 - a stable `id` for programmatic selection and persisted configuration;
 - a `label` for presentation to a user;
 - a set of capability strings for matching.
+- `maxParallelism`, the configured aggregate request capacity of this gateway process.
 
 A completion always names one exact `modelId`. The gateway never silently substitutes
 another model with similar capabilities. This makes user choice, agent policy, replay,
@@ -48,7 +46,7 @@ authenticated consumer
   chooses required capabilities
        |
        v
-GET model catalog -> all matching { id, label, capabilities }
+GET model catalog -> all matching { id, label, capabilities, maxParallelism }
        |
        | explicit modelId + bounded messages/output contract
        v
@@ -77,10 +75,9 @@ behalf.
 ## Authentication and authorization
 
 The public routes are reached only through `api.aven.ceo`. The facade verifies a
-short-lived `aven-services` token from `aven.id`, strips caller-supplied trust headers,
-selects a fixed downstream, and replaces the caller bearer with a dedicated service
-credential. The gateway independently verifies the forwarded signed identity token
-before accepting the facade's subject/session projection.
+short-lived `aven-services` token from `aven.id` and strips caller-supplied trust
+headers. The integrated gateway then validates model selection and provider requests.
+The Actor Runner uses a separate service bearer for the internal routes.
 
 The product contract deliberately makes the configured catalog available to every
 verified, authenticated user. It has no administrator-only or procedure-specific
@@ -93,7 +90,7 @@ The caller sends an Aven session credential, normally:
 Authorization: Bearer <aven-session-token>
 ```
 
-Provider credentials are unrelated secrets stored only in the LLM downstream
+Provider credentials are unrelated secrets stored only in the API service
 environment.
 They are never accepted from or returned to a caller.
 
@@ -448,12 +445,13 @@ small document schemas.
 
 ## Configuration
 
-The owning LLM downstream reads the public catalog and credentials from separate JSON
+The API gateway reads the public catalog and credentials from separate JSON
 environment variables.
 
 ```dotenv
 LLM_GATEWAY_ENABLED=true
 LLM_GATEWAY_TIMEOUT_SECONDS=180
+LLM_GATEWAY_MAX_PARALLELISM=5
 LLM_GATEWAY_ALLOW_INSECURE_HTTP=false
 LLM_GATEWAY_MODELS_JSON='[
   {
@@ -479,6 +477,13 @@ LLM_GATEWAY_MODELS_JSON='[
 LLM_GATEWAY_CREDENTIALS_JSON='{"openai":"replace-with-provider-secret"}'
 LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN=replace-with-a-distinct-generated-service-secret
 ```
+
+`LLM_GATEWAY_MAX_PARALLELISM` accepts 1–32 and defaults to 5. One FIFO permit
+pool bounds all structured and OpenAI-compatible completion routes in each API
+process, including chat and document work from both hosts. Streaming requests hold
+a permit until the stream completes or is cancelled. Size this value for the
+provider's simultaneous-request capacity; multiple API replicas each have their own
+pool and must be accounted for when sizing a shared provider.
 
 The mixed HTTPS/local example additionally requires:
 
@@ -628,23 +633,21 @@ To run the current desktop chat through this gateway:
    `tool-calling`; the Kimi design lane additionally needs `structured-output`.
 3. Set `LLM_GATEWAY_ENABLED=true`. Set the global timeout and allow insecure HTTP only
    when a trusted local provider genuinely requires it.
-4. Ensure the provider base URL is reachable from the LLM gateway container. The configured
+4. Ensure the provider base URL is reachable from the API container. The configured
    URL is an API root such as `https://api.redpill.ai/v1`; Aven appends
    `/chat/completions`.
-5. Add fixed `/api/llm` facade routing to the LLM downstream with a dedicated service
-   bearer. Never accept a caller-selected upstream URL.
-6. Deploy or restart the LLM downstream so startup validates the complete catalog and
-   credential map, then deploy the facade route.
-7. Sign in with a verified Aven user and call `/api/llm/v1/models`. Confirm both desktop
+5. Deploy or restart the API service so startup validates the complete catalog and
+   credential map. Never accept a caller-selected upstream URL.
+6. Sign in with a verified Aven user and call `/api/llm/v1/models`. Confirm both desktop
    model IDs appear with the required capabilities.
-8. Smoke-test one non-streaming request, one streaming text request, one tool-call round
+7. Smoke-test one non-streaming request, one streaming text request, one tool-call round
    followed by a tool-result message, and one `response_format: {"type":"json_object"}`
    request.
-9. Build and install the Tauri application. No provider key belongs in the desktop
+8. Build and install the Tauri application. No provider key belongs in the desktop
    environment; its existing Aven session authenticates every gateway call.
-10. Before opening expensive credentials to all users, add provider-side spend limits and
-   deployment-level rate/concurrency controls. The gateway deliberately does not invent
-   a product-specific quota policy.
+9. Before opening expensive credentials to all users, add provider-side spend limits.
+   The gateway's configured parallelism bounds simultaneous requests but does not
+   invent a product-specific quota policy.
 
 There is no `PHALA_API_KEY` or browser-development proxy. Local and production Tauri
 use the same gateway credential map and facade boundary.

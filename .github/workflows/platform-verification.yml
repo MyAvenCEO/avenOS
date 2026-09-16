@@ -27,7 +27,7 @@ jobs:
       AVEN_API_BASE_URL: https://api.next.aven.ceo
       CARGO_BUILD_JOBS: '2'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2
@@ -49,7 +49,7 @@ jobs:
       - run: bash scripts/verify-client-linux.sh
       - name: Retain failed packages for reproduction
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: diagnostic-linux-package-check
           path: |
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -114,7 +114,7 @@ jobs:
     timeout-minutes: 45
     services:
       checkout-postgres:
-        image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+        image: postgres:18-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
         env:
           POSTGRES_PASSWORD: aven-dev
         ports:
@@ -125,7 +125,7 @@ jobs:
           --health-timeout 3s
           --health-retries 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -173,7 +173,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -199,7 +199,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -219,7 +219,7 @@ jobs:
         with:
           token: ${{ secrets.PACKAGE_READ_TOKEN }}
       - uses: ./.github/actions/setup-platform-test-host
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -238,7 +238,7 @@ jobs:
     # Fleet image archives and fixture cleanup vary with hosted-runner disk speed.
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -248,7 +248,7 @@ jobs:
       - uses: ./.github/actions/bun-install
         with:
           token: ${{ secrets.PACKAGE_READ_TOKEN }}
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

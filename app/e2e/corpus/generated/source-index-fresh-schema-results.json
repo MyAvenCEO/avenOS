@@ -1,0 +1,12 @@
+{
+	"engine": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+	"results": [
+		{
+			"documents": 1000,
+			"incrementalBuildMs": 748.9000000357628,
+			"p50Ms": 1.2000000476837158,
+			"p95Ms": 8.399999976158142,
+			"maxExamined": 20
+		}
+	]
+}

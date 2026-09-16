@@ -10,6 +10,7 @@ export interface ProjectionArtifact {
 export interface IntentSourceArtifact {
 	artifactId: string
 	typeKey: 'core.file'
+	title?: string
 }
 
 interface ArtifactEnvelope {
@@ -31,7 +32,8 @@ interface FileProjection {
  */
 export async function discoverIntentSources(
 	artifacts: readonly ProjectionArtifact[],
-	loadEnvelope: (artifactId: string) => Promise<ArtifactEnvelope>
+	loadEnvelope: (artifactId: string) => Promise<ArtifactEnvelope>,
+	onUnavailable?: () => void
 ): Promise<Map<string, IntentSourceArtifact>> {
 	const byPublication = new Map<string, ProjectionArtifact[]>()
 	for (const artifact of artifacts) {
@@ -43,20 +45,32 @@ export async function discoverIntentSources(
 	const declarations = artifacts.filter(
 		(artifact) => artifact.typeKey === 'intent.declaration' && artifact.localKey === 'intent'
 	)
-	const candidates = await Promise.all(
-		declarations.map(async (declaration) => {
-			try {
-				const envelope = await loadEnvelope(declaration.artifactId)
-				const intentId = envelope.payload?.intentId
-				if (typeof intentId !== 'string' || intentId.trim() === '') return null
-				const source = byPublication
-					.get(declaration.publicationId)
-					?.find((artifact) => artifact.typeKey === 'core.file' && artifact.localKey === 'file')
-				if (!source) return null
-				return { intentId, source }
-			} catch {
-				// One unreadable historical declaration must not hide every other intent.
+	const load = async (declaration: ProjectionArtifact) => {
+		try {
+			const envelope = await loadEnvelope(declaration.artifactId)
+			const intentId = envelope.payload?.intentId
+			if (typeof intentId !== 'string' || intentId.trim() === '') {
+				onUnavailable?.()
 				return null
+			}
+			const source = byPublication
+				.get(declaration.publicationId)
+				?.find((artifact) => artifact.typeKey === 'core.file' && artifact.localKey === 'file')
+			if (!source) return null
+			return { intentId, source, title: envelope.payload?.title }
+		} catch {
+			// One unreadable historical declaration must not hide every other intent.
+			onUnavailable?.()
+			return null
+		}
+	}
+	const candidates: Array<Awaited<ReturnType<typeof load>>> = []
+	let next = 0
+	await Promise.all(
+		Array.from({ length: Math.min(6, declarations.length) }, async () => {
+			while (next < declarations.length) {
+				const declaration = declarations[next++]
+				candidates.push(await load(declaration))
 			}
 		})
 	)
@@ -74,7 +88,8 @@ export async function discoverIntentSources(
 		if (result.has(candidate.intentId)) continue
 		result.set(candidate.intentId, {
 			artifactId: candidate.source.artifactId,
-			typeKey: 'core.file'
+			typeKey: 'core.file',
+			...(typeof candidate.title === 'string' ? { title: candidate.title } : {})
 		})
 	}
 	return result

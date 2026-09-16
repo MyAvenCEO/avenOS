@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-05-18",
+        "intentId": "lena-weber:home-budget",
+        "kind": "transaction",
+        "user": "Mira, Rücklage checken. Dauerauftrag für Miete ist raus. Können wir die Umzugskartons bestellen?",
+        "assistant": "Kontostand ist okay. 2.100 Euro sind noch da. Kartons können wir bestellen.",
+        "artifact": {
+          "title": "Kontoauszug Sparkasse Berlin",
+          "from": "Sparkasse Berlin",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Kontoauszug für den Zeitraum 15.05.2026 - 18.05.2026\nKontonummer: ****4821\n\nBuchungen:\n16.05.2026 | SEPA-Überweisung | Umzugsrücklage Weber | 500,00 EUR | Soll\n17.05.2026 | Dauerauftrag | Hausverwaltung Berlin | 850,00 EUR | Soll\n18.05.2026 | SEPA-Eingang | Weber Keramik GmbH | 1.200,00 EUR | Haben\n\nGesamtbetrag Soll: 1.350,00 EUR\nGesamtbetrag Haben: 1.200,00 EUR\nSchlusssaldo: 2.100,00 EUR"
+        },
+        "probe": {
+          "question": "Wie hoch ist der Schlusssaldo auf dem Konto?",
+          "answer": "2.100,00 EUR"
+        }
+      },
+      {
+        "date": "2026-05-21",
+        "intentId": "lena-weber:studio-lease",
+        "kind": "order",
+        "user": "Frau Becker, hier ist die Unterschrift für den neuen Vertrag. Paul hat B-17 finalisiert.",
+        "assistant": "Danke Lena. Wir haben den Vertrag erhalten. Die Freigabe für Abendkurse ist erteilt.",
+        "artifact": {
+          "title": "Auftragsbestätigung Mietvertrag",
+          "from": "Berlin Hausverwaltung",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Sehr geehrte Frau Weber,\n\nwir bestätigen den Eingang des unterzeichneten Mietvertrags (Version 2.1) für die Werkstatt in Prenzlauer Berg.\n\nAuftragsreferenz: BHV-2026-LEASE-045\nVertragsbeginn: 01.05.2026\nMonatliche Miete: 1.200,00 EUR\nKaution: 3.600,00 EUR\nStatus: Aktiv\nNächster Schritt: Schlüsselübergabe"
+        },
+        "probe": {
+          "question": "Welche Vertragsversion wurde bestätigt?",
+          "answer": "Version 2.1"
+        }
+      },
+      {
+        "date": "2026-05-24",
+        "intentId": "lena-weber:classes",
+        "kind": "return",
+        "user": "Olivia hat sich beschwert, dass die Teller noch nicht da sind. Ich hab ihr gerade die Ersatzlieferung geschickt. Kannst du die Zahlung für die neue Sendung bestätigen? Und Eva, bist du am 10. da?",
+        "assistant": "Zahlung ist raus, Olivia bekommt die Tracking-Nummer gleich. Eva, bitte kurz bestätigen, ob du den Kurs am 10.5. übernehmen kannst, Jonas ist ja noch im Urlaub.",
+        "artifact": {
+          "title": "Payment Receipt - Replacement Order",
+          "from": "Weber Keramik",
+          "to": "Olivia Grant",
+          "language": "de",
+          "body": "Payment Receipt\n\nMerchant: Weber Keramik\nCustomer: Olivia Grant\nDate: 2026-05-03\nDescription: Replacement shipment for damaged ceramic plates (Order #WK-2026-0415-OG)\nAmount: 0.00 EUR (Shipping cost covered by merchant)\nPayment Method: Visa Debit ****4821\nStatus: Completed\nReference: STR-2026-0503-R"
+        },
+        "probe": {
+          "question": "Welche Referenznummer hat die Ersatzsendung?",
+          "answer": "STR-2026-0503-R"
+        }
+      },
+      {
+        "date": "2026-05-27",
+        "intentId": "lena-weber:orders",
+        "kind": "support",
+        "user": "Nils, das Paket von Amira ist zurück. Fotos sind im Anhang. Wann kommt die Erstattung?",
+        "assistant": "Fall CASE-2026-0328-DHL ist offen. Wir prüfen die Fotos. Erstattung dauert 3-5 Werktage.",
+        "artifact": {
+          "title": "DHL Rücksendebestätigung",
+          "from": "Nils Hartmann",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Guten Tag Frau Weber,\n\nvielen Dank für Ihre Nachricht. Wir haben Ihre Sendungsnummer 00340434271234567890 und die hochgeladenen Fotos zur Kenntnis genommen.\n\nFallreferenz: CASE-2026-0328-DHL\nStatus: In Prüfung\nNächster Schritt: Unser Team prüft die Dokumentation. Bitte haben Sie etwas Geduld. Wir melden uns."
+        },
+        "probe": {
+          "question": "Welche Fallreferenz hat DHL für die Rücksendung vergeben?",
+          "answer": "CASE-2026-0328-DHL"
+        }
+      },
+      {
+        "date": "2026-05-28",
+        "intentId": "lena-weber:studio-lease",
+        "kind": "legal",
+        "user": "Frau Becker, wegen Werkstatt-Mietvertrag und Brandschutz: Offene Klausel zu Abendkursen prüfen.",
+        "assistant": "Okay, Vermieterin um den Vertragsentwurf bitten ist notiert. Dann die fehlende Freigabe mit Paul und der Vermieterin klären.",
+        "artifact": {
+          "title": "RE: Mietvertrag Prenzlauer Berg - Version 2.2",
+          "from": "Dr. Lea Maier",
+          "to": "Lena Weber",
+          "language": "de",
+          "body": "Sehr geehrte Frau Weber,\n\nwir haben die Klausel § 4.2 (Abendkurse) in Version 2.2 des Mietvertrags (Referenz BHV-2026-LEASE-045) angepasst. Die Freigabe für Abendkurse ist an die unterzeichnete Bestätigung des Brandschutzberichts B-17 durch Paul Neumann gebunden.\n\nBitte senden Sie das unterschriebene Dokument zurück, bevor wir die Unterschrift leisten."
+        },
+        "probe": {
+          "question": "Welche Klausel im Mietvertrag betrifft die Abendkurse?",
+          "answer": "§ 4.2"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit NT-SMP-2026-04 dispatch scheduled for Feb 10 (Apr 3). Fire safety report B-17 under review by Berlin Hausverwaltung (Apr 6). Nordton invoice NT-2026-04-09 issued for 60,57 EUR (Apr 9). Family weekend DB tickets booked for Apr 24 (DB-2026-03-21-9902) (Apr 12). PayPal refund case for Amira Yilmaz still pending investigation (Apr 15). Lease version 2.2 awaiting signature for evening classes (Apr 21). Move reserve balance check pending final April figures (Apr 28). Closed: Studio lease fire-safety fee paid (Mar 9). Klaus's clinic ticket booked for Mar 14 (Mar 12). Apartment viewing attended with Britta (Mar 17). Move reserve transfer completed (Mar 24). Lease signed and § 4.2 approved (Mar 27). DHL damage claim for Amira under review (CASE-2026-0328-DHL) (Mar 28)."
+  }
+}

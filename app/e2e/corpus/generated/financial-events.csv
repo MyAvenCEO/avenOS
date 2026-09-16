@@ -1,0 +1,1556 @@
+"episodeId","personaId","date","kind","intentId","title","amountText","paymentMethod","sourceText"
+"qwen-lena-weber-1-5","lena-weber","2026-01-15","receipt","lena-weber:orders","Zahlungsbeleg DHL Paket","14,90 EUR","","Händler: DHL
+Artikel: Paket International (2kg)
+Datum: 15.01.2026
+Betrag: 14,90 EUR
+Währung: EUR
+Zahlungsmethode: Visa Debit ****4821
+Status: Bezahlt
+Referenz: DHL-2026-01-15-8892
+
+Sendungsnummer: 00340434271234567890
+Empfänger: Amira Yilmaz
+Versandart: Standard
+
+Hinweis: Sendungsverfolgung aktiv."
+"qwen-lena-weber-2-1","lena-weber","2026-01-18","transport-ticket","lena-weber:father-clinic","Fahrkarte RE1 Berlin Hbf - Potsdam Hbf","4,90 EUR","","Deutsche Bahn AG
+Buchungsbestätigung
+
+Reisender: Klaus Weber
+Datum: 20.01.2026
+Strecke: Berlin Hbf -> Potsdam Hbf
+Verbindung: RE1 (RegionalExpress)
+Abfahrt: 09:12 Uhr
+Ankunft: 09:45 Uhr
+Klasse: 2. Klasse
+Preis: 4,90 EUR
+Referenznummer: DB-2026-01-18-8842
+
+Hinweis: Diese Fahrkarte ist für den RE1 gültig. Ein ICE ist nicht enthalten. Bitte melden Sie sich am Schalter für Unterstützung beim Einsteigen, da keine feste Platzreservierung für Rollstuhlfahrer garantiert werden kann."
+"qwen-lena-weber-2-2","lena-weber","2026-01-21","event-ticket","lena-weber:father-clinic","Eintrittskarte Museum für Kommunikation","4,00 EUR","","Ihre Eintrittskarte für die Sonderausstellung 'Post und Papier'.
+
+Veranstaltung: Führung 'Papiergeschichte'
+Datum: 22.01.2026
+Uhrzeit: 14:00 - 15:30 Uhr
+Ort: Museum für Kommunikation, Berlin
+Inhaber: Klaus Weber
+Kategorie: Ermäßigt (Schwerbehindertenausweis)
+Preis: 4,00 EUR
+Ticket-ID: MK-2026-01-21-4455
+
+Hinweis zur Barrierefreiheit: Der Haupteingang ist stufenlos. Ein Aufzug bringt Sie zu allen Ausstellungsebenen. Bitte halten Sie den Schwerbehindertenausweis bereit."
+"qwen-lena-weber-2-3","lena-weber","2026-01-24","voucher","lena-weber:bike","Gutschein Fahrradwerkstatt Prenzlberg","25,00 EUR","","Vielen Dank für Ihren Einkauf bei Radwerk Prenzlberg.
+
+Gutschein-Nr.: RW-2026-01-24-7788
+Wert: 25,00 EUR
+Gültig bis: 31.03.2026
+Einlösbar für: Wartungsarbeiten, Ersatzteile und Zubehör.
+Nicht einlösbar für: Leihfahrräder und Geschenkgutscheine.
+
+Bitte zeigen Sie diesen Code an der Kasse vor. Der Gutschein ist nicht übertragbar und wird nicht in bar ausgezahlt."
+"qwen-lena-weber-2-4","lena-weber","2026-01-27","booking","lena-weber:family-weekend","Buchungsbestätigung Hotel am Hafen Stralsund","380,00 EUR","","Sehr geehrte Frau Weber,
+
+wir freuen uns, Ihre Buchung bestätigen zu können.
+
+Gastgeber: Lena Weber, Mira, Klaus Weber
+Anreise: 24.01.2026, ab 15:00 Uhr
+Abreise: 26.01.2026, bis 11:00 Uhr
+Zimmer: 2x Doppelzimmer, barrierefrei
+Preis: 380,00 EUR (Gesamt)
+Anzahlung: 100,00 EUR (bezahlt am 27.01.2026)
+Restbetrag: 280,00 EUR (bei Anreise)
+Buchungsnummer: HA-2026-01-27-1122
+
+Stornierungsbedingungen: Kostenlose Stornierung bis 7 Tage vor Anreise. Danach werden 50% des Gesamtpreises berechnet."
+"qwen-lena-weber-2-5","lena-weber","2026-01-28","transaction","lena-weber:home-budget","Kontoauszug Sparkasse Berlin","500,00 EUR","SEPA bank transfer","Kontoauszug für den Zeitraum 25.01.2026 - 28.01.2026
+Kontonummer: ****4821
+
+Buchungen:
+28.01.2026 | SEPA-Überweisung | Umzugsrücklage Weber | 500,00 EUR | Soll
+28.01.2026 | Dauerauftrag | Hausverwaltung Berlin | 850,00 EUR | Soll
+27.01.2026 | SEPA-Eingang | Weber Keramik GmbH | 1.200,00 EUR | Haben
+
+Saldo am 28.01.2026: 4.215,50 EUR
+
+Hinweis: Die Überweisung an die Umzugsrücklage wurde am 28.01.2026 ausgeführt."
+"qwen-lena-weber-3-1","lena-weber","2026-02-03","order","lena-weber:classes","Order Confirmation #WK-2026-0203-OG","85.00 EUR","","Dear Olivia Grant,
+
+Thank you for your order with Weber Keramik. We are pleased to confirm the details below.
+
+Order Reference: WK-2026-0203-OG
+Date: 2026-02-03
+Items:
+- 1x Handmade Ceramic Bowl Set (4 pcs), Matte White
+- 1x Gift Wrap Service
+
+Subtotal: 85.00 EUR
+VAT (19%): 16.15 EUR
+Shipping (DHL Express): 12.00 EUR
+Total Paid: 113.15 EUR
+Payment Method: Visa Debit ****4821
+Status: Paid
+
+Delivery Window: 2026-02-05 to 2026-02-07
+Tracking Number: 00340434271234567891
+
+We hope you enjoy your new ceramics. Please note that fragile items are packed with extra care.
+
+Best regards,
+Lena Weber
+Weber Keramik"
+"qwen-lena-weber-3-2","lena-weber","2026-02-06","return","lena-weber:orders","Return Authorization Record #RA-2026-0206-AY","","","Sehr geehrte Frau Yilmaz,
+
+wir haben Ihre Rücksendeanfrage erhalten.
+
+Originalbestellung: WK-2026-0110-AY
+Artikel: 1x Keramik-Teller 'Nordblau'
+Grund: Beschädigung beim Transport
+Status: Rücksendung angefordert
+Rücksendeadresse: Weber Keramik, Berlin
+Frist: 14 Tage
+
+Bitte senden Sie das Paket mit dem beigefügten Label zurück. Nach Eingang und Prüfung der Ware veranlassen wir die Erstattung auf Ihr ursprüngliches Zahlungsmittel.
+
+Mit freundlichen Grüßen
+Lena Weber"
+"qwen-lena-weber-3-5","lena-weber","2026-02-15","invoice","lena-weber:studio-lease","Invoice #NB-2026-0215-001","350,00 EUR","SEPA bank transfer","Rechnung Nr.: NB-2026-0215-001
+Datum: 15.02.2026
+Leistungszeitraum: 01.02.2026 - 14.02.2026
+
+Positionen:
+1. Brandschutzprüfung Werkstatt (Bericht B-17): 350,00 EUR
+2. Anfahrt und Beratung: 100,00 EUR
+
+Nettobetrag: 450,00 EUR
+Umsatzsteuer (19%): 85,50 EUR
+Gesamtbetrag: 535,50 EUR
+
+Zahlungsziel: 14 Tage
+Zahlungsmethode: SEPA-Überweisung
+Status: Bezahlt am 15.02.2026
+Referenz: SEPA-2026-02-15-NB
+
+Bitte überweisen Sie den Betrag auf das angegebene Konto.
+
+Neumann Brandschutz
+Paul Neumann"
+"qwen-lena-weber-4-1","lena-weber","2026-02-18","payment","lena-weber:bike","Zahlungsbestätigung Radwerk Prenzlberg","25,00 EUR","","Vielen Dank für Ihren Einkauf bei Radwerk Prenzlberg.
+
+Transaktionsnummer: RW-2026-02-18-4421
+Datum: 18.02.2026
+Artikel: Bremsbeläge vorne/hinten, Montage
+Betrag: 25,00 EUR
+Zahlungsmethode: Visa Debit ****4821
+Status: Bezahlt
+Hinweis: Gutschein RW-2026-01-24-7788 wurde vollständig verrechnet. Restwert 0,00 EUR."
+"qwen-lena-weber-4-2","lena-weber","2026-02-21","card-statement","lena-weber:classes","Kreditkartenabrechnung Februar 2026","45,00 EUR","","Abrechnungszeitraum: 01.02.2026 - 20.02.2026
+Karte: Visa Business ****4821
+
+Buchungen:
+15.02.2026 | Nordton GmbH | Glaze Sample Kit | 45,00 EUR
+18.02.2026 | Radwerk Prenzlberg | Bremsen Service | 25,00 EUR
+20.02.2026 | DHL Express | Versand Olivia Grant | 12,50 EUR
+
+Gesamtbetrag: 82,50 EUR
+Fälligkeitsdatum: 05.03.2026"
+"qwen-lena-weber-4-3","lena-weber","2026-02-24","bank-statement","lena-weber:cashflow","Kontoauszug Weber Keramik Geschäftskonto","2.450,00 EUR","Stripe storefront payouts","Kontoauszug
+Konto: Weber Keramik Geschäftskonto ****5602
+Zeitraum: 15.02.2026 - 24.02.2026
+
+Anfangssaldo: 2.450,00 EUR
+
+Buchungen:
+15.02.2026 | SEPA-Überweisung | Neumann Brandschutz (Rechnung NB-2026-0215-001) | -535,50 EUR
+18.02.2026 | Gutschrift | Stripe Payout (Online-Shop Verkäufe KW 7) | +420,00 EUR
+20.02.2026 | Kartenzahlung | DHL Express (Versand Olivia Grant) | -12,50 EUR
+
+Schlusssaldo: 2.322,00 EUR
+
+Hinweis: Dauerauftrag Miete (850,00 EUR) ist für den 01.03.2026 geplant. Keine weiteren offenen Posten aus dem Zeitraum."
+"qwen-lena-weber-5-3","lena-weber","2026-03-09","receipt","lena-weber:studio-lease","Payment Receipt: Fire Safety Report Fee","535,50 EUR","","Zahlungsbestätigung
+
+Zahlungsempfänger: Neumann Brandschutz
+Zahler: Lena Weber (Weber Keramik)
+Datum: 09.03.2026
+Betrag: 535,50 EUR
+Währung: EUR
+Zahlungsmethode: Visa Debit ****4821
+Status: Bezahlt
+Referenz: NB-2026-0215-001
+
+Verwendungszweck: Brandschutzprüfung Werkstatt (Bericht B-17)
+
+Hinweis: Diese Zahlung bestätigt den Abschluss der Prüfung. Die Unterschrift auf Bericht B-17 ist gültig."
+"qwen-lena-weber-5-4","lena-weber","2026-03-12","transport-ticket","lena-weber:father-clinic","DB Ticket Confirmation: Berlin Hbf to Potsdam Hbf","12,40 EUR","","Fahrkartenbestätigung
+
+Reisedaten:
+Datum: 14.03.2026
+Strecke: Berlin Hbf -> Potsdam Hbf
+Zug: RE 1
+Abfahrt: 09:30 Uhr
+Ankunft: 10:00 Uhr
+Reisender: Klaus Weber
+Klasse: 2. Klasse
+Sitzplatz: Rollstuhlplatz, Wagen 2
+Barrierefreiheit: Aufzug am Gleis verfügbar, barrierefreier Zugang
+
+Buchungsreferenz: DB-2026-03-12-4451
+Preis: 12,40 EUR
+Status: Bezahlt
+
+Hinweis: Bitte nutzen Sie den Aufzug am Gleis 1. Der barrierefreie Shuttle hält am Nord-Eingang des Bahnhofs."
+"qwen-lena-weber-5-5","lena-weber","2026-03-15","event-ticket","lena-weber:flat-move","Event Ticket: Open House Viewing - Prenzlauer Berg","0,00 EUR","","Eintrittskarte
+
+Veranstaltung: Besichtigungstermin Wohnung Prenzlauer Berg
+Datum: 17.03.2026
+Uhrzeit: 15:00 - 15:30 Uhr
+Ort: Prenzlauer Berg, Berlin
+Inhaber: Britta Seidel
+Kategorie: Gast
+Preis: 0,00 EUR
+Ticket-ID: BHV-2026-03-15-VIEW-09
+
+Hinweis: Bitte pünktlich erscheinen. Der Zugang erfolgt über den Hinterhof."
+"qwen-lena-weber-6-1","lena-weber","2026-03-18","voucher","lena-weber:family-weekend","DB Gutschein Bestätigung","50,00 EUR","","Sehr geehrte Frau Weber,
+
+vielen Dank für Ihre Treue. Anbei erhalten Sie einen Reisegutschein im Wert von 50,00 EUR.
+
+Gutschein-Referenz: DB-VOUCH-2026-8821
+Wert: 50,00 EUR
+Gültig bis: 30.04.2026
+Einlösbar für: Fernverkehrstickets (ICE, IC, EC) innerhalb Deutschlands.
+Nicht einlösbar für: Reservierungen, Nahverkehr oder bereits gebuchte Tickets.
+
+Bitte geben Sie den Code bei der Buchung im Feld 'Gutschein' ein."
+"qwen-lena-weber-6-2","lena-weber","2026-03-21","booking","lena-weber:family-weekend","DB Buchungsbestätigung","120,00 EUR","","Buchungsbestätigung
+
+Reise: Berlin Hbf -> Stralsund Hbf
+Datum: 24.04.2026
+Zug: IC 2110
+Abfahrt: 09:15 Uhr
+Ankunft: 12:45 Uhr
+Reisende: Lena Weber, Mira, Klaus Weber
+Klasse: 2. Klasse
+Sitzplatz: Barrierefreier Bereich, Wagen 4
+Preis: 120,00 EUR (nach Gutscheinabzug)
+Zahlungsmethode: Visa Debit ****4821
+Status: Bezahlt
+Buchungsnummer: DB-2026-03-21-9902
+Stornierung: Kostenlos bis 7 Tage vor Abfahrt."
+"qwen-lena-weber-6-3","lena-weber","2026-03-24","transaction","lena-weber:home-budget","Kontoauszug Sparkasse Berlin","500,00 EUR","SEPA bank transfer","Kontoauszug für den Zeitraum 20.03.2026 - 24.03.2026
+Kontonummer: ****4821
+
+Buchungen:
+21.03.2026 | SEPA-Überweisung | Umzugsrücklage Weber | 500,00 EUR | Soll
+22.03.2026 | Dauerauftrag | Hausverwaltung Berlin | 850,00 EUR | Soll
+23.03.2026 | SEPA-Eingang | Weber Keramik GmbH | 1.200,00 EUR | Haben
+24.03.2026 | Kartenzahlung | DHL Express | 12,50 EUR | Soll
+
+Schlusssaldo: 2.100,00 EUR"
+"qwen-lena-weber-6-4","lena-weber","2026-03-27","order","lena-weber:studio-lease","Auftragsbestätigung Mietvertrag","1.200,00 EUR","","Sehr geehrte Frau Weber,
+
+wir bestätigen den Eingang des unterzeichneten Mietvertrags (Version 2.1) für die Werkstatt in Prenzlauer Berg.
+
+Auftragsreferenz: BHV-2026-LEASE-045
+Vertragsbeginn: 01.05.2026
+Monatliche Miete: 1.200,00 EUR
+Kaution: 3.600,00 EUR
+Status: Aktiv
+Nächster Schritt: Schlüsselübergabe am 30.04.2026.
+Hinweis: Die Klausel § 4.2 (Abendkurse) ist gemäß Brandschutzbericht B-17 (unterschrieben am 25.03.2026) freigegeben."
+"qwen-lena-weber-6-5","lena-weber","2026-03-28","return","lena-weber:orders","Rückerstattungsbestätigung #REF-2026-0328-AY","42,50 EUR","PayPal business account","Sehr geehrte Frau Yilmaz,
+
+wir bestätigen: Ihre Rücksendung ist bei uns eingegangen für die Bestellung WK-2026-0110-AY am 28.03.2026. Der beschädigte Teller 'Nordblau' wurde geprüft und als Transportschaden anerkannt.
+
+Erstattungsbetrag: 42,50 EUR
+Zahlungsmethode: PayPal (Originaltransaktion PAY-2026-0110-AY)
+Status: Erstattung veranlasst
+Bearbeitungszeit: 3-5 Werktage
+
+Kundenerstattung: REF-2026-0328-AY
+Separater DHL-Händlerfall: CASE-2026-0209-DHL
+
+Mit freundlichen Grüßen
+Lena Weber
+Weber Keramik"
+"qwen-lena-weber-7-3","lena-weber","2026-04-09","invoice","lena-weber:glaze-supplier","Rechnung Nr. NT-2026-04-09","45,00 EUR","SEPA bank transfer","Rechnungsnummer: NT-2026-04-09
+Datum: 09.04.2026
+
+Leistungen:
+1. Musterplatten Matte Serie (5 Stk.) - 45,00 EUR
+2. Versand & Verpackung - 5,90 EUR
+
+Zwischensumme: 50,90 EUR
+Umsatzsteuer (19%): 9,67 EUR
+Gesamtbetrag: 60,57 EUR
+
+Zahlungsziel: 14 Tage
+Zahlungsart: SEPA-Überweisung
+Verwendungszweck: NT-2026-04-09
+
+Hinweis: Die Preise basieren auf der bestätigten Frühjahrsstaffel vom 15.01.2026."
+"qwen-lena-weber-7-4","lena-weber","2026-04-12","payment","lena-weber:family-weekend","DB Buchungsbestätigung","120,00 EUR","","Buchungsbestätigung
+
+Reise: Berlin Hbf -> Stralsund Hbf
+Datum: 24.04.2026
+Zug: IC 2110
+Abfahrt: 09:15 Uhr
+Ankunft: 12:45 Uhr
+Reisende: Lena Weber, Mira, Klaus Weber
+Klasse: 2. Klasse
+Sitzplatz: Barrierefreier Bereich, Wagen 4
+Preis: 120,00 EUR (nach Gutscheinabzug)
+Zahlungsmethode: Visa Debit ****4821
+Buchungsnummer: DB-2026-03-21-9902
+
+Hinweis: Bitte nutzen Sie den barrierefreien Zugang am Nord-Eingang des Bahnhofs Stralsund."
+"qwen-lena-weber-7-5","lena-weber","2026-04-15","card-statement","lena-weber:cashflow","Visa Debit Kartenabrechnung April 2026","45,00 EUR","SEPA bank transfer","Kartenabrechnung
+Karte: Visa Debit ****4821
+Abrechnungszeitraum: 01.03.2026 - 14.04.2026
+
+Buchungen:
+09.03.2026 | Nordton GmbH | Glaze Sample Kit (Ref: NK-2026-SPR-09) | 45,00 EUR
+18.03.2026 | Radwerk Prenzlberg | Bremsen Service | 25,00 EUR
+20.03.2026 | DHL Express | Versand Olivia Grant | 12,50 EUR
+05.04.2026 | Nordton GmbH | Musterplatten Matte Serie | 60,57 EUR
+
+Gesamtbetrag: 143,07 EUR
+Fälligkeitsdatum: 05.05.2026
+Status: Offen; Lastschrift geplant zum 05.05.2026
+
+Hinweis: Die Zahlung an Neumann Brandschutz (535,50 EUR) erfolgte per SEPA-Überweisung vom Geschäftskonto ****5602 und ist hier nicht enthalten."
+"qwen-lena-weber-8-1","lena-weber","2026-04-18","bank-statement","lena-weber:cashflow","Kontoauszug Weber Keramik Geschäftskonto","1.450,00 EUR","PayPal business account","Kontoauszug
+Konto: Weber Keramik Geschäftskonto ****5602
+Zeitraum: 01.04.2026 - 18.04.2026
+
+Saldo am Anfang: 1.450,00 EUR
+
+Buchungen:
+05.04.2026 | Gutschrift | Stripe Payout | +210,00 EUR
+10.04.2026 | SEPA-Lastschrift | Nordton Glaze | -85,00 EUR
+15.04.2026 | SEPA-Überweisung | Eva Richter | -350,00 EUR
+
+Saldo am Ende: 1.225,00 EUR
+
+Hinweis: PayPal-Kundenerstattung 42,50 EUR an Amira Yilmaz (REF-2026-0328-AY): am 31.03. vom Zahlungsdienst bestätigt. Der zugehörige Händlerabgang ist auf diesem Bankkonto bis 18.04. noch nicht verbucht; Abstimmungsposten PP-2026-0328-AY bleibt offen."
+"qwen-lena-weber-9-1","lena-weber","2026-05-03","receipt","lena-weber:classes","Payment Receipt - Replacement Order","0.00 EUR","","Payment Receipt
+
+Merchant: Weber Keramik
+Customer: Olivia Grant
+Date: 2026-05-03
+Description: Replacement shipment for damaged ceramic plates (Order #WK-2026-0415-OG)
+Amount: 0.00 EUR (Shipping cost covered by merchant)
+Payment Method: Visa Debit ****4821
+Status: Completed
+Reference: STR-2026-0503-REPL-01
+
+Note: This receipt confirms the transaction for the replacement items. The original refund to the customer's card was processed on 2026-04-28."
+"qwen-lena-weber-9-2","lena-weber","2026-05-06","transport-ticket","lena-weber:father-clinic","DB Ticket Confirmation","12,50 EUR","","Fahrkartenbestätigung
+
+Reisedaten:
+Datum: 07.05.2026
+Strecke: Berlin Hbf -> Potsdam Hbf
+Zug: RE 1
+Abfahrt: 10:30 Uhr
+Ankunft: 11:00 Uhr
+Reisender: Klaus Weber
+Klasse: 2. Klasse
+Sitzplatz: Rollstuhlplatz, Wagen 2
+Barrierefreiheit: Aufzug am Gleis verfügbar, barrierefreier Zugang
+
+Buchungsreferenz: DB-2026-0506-CLIN-04
+Preis: 12,50 EUR
+Zahlungsmethode: Visa Debit ****4821
+
+Hinweis: Bitte nutzen Sie den barrierefreien Zugang am Nord-Eingang des Bahnhofs Potsdam Hbf."
+"qwen-lena-weber-9-3","lena-weber","2026-05-09","event-ticket","lena-weber:flat-move","Eintrittskarte: Premiere ""Die Räuber""","28,00 EUR","","EINTRITTSKARTE
+
+Veranstaltung: Premiere ""Die Räuber"" (Regie: N.N.)
+Ort: Deutsches Theater, Schumannstraße 13A, 10117 Berlin
+Datum: 15.05.2026
+Uhrzeit: 19:30 Uhr (Einlass 19:00 Uhr)
+Inhaber: Britta Seidel
+Kategorie: Parkett, Reihe 12, Platz 4
+Preis: 28,00 EUR
+Ticket-ID: DT-2026-05-15-BS-442
+
+Hinweis: Bitte pünktlich erscheinen. Einlass nur mit gültigem Ticket. Keine Platzgarantie nach Vorstellungsbeginn. Das Ticket ist nicht übertragbar."
+"qwen-lena-weber-9-4","lena-weber","2026-05-12","voucher","lena-weber:family-weekend","DB Gutschein Bestätigung","50,00 EUR","","Sehr geehrte Frau Weber,
+
+vielen Dank für Ihre Treue. Anbei erhalten Sie einen Reisegutschein im Wert von 50,00 EUR.
+
+Gutschein-Referenz: DB-VOUCH-2026-8821
+Wert: 50,00 EUR
+Gültig bis: 30.04.2026
+Einlösbar für: Fernverkehrstickets (ICE, IC, EC) innerhalb Deutschlands.
+Nicht einlösbar für: Reservierungen, Sitzplatzreservierungen und Nahverkehr.
+
+Mit freundlichen Grüßen
+Ihre Deutsche Bahn"
+"qwen-lena-weber-9-5","lena-weber","2026-05-15","booking","lena-weber:family-weekend","DB Buchungsbestätigung","145,00 EUR","","Buchungsbestätigung
+
+Reise: Berlin Hbf -> Leipzig Hbf
+Datum: 18.07.2026
+Zug: ICE 1502
+Abfahrt: 08:15 Uhr
+Ankunft: 09:15 Uhr
+Reisende: Lena Weber, Mira, Klaus Weber
+Klasse: 2. Klasse
+Sitzplatz: Barrierefreier Bereich, Wagen 5
+Tarif: Flexpreis
+Preis: 145,00 EUR
+Zahlungsmethode: Visa Debit ****4821
+Status: Bezahlt
+Buchungsnummer: DB-2026-0515-LEIP-01
+Stornierung: Vor dem 1. Geltungstag gegen 19,00 EUR Entgelt; danach ausgeschlossen.
+
+Hinweis: Bitte nutzen Sie den Aufzug am Gleis 1 in Berlin Hbf. Die aktuelle Aufzugslage und Einstiegshilfe bitte 24 Stunden vorher prüfen."
+"qwen-lena-weber-10-1","lena-weber","2026-05-18","transaction","lena-weber:home-budget","Kontoauszug Sparkasse Berlin","500,00 EUR","SEPA bank transfer","Kontoauszug für den Zeitraum 15.05.2026 - 18.05.2026
+Kontonummer: ****4821
+
+Buchungen:
+16.05.2026 | SEPA-Überweisung | Umzugsrücklage Weber | 500,00 EUR | Soll
+17.05.2026 | Dauerauftrag | Hausverwaltung Berlin | 850,00 EUR | Soll
+18.05.2026 | SEPA-Eingang | Weber Keramik GmbH | 1.200,00 EUR | Haben
+
+Gesamtbetrag Soll: 1.350,00 EUR
+Gesamtbetrag Haben: 1.200,00 EUR
+Schlusssaldo: 2.100,00 EUR"
+"qwen-lena-weber-10-2","lena-weber","2026-05-21","order","lena-weber:studio-lease","Auftragsbestätigung: Brandschutz-Ausstattung","45,00 EUR","","AUFTRAGSBESTÄTIGUNG
+
+Bestellnummer: SB24-2026-05-21-889
+Datum: 21.05.2026
+Kunde: Weber Keramik
+
+Artikel:
+1. Feuerlöscher ABC 6kg (inkl. Wandhalterung) - 1 Stk. - 45,00 EUR
+2. Fluchtwegschild ""Notausgang"" (PVC, selbstklebend) - 4 Stk. - 12,00 EUR
+3. Warnschild ""Feuerlöscher"" - 2 Stk. - 6,00 EUR
+
+Zwischensumme: 63,00 EUR
+Umsatzsteuer (19%): 11,97 EUR
+Gesamtbetrag: 74,97 EUR
+
+Zahlungsmethode: Visa Debit ****4821
+Status: Bezahlt
+Lieferdatum: Geschätzt 22.05.2026
+Lieferadresse: Weber Keramik, Prenzlauer Berg, Berlin
+Hinweis: Bitte prüfen Sie die Ware bei Erhalt auf Transportschäden."
+"qwen-lena-weber-10-3","lena-weber","2026-05-24","return","lena-weber:classes","RMA Abschlussbestätigung #RMA-2026-0524-OG","","","Kundin: Olivia Grant
+
+Sehr geehrte Frau Grant,
+
+wir bestätigen den Abschluss Ihrer Reklamation für die Bestellung WK-2026-0415-OG.
+
+RMA-Referenz: RMA-2026-0524-OG
+Originalbestellung: WK-2026-0415-OG
+Grund: Beschädigung beim Transport (4 Teller 'Nordblau')
+Status: Geschlossen
+
+Maßnahmen:
+1. Rücksendung der beschädigten Ware: Eingegangen am 22.05.2026. Schaden an allen vier Tellern bestätigt.
+2. Ersatzlieferung: Versandt am 24.05.2026 per DHL Express (Tracking: 00340434271234567891).
+3. Zahlung: Die ursprüngliche Erstattung vom 28.04.2026 bleibt bestehen. Die Ersatzware ist eine zusätzliche Kulanzleistung; keine weitere Zahlung oder Erstattung offen.
+
+Mit freundlichen Grüßen
+Lena Weber
+Weber Keramik"
+"qwen-lena-weber-11-1","lena-weber","2026-06-03","invoice","lena-weber:orders","Nordton Export Invoice INV-2026-0603-NW","120.00 EUR","","Dear Ms. Weber,
+
+Please find attached the invoice for the Spring Glaze Sample Kit (Ref: NK-2026-SPR-09). The batch release code BLUE-271 has been verified and applied to this order.
+
+Invoice Number: INV-2026-0603-NW
+Date: 2026-06-03
+Client: Weber Keramik
+Line Items:
+- Spring Glaze Sample Kit (5 units): 120.00 EUR
+- Shipping (DHL Express): 15.00 EUR
+Subtotal: 135.00 EUR
+VAT (19%): 25.65 EUR
+Total Due: 160.65 EUR
+
+Payment Terms: Net 14 days.
+Status: Unpaid
+
+The sample kit is ready for dispatch. Please confirm the pickup address for your instructor Jonas Beck.
+
+Best regards,
+Nora Wells
+Quality Support, Nordton Export Desk"
+"qwen-lena-weber-11-2","lena-weber","2026-06-06","payment","lena-weber:flat-move","Zahlungsbestätigung SEPA-Überweisung","2.400,00 EUR","","Zahlungsbestätigung
+
+Auftraggeber: Lena Weber
+Empfänger: Hausverwaltung Prenzlauer Berg
+Betrag: 2.400,00 EUR
+Verwendungszweck: Kaution Wohnung Prenzlauer Berg
+Buchungsdatum: 06.06.2026
+Status: Ausgeführt
+Referenznummer: UMW-2026-0606
+Konto: ****4821
+
+Hinweis: Die Überweisung wurde am 06.06.2026 ausgeführt. Der Betrag wurde dem Empfängerkonto gutgeschrieben."
+"qwen-lena-weber-11-3","lena-weber","2026-06-09","card-statement","lena-weber:cashflow","Visa Debit Kartenabrechnung Juni 2026","160,65 EUR","PayPal business account","Kartenabrechnung
+Konto: Visa Debit ****4821
+Zeitraum: 01.06.2026 - 09.06.2026
+
+Buchungen:
+03.06.2026 | Nordton Export | 160,65 EUR | Soll
+05.06.2026 | DHL Paket | 12,40 EUR | Soll
+07.06.2026 | PayPal Business | 15,00 EUR | Soll
+
+Gesamtbetrag: 188,05 EUR
+Fälligkeit: 15.06.2026
+Status: Offen
+
+Hinweis: Bitte prüfen Sie die offenen Posten. Die Rückerstattung von PayPal (Case PP-2026-0527-AY) ist noch nicht verbucht."
+"qwen-lena-weber-11-4","lena-weber","2026-06-12","bank-statement","lena-weber:cashflow","Kontoauszug Weber Keramik Geschäftskonto","1.850,00 EUR","SEPA bank transfer","Kontoauszug
+Konto: Weber Keramik Geschäftskonto ****5602
+Zeitraum: 01.06.2026 - 12.06.2026
+
+Anfangssaldo: 1.850,00 EUR
+
+Buchungen:
+03.06.2026 | SEPA-Überweisung | Nordton GmbH (Rechnung INV-2026-0603-NW) | -160,65 EUR
+08.06.2026 | Gutschrift | DHL Entschädigung (Fall CASE-2026-0209-DHL) | +42,50 EUR
+10.06.2026 | Kartenzahlung | Visa Debit ****4821 (Kartengebühren) | -15,00 EUR
+
+Schlusssaldo: 1.716,85 EUR
+
+Hinweis: Die private Mietkaution läuft nicht über dieses Geschäftskonto. Die erste Studiomiete für den neuen Standort ist zum 01.07.2026 vorgemerkt."
+"qwen-lena-weber-12-4","lena-weber","2026-06-27","receipt","lena-weber:studio-lease","Zahlungsbestätigung: Brandschutzprüfung B-17","180,00 EUR","","Zahlungsbestätigung
+
+Auftraggeber: Weber Keramik
+Empfänger: Neumann Brandschutz
+Betrag: 180,00 EUR
+Verwendungszweck: Prüfung Brandschutzbericht B-17
+Buchungsdatum: 2026-06-27
+Status: Ausgeführt
+Referenznummer: NB-2026-0627-B17
+Konto: Visa Debit ****4821
+
+Hinweis: Die Prüfung ist abgeschlossen. Die Unterschrift von Paul Neumann steht noch aus."
+"qwen-lena-weber-12-5","lena-weber","2026-06-28","transport-ticket","lena-weber:father-clinic","DB Ticket Confirmation: Berlin Hbf to Potsdam Hbf","4,70 EUR","","Fahrkartenbestätigung
+
+Reisedaten:
+Datum: 29.06.2026
+Strecke: Berlin Hbf -> Potsdam Hbf
+Zug: S 7
+Abfahrt: 09:45 Uhr
+Ankunft: 10:25 Uhr
+Reisender: Klaus Weber
+Klasse: 2. Klasse
+Sitzplatz: Kein reservierter Platz (Nahverkehr)
+Barrierefreiheit: Aufzug am Gleis verfügbar, barrierefreier Zugang
+
+Buchungsreferenz: DB-2026-0628-CLIN-09
+Tarif: Berlin ABC Einzelfahrausweis
+Preis: 4,70 EUR
+Status: Bezahlt
+
+Hinweis: Keine Sitzplatzgarantie im Nahverkehr. Bitte die aktuelle Aufzugslage in Berlin Hbf und Potsdam Hbf vor Abfahrt prüfen."
+"qwen-rowan-chen-1-5","rowan-chen","2026-01-15","receipt","rowan-chen:contractor","Payment Receipt - Sam Patel","£450.00","","Transaction Receipt
+Date: 2026-01-15
+Merchant: Sam Patel (Contractor)
+Amount: £450.00 GBP
+Method: Company Mastercard ending 3074
+Status: Completed
+Reference: INV-SP-2026-001
+Description: Initial deposit for data migration support project. Agreement signed 2026-01-14. Access to staging environment to be granted upon receipt of this payment."
+"qwen-rowan-chen-2-1","rowan-chen","2026-01-18","transport-ticket","rowan-chen:household","GWR E-Ticket Confirmation","£42.50","Monzo household debit ending 5526","Booking Reference: GWR-8821-KITCH
+Traveller: Rowan Chen
+Route: Bristol Temple Meads to London Paddington
+Travel Date: 2026-01-19
+Departure: 09:15
+Arrival: 11:10
+Class: Standard
+Fare: £42.50
+Status: Confirmed
+Payment Method: Monzo Household Debit ending 5526
+Note: This ticket is valid for the specified date only. Changes subject to fare rules."
+"qwen-rowan-chen-2-2","rowan-chen","2026-01-21","event-ticket","rowan-chen:kitchen","Showroom Tour Admission Ticket","£0.00","","Event: Premium Kitchen Design Workshop
+Venue: Bristol Showroom, Unit 4, Industrial Estate
+Date: 2026-01-28
+Time: 14:00 - 16:00
+Holder: Rowan Chen
+Category: Professional Consultation
+Price: £0.00 (Complimentary for registered contractors)
+Ticket Reference: KS-2026-0128-RC
+Terms: Non-transferable. Please arrive 10 minutes early for check-in."
+"qwen-rowan-chen-2-3","rowan-chen","2026-01-24","voucher","rowan-chen:garden","Community Garden Supply Voucher","£15.00","","Voucher Code: CGT-SPRING-26
+Value: £15.00 GBP
+Currency: GBP
+Expiry Date: 2026-03-31
+Issuer: Bristol Community Garden Trust
+Reason: Volunteer Service Credit (Q4 2025)
+Redemption Limits: Valid only for seed and tool purchases at the garden shop. Cannot be exchanged for cash. One use per transaction."
+"qwen-rowan-chen-2-4","rowan-chen","2026-01-27","booking","rowan-chen:family-visit","Dog Sitting Booking Confirmation","£25.00","PayPal for small online orders","Booking Reference: BEA-DOG-2026-01
+Provider: Bea Fox (Private Foster Approved)
+Client: Rowan Chen
+Pet: Pip (Foster Dog)
+Dates: 2026-01-30 to 2026-02-02
+Service: Full-day care and overnight stay
+Price: £25.00 per day
+Deposit Status: Paid via PayPal
+Cancellation Terms: Full refund if cancelled 48 hours prior. Foster coordinator consent (Jo Harding) on file."
+"qwen-rowan-chen-2-5","rowan-chen","2026-01-28","transaction","rowan-chen:household","Monzo Transaction Detail","£120.00","Monzo household debit ending 5526","Transaction ID: MON-2026-0128-9921
+Date: 2026-01-28
+Merchant: Kitchen Supplier Ltd
+Amount: +£120.00 GBP
+Currency: GBP
+Method: Refund to Original Card (Monzo Debit ending 5526)
+Status: Completed
+Reference: REF-KS-9921
+Description: Refund for faulty mixer tap (Order #KS-4421). Case closed."
+"qwen-rowan-chen-3-1","rowan-chen","2026-02-03","order","rowan-chen:foster-dog","Order Confirmation: Sensitive Diet Kibble","£42.50","PayPal for small online orders","Order Reference: PP-2026-0203-8841
+Date: 2026-02-03
+Items: 1x 'Sensitive Stomach' Kibble (12kg)
+Quantity: 1
+Gross Price: £42.50
+Tax (VAT): £7.08
+Shipping: £0.00
+Total Paid: £49.58
+Payment Method: PayPal
+Delivery Window: 2026-02-05 to 2026-02-06
+Status: Processing
+Note: This order fulfills the dietary change advised by Jo Harding on 2026-01-06."
+"qwen-rowan-chen-3-2","rowan-chen","2026-02-06","return","rowan-chen:family-visit","Return Authorization and Status","£18.50","Monzo household debit ending 5526","Return Reference: RT-PP-2026-0206-112
+Original Order: PP-2026-0125-4420
+Item Returned: 1x Adjustable Dog Harness (Large)
+Reason: Incorrect size
+Status: Received at Warehouse
+Refund Amount: £18.50
+Refund Destination: Original Payment Method (Monzo Debit ending 5526)
+Estimated Processing Time: 3-5 business days
+Note: Refund initiated on 2026-02-06."
+"qwen-rowan-chen-3-5","rowan-chen","2026-02-15","invoice","rowan-chen:atlas-contract","Invoice INV-2026-02-001","£2,000.00","","Invoice Number: INV-2026-02-001
+Date: 2026-02-15
+Client: Atlas Ltd
+Period: January 2026
+Line Item: Data Migration Support
+Subtotal: £2,000.00
+VAT (20%): £400.00
+Total Due: £2,400.00
+Rebate Applied: 4% (£80.00)
+Net Payable: £2,320.00
+Status: Paid
+Payment Method: Bank Transfer
+Reference: ATLAS-PAY-20260215
+Note: Rebate calculated at 4% per the 2025 appendix, as the 2026 renewal draft was unsigned during the billing period."
+"qwen-rowan-chen-4-1","rowan-chen","2026-02-18","payment","rowan-chen:garden","Payment Confirmation: Bristol Community Garden Trust","£15.00","Monzo household debit ending 5526","Transaction ID: BCGT-PAY-2026-0218-04
+Date: 2026-02-18
+Merchant: Bristol Community Garden Trust
+Description: Spring Seedling Order (Volunteer Discount Applied)
+Voucher Code: CGT-SPRING-26
+Voucher Value: £15.00 GBP
+Order Total: £42.00 GBP
+Amount Paid: £27.00 GBP
+Payment Method: Monzo Debit ending 5526
+Status: Completed
+Reference: BCGT-ORD-2026-0218
+Note: Voucher CGT-SPRING-26 has been fully redeemed and is no longer valid."
+"qwen-rowan-chen-4-2","rowan-chen","2026-02-21","card-statement","rowan-chen:migration","Company Mastercard Statement: Feb 2026","£0.00","","Account: Company Mastercard ending 3074
+Statement Period: 2026-02-01 to 2026-02-21
+Opening Balance: £0.00
+
+Transactions:
+2026-02-03 | DataSync Cloud Ltd | £45.00 | Software Subscription
+2026-02-10 | GWR Rail | £62.50 | Travel (Bristol-London)
+2026-02-19 | DataSync Cloud Ltd | £37.50 | License Renewal (Pro Tier)
+
+Total Due: £145.00 GBP
+Payment Due Date: 2026-03-05
+Status: Pending"
+"qwen-rowan-chen-4-3","rowan-chen","2026-02-24","bank-statement","rowan-chen:invoices","Business Current Account Statement: Feb 2026","£1,200.00","","Account: Business Current Account
+Period: 2026-02-01 to 2026-02-24
+Opening Balance: £1,200.00 GBP
+
+Entries:
+2026-02-05 | Out | HMRC VAT Payment | £400.00
+2026-02-12 | In | Atlas Ltd (INV-2026-02-001) | £2,320.00
+2026-02-15 | Out | Morgan Joinery (Deposit) | £500.00
+2026-02-20 | In | GWR Delay Repay (GWR-DR-2026-0209-773) | £25.00
+
+Closing Balance: £2,645.00 GBP
+Note: Invoice INV-2026-02-002 (Feb Work) remains unpaid."
+"qwen-rowan-chen-5-3","rowan-chen","2026-03-09","receipt","rowan-chen:atlas-contract","Payment Receipt: Atlas Ltd","£2,000.00","","Merchant: Atlas Ltd
+Date: 2026-03-09
+Reference: ATLAS-PAY-2026-0309-02
+Description: Payment for Invoice INV-2026-03-001 (February Services)
+Subtotal: £2,000.00
+VAT (20%): £400.00
+Rebate Applied: 5% (£100.00)
+Total Paid: £2,300.00
+Currency: GBP
+Payment Method: Bank Transfer
+Status: Completed
+Note: Rebate calculated per Renewal Agreement v2.0 signed 2026-02-26."
+"qwen-rowan-chen-5-4","rowan-chen","2026-03-12","transport-ticket","rowan-chen:foster-dog","GWR E-Ticket Confirmation","£62.50","Monzo household debit ending 5526","Operator: GWR
+Traveller: Rowan Chen
+Route: Bristol Temple Meads to London Paddington
+Travel Date: 2026-03-14
+Departure: 09:15
+Arrival: 11:10
+Class: Standard
+Fare: £62.50
+Booking Reference: GWR-2026-0312-441
+Status: Confirmed
+Payment Method: Monzo Household Debit ending 5526
+Note: Valid for the specified date only. Connection to Glasgow arranged separately via LNER from King's Cross."
+"qwen-rowan-chen-5-5","rowan-chen","2026-03-15","event-ticket","rowan-chen:garden","Bristol Community Garden Seed Swap Ticket","£0.00","","Event: Spring Seed Swap & Tool Handoff
+Venue: Bristol Community Garden, Main Shed Area
+Date: 2026-03-15
+Time: 10:00 - 12:00
+Holder: Rowan Chen
+Admission Category: Volunteer (Free)
+Price: £0.00
+Ticket Reference: BCGT-EVT-2026-0315-09
+Status: Confirmed
+Note: Entry requires volunteer ID. Shed locker label GREEN-806 must be checked before tool distribution."
+"qwen-rowan-chen-6-1","rowan-chen","2026-03-18","voucher","rowan-chen:family-visit","GWR Delay Repay Voucher Issued","£25.00","","Dear Rowan Chen,
+
+We have reviewed your claim for the delay on 2026-02-07 (Booking Reference: GWR-9921-ATLAS). As the delay exceeded 30 minutes, you are eligible for compensation.
+
+A voucher has been issued to your account:
+Value: £25.00 GBP
+Expiry Date: 2027-03-18
+Restrictions: Valid for one use on any GWR service. Cannot be exchanged for cash. Must be applied at checkout.
+Reference: GWR-VCH-2026-0318-9921
+
+We apologise for the inconvenience caused.
+
+Kind regards,
+Dani Brooks
+Customer Support Agent"
+"qwen-rowan-chen-6-2","rowan-chen","2026-03-21","booking","rowan-chen:family-visit","Rail Booking Confirmation: Bristol to Glasgow","£85.00","Monzo household debit ending 5526","Booking Reference: NRC-2026-0321-GLA
+Traveller: Rowan Chen
+Travel Date: 2026-03-28
+Route: Bristol Temple Meads to Glasgow Central
+Connections: Change at London Euston
+Departure: 09:45 (GWR to London Paddington)
+Arrival: 15:30 (Avanti West Coast to Glasgow)
+Fare: £85.00 GBP
+Payment Method: GWR Voucher (£25.00) + Monzo Debit ending 5526 (£60.00)
+Status: Confirmed
+Cancellation Terms: Non-refundable. Change fee £10.00.
+
+Please arrive 15 minutes before departure."
+"qwen-rowan-chen-6-3","rowan-chen","2026-03-24","transaction","rowan-chen:household","Monzo Transaction Detail","£1,200.00","Monzo household debit ending 5526","Transaction ID: MON-2026-0324-5526
+Date: 2026-03-24
+Merchant: Morgan Joinery Ltd
+Amount: -£1,200.00 GBP
+Currency: GBP
+Method: Monzo Household Debit ending 5526
+Status: Completed
+Reference: INV-MJ-2026-004
+Description: Stage 1 Cabinet Deposit
+
+Account Balance After Transaction: £4,500.00 GBP
+Note: This payment was made from the protected renovation reserve."
+"qwen-rowan-chen-6-4","rowan-chen","2026-03-27","order","rowan-chen:kitchen","Kitchen Supplier Order Confirmation","£28.00","PayPal for small online orders","Order Reference: KS-2026-0327-88
+Date: 2026-03-27
+Items:
+1x Dulux Easycare Kitchen Paint (SALT-312, 2.5L) - £28.00
+1x Microfibre Roller Set - £12.50
+1x Masking Tape Pack - £5.00
+Subtotal: £45.50
+VAT (20%): Included in price
+Total Paid: £45.50 GBP
+Payment Method: PayPal
+Delivery Window: 2026-03-29, 09:00 - 17:00
+Status: Processing
+
+Please ensure someone is available to sign for the delivery."
+"qwen-rowan-chen-6-5","rowan-chen","2026-03-28","return","rowan-chen:family-visit","Dog Sitting Cancellation and Refund","£25.00","PayPal for small online orders","Cancellation Confirmation
+Booking Reference: BEA-DOG-2026-03
+Original Dates: 2026-03-28 to 2026-03-29
+Reason: Sitter unavailable
+Status: Cancelled
+Refund Amount: £25.00 GBP
+Refund Destination: Original Payment Method (PayPal)
+Estimated Processing Time: 3-5 business days
+
+Note: Foster coordinator Jo Harding has been notified of the cancellation. Please arrange alternative cover if needed."
+"qwen-rowan-chen-7-3","rowan-chen","2026-04-09","invoice","rowan-chen:security-audit","Invoice INV-2026-04-002: Security Audit Preparation","£1,000.00","","INVOICE NUMBER: INV-2026-04-002
+DATE: 2026-04-09
+DUE DATE: 2026-04-23
+
+CLIENT:
+Bristol Nonprofit
+Attn: Mary Evans
+
+ISSUER:
+Rowan Chen Consultancy
+
+LINE ITEMS:
+1. Security Audit Preparation & Review (Hours: 10) - £1,000.00
+2. Documentation & Compliance Check - £200.00
+
+SUBTOTAL: £1,200.00
+VAT (20%): £0.00 (Exempt/Reverse Charge applicable if registered)
+TOTAL DUE: £1,200.00 GBP
+
+PAYMENT STATUS: Unpaid
+
+NOTE: This invoice covers preparation work only. No fees for production data migration are included as DPA-42 v3.0 remains unsigned. Data exchange is blocked pending legal countersignature."
+"qwen-rowan-chen-7-4","rowan-chen","2026-04-12","payment","rowan-chen:family-visit","Payment Confirmation: Dog Sitting Deposit","£40.00","PayPal for small online orders","TRANSACTION REFERENCE: PAY-2026-0412-DOG
+DATE: 2026-04-12
+SENDER: Rowan Chen
+RECIPIENT: Alex Thorne (Sitter)
+AMOUNT: £40.00 GBP
+CURRENCY: GBP
+METHOD: PayPal
+STATUS: Completed
+SETTLEMENT REF: PAYPAL-2026-0412-8891
+
+NOTE: Deposit for dog sitting services for dates 2026-04-28 to 2026-04-29. Foster coordinator Jo Harding has approved Alex Thorne. Previous booking with Bea Fox (Ref: BEA-DOG-2026-03) was cancelled and refunded £25.00 to PayPal on 2026-04-10."
+"qwen-rowan-chen-7-5","rowan-chen","2026-04-15","card-statement","rowan-chen:invoices","Company Mastercard Statement: March 2026","£10.00","","CARD ENDING: 3074
+PERIOD: 2026-03-01 to 2026-03-31
+
+LINE ITEMS:
+2026-03-05 | Out | Adobe Creative Cloud | -£10.00
+2026-03-10 | Out | Microsoft 365 | -£12.00
+2026-03-15 | Out | GWR Rail Ticket | -£85.00
+2026-03-20 | In | GWR Delay Repay Refund | +£25.00
+2026-03-25 | Out | Zoom Pro | -£13.00
+
+TOTAL DUE: £1,245.00 GBP
+PAYMENT DATE: 2026-04-15
+STATUS: Paid
+
+NOTE: Atlas Ltd payment (INV-2026-03-001) received via bank transfer, not card. Card balance reflects travel and software expenses only."
+"qwen-rowan-chen-8-1","rowan-chen","2026-04-18","bank-statement","rowan-chen:invoices","Company Mastercard Statement: March 2026","£10.00","","CARD ENDING: 3074
+PERIOD: 2026-03-01 to 2026-03-31
+
+LINE ITEMS:
+2026-03-05 | Out | Adobe Creative Cloud | -£10.00
+2026-03-10 | Out | Microsoft 365 | -£12.00
+2026-03-15 | Out | GWR Rail Ticket | -£85.00
+2026-03-20 | In | GWR Delay Repay Refund | +£25.00
+2026-03-25 | Out | Zoom Pro | -£13.00
+
+TOTAL DUE: £1,245.00
+STATUS: Pending Direct Debit"
+"qwen-rowan-chen-9-1","rowan-chen","2026-05-03","receipt","rowan-chen:security-audit","Comprobante de pago - Entorno de pruebas RIO-588","£150.00","","Hola Rowan,
+
+Aquí tienes el comprobante de la configuración del entorno de pruebas para el lote RIO-588.
+
+MERCANTE: Iberia Retail Partner
+CONCEPTO: Setup entorno de pruebas (Lote RIO-588)
+FECHA: 2026-05-03
+TOTAL: £150.00 GBP
+METODO: Tarjeta corporativa terminación 3074
+ESTADO: Pagado
+REFERENCIA: INV-IRP-2026-0503-01
+
+Gracias por la rapidez. Seguimos a la espera de la firma del DPA para el siguiente paso."
+"qwen-rowan-chen-9-2","rowan-chen","2026-05-06","transport-ticket","rowan-chen:foster-dog","Rail Ticket: Bristol to Glasgow","£145.00","","TICKET REFERENCE: NR-2026-0506-GLA-01
+PASSENGER: Rowan Chen
+DATE OF TRAVEL: 2026-05-21
+ROUTE: Bristol Temple Meads to Glasgow Central
+OPERATORS: GWR (Bristol to London Paddington), LNER (London King's Cross to Edinburgh), ScotRail (Edinburgh to Glasgow Central)
+DEPARTURE: 17:45 from Bristol Temple Meads
+ARRIVAL: 23:15 at Glasgow Central
+CLASS: Standard
+FARE: £145.00 GBP
+STATUS: Confirmed
+NOTE: This journey also requires a cross-London transfer from Paddington to King’s Cross before the LNER leg, then a change at Edinburgh Waverley. Allow at least 45 minutes for the London transfer."
+"qwen-rowan-chen-9-3","rowan-chen","2026-05-09","event-ticket","rowan-chen:garden","Community Garden Volunteer Event Ticket","","","EVENT: Saturday Morning Shift - Shed Opening
+DATE: 2026-05-09
+TIME: 09:00 - 13:00
+VENUE: Bristol Community Garden, Main Gate
+HOLDER: Rowan Chen
+ROLE: Opening Volunteer
+ADMISSION: Free (Volunteer Access)
+REFERENCE: CG-EVT-2026-0509-RC
+INSTRUCTIONS:
+1. Collect key from gate lockbox (code shared via volunteer chat).
+2. Open shed locker GREEN-806.
+3. Count tools against checklist v3.2.
+4. Sign handoff sheet for Asha Green (closing shift).
+NOTE: Weather forecast is rain. Wear boots."
+"qwen-rowan-chen-9-4","rowan-chen","2026-05-12","voucher","rowan-chen:family-visit","GWR Delay Repay Voucher","£25.00","","Issuer: GWR
+Original Reason: Delay Repay Claim GWR-2026-0415-77
+Value: £25.00 GBP
+Currency: GBP
+Expiry: 2026-11-12
+Redemption Limits: Valid for GWR services only. Cannot be exchanged for cash.
+Reference: VOUCHER-GWR-2026-0512-44
+Status: Active
+Note: Use this code at checkout for future bookings."
+"qwen-rowan-chen-9-5","rowan-chen","2026-05-15","booking","rowan-chen:family-visit","Dog Sitting Booking Confirmation","£60.00","PayPal for small online orders","Provider: Alex Thorne
+Party: Rowan Chen
+Dates: 2026-05-22 to 2026-05-24
+Service: Overnight dog sitting for Pip
+Price: £60.00 GBP
+Payment Status: Deposit £20.00 paid via PayPal (Ref PAY-2026-0515-DOG)
+Cancellation Terms: Full refund if cancelled 48 hours prior.
+Reference: BOOK-DOG-2026-0515-AT
+Status: Confirmed
+Note: Foster coordinator Jo Harding has approved the sitter."
+"qwen-rowan-chen-10-1","rowan-chen","2026-05-18","transaction","rowan-chen:household","Monzo Transaction Detail: Morgan Joinery Ltd","£1,200.00","Monzo household debit ending 5526","Transaction ID: MON-2026-0518-5526
+Date: 2026-05-18
+Merchant: Morgan Joinery Ltd
+Amount: -£1,200.00 GBP
+Currency: GBP
+Method: Monzo Household Debit ending 5526
+Status: Completed
+Reference: INV-MJ-2026-005
+Description: Stage 2 Cabinet Deposit
+
+Account Balance After Transaction: £3,300.00 GBP
+Note: This payment releases the second tranche for cabinet manufacturing. Ensure measurements match Tess's final quote before fitting begins."
+"qwen-rowan-chen-10-2","rowan-chen","2026-05-21","order","rowan-chen:kitchen","Kitchen Supplier Order Confirmation","£14.50","PayPal for small online orders","Order Reference: KS-2026-0521-44
+Date: 2026-05-21
+Items:
+1x Dulux Easycare Kitchen Paint (SALT-312, 1L) - £14.50
+1x Microfibre Roller Set (goodwill replacement for missing March item) - £0.00
+Subtotal: £14.50
+VAT (20%): Included in price
+Total Paid: £14.50 GBP
+Payment Method: PayPal
+Delivery Window: 2026-05-22, 10:00 - 14:00
+Status: Confirmed; dispatch scheduled
+
+Note: This order resolves case KS-SUP-2026-0403-01. The roller set replaces the item missing from order KS-2026-0327-88. The 1L paint tin is a final touch-up quantity, distinct from the initial 2.5L purchase. Please inspect upon arrival."
+"qwen-rowan-chen-10-3","rowan-chen","2026-05-24","return","rowan-chen:garden","Community Garden Return Authorization","","","Return Reference: CG-RET-2026-0524-01
+Date: 2026-05-24
+Original Order: CG-ORD-2026-0510-05
+Items: 4x Seedling Trays (Plastic)
+Reason: Damaged in transit/storage
+Status: Pending Inspection
+Refund Destination: Volunteer Account Credit
+Timing: Credit applied after physical check at shed.
+Note: Leave items in locker GREEN-806. I will sign off when I open the shed on Saturday."
+"qwen-rowan-chen-11-1","rowan-chen","2026-06-03","invoice","rowan-chen:migration","Factura de Servicios de Migración de Datos","£120.83","","Hola Rowan,
+
+Adjunto la factura para el lote de prueba RIO-588.
+
+FACTURA NÚMERO: INV-ES-2026-0603
+FECHA: 2026-06-03
+CLIENTE: Rowan Chen Consultancy
+SERVICIOS: Validación de archivos fuente y preparación de datos.
+SUBTOTAL: £120.83
+IVA (20%): £24.17
+TOTAL: £145.00
+ESTADO: Pendiente de pago
+REFERENCIA DE ENVÍO: RIO-588
+
+Por favor, confirma la recepción. Saludos."
+"qwen-rowan-chen-11-2","rowan-chen","2026-06-06","payment","rowan-chen:foster-dog","PayPal Payment Confirmation","£60.00","Monzo household debit ending 5526","Payment Confirmation
+
+You sent a payment to Bea Fox.
+
+Date: 2026-06-06
+Amount: £60.00 GBP
+Status: Completed
+Payment Method: Monzo Household Debit ending 5526
+Transaction ID: PAY-2026-0606-BEA
+Note: Weekend dog sitting for Pip (2026-06-06 to 2026-06-08). Approved by Jo Harding."
+"qwen-rowan-chen-11-3","rowan-chen","2026-06-09","card-statement","rowan-chen:invoices","Company Mastercard Statement: May 2026","£45.00","","CARD ENDING: 3074
+PERIOD: 2026-05-01 to 2026-05-31
+
+LINE ITEMS:
+2026-05-03 | Out | DataSync Cloud Ltd | -£45.00
+2026-05-05 | Out | Adobe Creative Cloud | -£10.00
+2026-05-10 | Out | Microsoft 365 | -£12.00
+2026-05-15 | Out | GWR Rail Ticket | -£25.50
+
+TOTAL DUE: £92.50
+PAYMENT DUE DATE: 2026-06-15
+STATUS: Open"
+"qwen-rowan-chen-11-4","rowan-chen","2026-06-12","bank-statement","rowan-chen:invoices","Business Current Account Statement: May 2026","£1,450.00","","Account: Business Current Account
+Period: 2026-05-01 to 2026-05-31
+Opening Balance: £1,450.00
+Closing Balance: £1,475.00
+
+ENTRIES:
+2026-05-12 | In | GWR Delay Repay Refund | +£25.00
+2026-05-20 | Out | HMRC VAT Payment | -£400.00
+2026-05-25 | Out | Morgan Joinery (Stage 3) | -£1,200.00
+2026-05-28 | In | Bristol Nonprofit (INV-2026-04-002) | +£1,200.00
+
+NOTE: Atlas Ltd invoice INV-2026-03-001 remains unpaid."
+"qwen-rowan-chen-12-4","rowan-chen","2026-06-27","receipt","rowan-chen:atlas-contract","Payment Receipt: Atlas Ltd","£2,000.00","","Merchant: Atlas Ltd
+Date: 2026-06-27
+Reference: ATLAS-PAY-2026-0627-01
+Description: Payment for Invoice INV-2026-05-001 (May Services)
+
+BREAKDOWN:
+Subtotal: £2,000.00
+VAT (20%): £400.00
+Gross Total: £2,400.00
+Rebate Applied: 7% of net fees (£140.00)
+VAT credit on rebate: £28.00
+Total Paid after credit: £2,232.00
+
+Currency: GBP
+Payment Method: Bank Transfer
+Status: Completed
+
+Note: Rebate calculated per Renewal Agreement v2.2 (Executed 2026-05-28). The 7% rate supersedes the previous 5% interim term. No further adjustments required for this period."
+"qwen-rowan-chen-12-5","rowan-chen","2026-06-28","transport-ticket","rowan-chen:household","Rail Ticket: Glasgow to Bristol","£138.50","","TICKET REFERENCE: NR-2026-0628-BRI-02
+PASSENGER: Rowan Chen
+DATE OF TRAVEL: 2026-06-28
+ROUTE: Glasgow Central to Bristol Temple Meads
+OPERATORS: ScotRail (Glasgow to Edinburgh), LNER (Edinburgh to London King's Cross), GWR (London Paddington to Bristol Temple Meads)
+DEPARTURE: 08:30 from Glasgow Central
+ARRIVAL: 14:15 at Bristol Temple Meads
+CLASS: Standard
+FARE: £138.50 GBP
+STATUS: Confirmed
+NOTE: Includes £15.00 taxi voucher from Jamie’s address to Glasgow Central (Ref: TAXI-GLA-2026-0628). Cross-London transfer from King’s Cross St Pancras to Paddington uses the Circle or Hammersmith & City line."
+"qwen-sofia-morales-1-5","sofia-morales","2026-01-15","receipt","sofia-morales:staff","Comprobante de Pago Nómina Extraordinaria","18,00 EUR","SEPA bank transfer","COMPROBANTE DE TRANSFERENCIA SEPA
+FECHA: 15/01/2026
+EMISOR: Estudio Morales (Sofía Morales)
+BENEFICIARIOS: Lucía Ferrer, Mario Costa
+CONCEPTO: Pago horas extra montaje evento 11/01/2026
+
+DETALLE:
+- Lucía Ferrer: 2 horas extra @ 18,00 EUR/h = 36,00 EUR
+- Mario Costa: 4 horas extra @ 16,00 EUR/h = 64,00 EUR
+- TOTAL NETO: 100,00 EUR
+- MÉTODO: Transferencia SEPA (Cuenta origen: ES**...6418)
+- ESTADO: Ejecutado
+- REFERENCIA: SEPA-2026-01-15-EM-001
+
+NOTA: Este pago cubre las horas adicionales derivadas del retraso en la recepción de flores por la avería de la cámara fría. No incluye dietas de transporte."
+"qwen-sofia-morales-2-1","sofia-morales","2026-01-18","transport-ticket","sofia-morales:porto-visit","Confirmación de reserva Renfe - Trayecto Valencia-Madrid","45,00 EUR","","Estimada Sofía Morales,
+
+Adjuntamos su billete electrónico para el trayecto Valencia Joaquín Sorolla - Madrid Atocha.
+
+Operador: Renfe
+Viajero: Sofía Morales
+Fecha de viaje: 20 de enero de 2026
+Hora de salida: 07:30
+Duración: 1h 30min
+Tarifa: 45,00 EUR
+Clase: Turista
+Asiento: 12A (Ventanilla)
+Referencia de reserva: RNF-8821-XK
+
+Nota: Este billete cubre únicamente el tramo doméstico. El trayecto posterior a Porto requiere conexión independiente (Bus Vigo-Valença + CP Celta)."
+"qwen-sofia-morales-2-2","sofia-morales","2026-01-21","event-ticket","sofia-morales:running","Entrada Carrera Popular Barrio del Carmen","12,00 EUR","","Confirmación de inscripción
+
+Evento: Carrera Popular Barrio del Carmen
+Lugar: Salida desde Plaza de la Virgen
+Titular: Sofía Morales
+Fecha y hora: 25 de enero de 2026, 09:00
+Categoría: 5K Popular
+Precio: 12,00 EUR
+Referencia de ticket: CPV-2026-0991
+
+Instrucciones: Presentar este código QR en la bolsa de salida. Recogida de dorsales el sábado 24 de 10:00 a 14:00 en el pabellón municipal."
+"qwen-sofia-morales-2-3","sofia-morales","2026-01-24","voucher","sofia-morales:running","Vale de descuento por cancelación de evento","15,00 EUR","","Estimada cliente,
+
+Debido a la cancelación de la 'Carrera Nocturna de Enero', le emitimos un vale de compensación.
+
+Emisor: Deportes Run Valencia
+Motivo original: Cancelación de inscripción por condiciones meteorológicas
+Valor: 15,00 EUR
+Moneda: EUR
+Caducidad: 24 de julio de 2026
+Restricciones de canje: Válido únicamente para productos de nutrición deportiva y textil técnico en tienda física. No acumulable con otras ofertas.
+Referencia: VCH-2026-4421"
+"qwen-sofia-morales-2-4","sofia-morales","2026-01-27","booking","sofia-morales:mother-clinic","Confirmación de reserva Transporte Adaptado","25,00 EUR","","Confirmación de servicio
+
+Proveedor: Taxi Adaptado Valencia
+Participante: Pilar Morales
+Fecha: 3 de febrero de 2026
+Hora de recogida: 09:45
+Servicio: Transporte puerta a puerta a Centro de Rehabilitación
+Precio: 25,00 EUR
+Estado del pago: Pendiente (pago en destino)
+Condiciones de cancelación: Cancelación gratuita hasta 24 horas antes del servicio. Después, se cobra el 50%.
+Referencia de reserva: TAV-2026-0203-P"
+"qwen-sofia-morales-2-5","sofia-morales","2026-01-28","transaction","sofia-morales:porto-visit","Extracto de movimiento bancario","60,00 EUR","Bizum personal transfers","Movimientos recientes en cuenta ES**...6418
+
+1. Fecha: 28/01/2026
+   Concepto: Bizum a Tomás Vidal
+   Importe: -60,00 EUR
+   Estado: Completado
+   Referencia: BZM-20260128-099
+
+2. Fecha: 28/01/2026
+   Concepto: Pago Hotel Porto Central
+   Importe: -120,00 EUR
+   Estado: Pendiente de liquidación
+   Referencia: VISA-6418-8821
+
+3. Fecha: 27/01/2026
+   Concepto: Compra Mar Azul
+   Importe: -450,00 EUR
+   Estado: Completado
+   Referencia: SEPA-MA-2026-01
+
+Saldo disponible: 1.240,50 EUR"
+"qwen-sofia-morales-3-1","sofia-morales","2026-02-03","order","sofia-morales:flower-supplier","Order Confirmation & Substitution Notice","150.00 EUR","","Dear Sofía,
+
+Your order MA-2026-0203 is confirmed. Substitution accepted. Shipment dispatched via DHL Express. Tracking: DHL-ES-99821. Delivery window: Feb 4, 08:00-10:00. Please ensure cold storage is ready.
+
+Order Details:
+- Item: Peonías Coral Charm (Substituted for Sarah Bernhardt due to stock).
+- Quantity: 50 stems.
+- Gross: 150.00 EUR
+- VAT (21%): 31.50 EUR
+- Shipping: 15.00 EUR
+- Total Paid: 196.50 EUR
+- Method: Visa ending 6418
+- Status: Dispatched
+
+Best regards,
+Oliver Kent
+Mar Azul Export Desk"
+"qwen-sofia-morales-3-2","sofia-morales","2026-02-06","return","sofia-morales:flower-supplier","Autorización de Devolución (RMA)","196.50 EUR","","Estimada Sofía,
+
+Hemos procesado su solicitud. Aquí tiene la autorización de devolución.
+
+Referencia Original: MA-2026-0203
+Referencia Devolución: RA-2026-0206
+Motivo: Daño en transporte (tallos rotos en caja 3).
+Estado: Pendiente de recogida.
+Fecha Recogida: 07/02/2026 (14:00-16:00).
+Destino Reembolso: Visa terminada en 6418.
+Importe Estimado: 196.50 EUR.
+
+Por favor, empaquete las flores dañadas en la caja original si es posible. El reembolso se emitirá tras la verificación física en nuestro almacén.
+
+Saludos,
+Isabel Ríos
+Mar Azul"
+"qwen-sofia-morales-3-5","sofia-morales","2026-02-15","invoice","sofia-morales:valencia-wedding","PROFORMA ANTICIPO - BODA CLARA BELTRÁN","300,00 EUR","Stripe event deposits","PROFORMA DE SERVICIOS FLORALES
+Cliente: Clara Beltrán
+Evento: Boda Valencia
+Fecha Evento: 15/05/2026
+
+Concepto: Anticipo reserva de fecha (12%)
+Base Imponible: 300,00 EUR
+IVA (21%): 63,00 EUR
+TOTAL A PAGAR: 363,00 EUR
+
+Método de pago: Transferencia Bancaria o Stripe
+Vencimiento: 28/02/2026
+
+Nota: Este documento es una proforma para el anticipo de la boda del 15/05/2026. No constituye factura final. El saldo restante se facturará tras la confirmación definitiva de los detalles del evento."
+"qwen-sofia-morales-4-1","sofia-morales","2026-02-18","payment","sofia-morales:mother-clinic","Confirmación de pago Bizum - Taxi Adaptado Valencia","25,00 EUR","Bizum personal transfers","Concepto: Transporte adaptado Centro de Rehabilitación
+Fecha: 18/02/2026
+Hora: 10:00
+Importe: 25,00 EUR
+Método: Bizum
+Estado: Completado
+Referencia: BZM-20260218-442
+Receptor: Taxi Adaptado Valencia
+Nota: Servicio puerta a puerta para cita médica."
+"qwen-sofia-morales-4-2","sofia-morales","2026-02-21","card-statement","sofia-morales:flower-supplier","Extracto Visa Estudio Morales - Feb 2026","450,00 EUR","","Titular: Sofía Morales
+Tarjeta: Visa terminada en 6418
+Periodo: 01/02/2026 - 20/02/2026
+
+1. 03/02/2026 - Mar Azul Importación - 450,00 EUR (Cargo)
+2. 07/02/2026 - Taller Alba Refrigeración - 120,00 EUR (Cargo)
+3. 15/02/2026 - Renfe Viajes - 85,50 EUR (Cargo)
+4. 18/02/2026 - Mar Azul Reembolso Parcial - 150,00 EUR (Abono Pendiente)
+
+Total Pendiente: 505,50 EUR
+Fecha de Cobro: 25/02/2026"
+"qwen-sofia-morales-4-3","sofia-morales","2026-02-24","bank-statement","sofia-morales:quotes","Extracto Cuenta Comercial Estudio Morales","2.450,00 EUR","Stripe event deposits","Cuenta: ES**...6418 (Etiqueta: Estudio Morales)
+Periodo: 20/02/2026 - 24/02/2026
+Saldo Inicial: 2.450,00 EUR
+
+1. 20/02/2026 - Pago Boda Clara Beltrán (Stripe) - 500,00 EUR (Ingreso)
+2. 22/02/2026 - Factura Mar Azul MA-2026-0218 - 320,00 EUR (Cargo)
+3. 23/02/2026 - Nómina Lucía Ferrer - 450,00 EUR (Cargo)
+
+Saldo Final: 2.180,00 EUR"
+"qwen-sofia-morales-5-3","sofia-morales","2026-03-09","receipt","sofia-morales:valencia-wedding","Receipt: Van Hire Payment","145,00 EUR","","RECIBO DE PAGO
+
+Comercio: Rent-a-Car Valencia
+Fecha: 09/03/2026
+Hora: 14:30
+Método de pago: Visa terminada en 6418
+Referencia de transacción: RCV-20260309-882
+
+Concepto:
+Alquiler Furgoneta Refrigerada (Mercedes Sprinter) - 24h
+Fecha de uso: 14/03/2026
+Importe: 145,00 EUR
+IVA (21%): 30,45 EUR
+Total: 175,45 EUR
+
+Estado: Completado
+Nota: Incluye seguro a todo riesgo y combustible básico. Entrega en Calle de la Madera, Valencia."
+"qwen-sofia-morales-5-4","sofia-morales","2026-03-12","transport-ticket","sofia-morales:running","Renfe Ticket Confirmation","2,40 EUR","","CONFIRMACIÓN DE BILLETE
+
+Operador: Renfe Cercanías
+Viajero: Sofía Morales
+Fecha de viaje: 15/03/2026
+Trayecto: Valencia Nord - Sagunt
+Hora de salida: 08:00
+Hora de llegada: 08:35
+Tarifa: 2,40 EUR
+Clase: Turista
+Asiento: No asignado (Cercanías)
+Referencia de reserva: REN-20260312-4419
+
+Estado: Emitido
+Nota: Billete válido para el día indicado. Presentar código QR en el validador."
+"qwen-sofia-morales-5-5","sofia-morales","2026-03-15","event-ticket","sofia-morales:running","Confirmación de Inscripción - Media Maratón de Alboraya","22,00 EUR","","CONFIRMACIÓN DE INSCRIPCIÓN
+
+Evento: Media Maratón de Alboraya
+Lugar: Salida desde Paseo de la Playa, Alboraya
+Titular: Sofía Morales
+Fecha y hora: 29 de marzo de 2026, 09:00
+Categoría: 21K Popular
+Precio: 22,00 EUR
+Referencia de ticket: MMA-2026-0329
+
+Instrucciones: Presentar este código QR en la bolsa de salida. Recogida de dorsales el viernes 27 de 16:00 a 20:00 en el Pabellón Municipal de Alboraya. Prohibido auriculares."
+"qwen-sofia-morales-6-1","sofia-morales","2026-03-18","voucher","sofia-morales:home-budget","Voucher de Compensación Emitido","45,00 EUR","Stripe event deposits","Estimada Sofía,
+
+En relación con el caso STR-2026-0318-CLARA, confirmamos que la disputa sobre el cargo duplicado ha sido resuelta a su favor. Como compensación por las molestias, hemos emitido un voucher de crédito.
+
+Detalles del Voucher:
+- Valor: 45,00 EUR
+- Moneda: EUR
+- Fecha de emisión: 18/03/2026
+- Caducidad: 30/06/2026
+- Restricciones: Utilizable en cualquier transacción procesada por Stripe. No canjeable por efectivo.
+- Referencia: VCH-2026-0318-45
+
+Puede aplicar este saldo a futuros cobros o reembolsos. Quedamos a su disposición."
+"qwen-sofia-morales-6-2","sofia-morales","2026-03-21","booking","sofia-morales:porto-visit","Confirmación de Reserva de Viaje","45,00 EUR","","Estimada Sofía Morales,
+
+Adjuntamos su confirmación de reserva para el viaje Valencia - Porto.
+
+Itinerario:
+1. Renfe: Valencia Joaquín Sorolla - Madrid Atocha. 20/03/2026, 07:30 - 09:00. Tarifa: 45,00 EUR.
+2. Renfe: Madrid Atocha - Vigo-Guixar. 20/03/2026, 10:15 - 14:30. Tarifa: 65,00 EUR.
+3. CP Celta: Vigo-Guixar - Porto Campanhã. 20/03/2026, 15:15 - 16:45. Tarifa: 25,00 EUR.
+
+Total: 135,00 EUR. Pagado con Visa terminada en 6418.
+Referencia: REN-CP-20260321-889
+Política de cancelación: Reembolso del 80% hasta 48h antes de la salida."
+"qwen-sofia-morales-6-3","sofia-morales","2026-03-24","transaction","sofia-morales:porto-visit","Justificante de Pago Hotel Porto Central","120,00 EUR","","JUSTIFICANTE DE PAGO
+
+Comercio: Hotel Porto Central
+Fecha: 24/03/2026
+Hora: 16:45
+Método de pago: Visa terminada en 6418
+Referencia de transacción: HPC-20260324-11
+
+Concepto:
+Reserva de habitación doble (2 noches)
+Fechas de estancia: 20/03/2026 - 22/03/2026
+Importe: 120,00 EUR
+IVA (6%): 7,20 EUR
+Total: 127,20 EUR
+
+Estado: Completado
+Estado de estancia: Finalizada. Factura del hotel: FHC-2026-0324-77. Incluye desayuno buffet; este cargo liquida la cuenta al hacer check-out."
+"qwen-sofia-morales-6-4","sofia-morales","2026-03-27","order","sofia-morales:valencia-wedding","CONFIRMACIÓN DE PEDIDO - MAR AZUL","450,00 EUR","","CONFIRMACIÓN DE PEDIDO
+Nº Pedido: ORD-2026-0327-MA
+Fecha: 27/03/2026
+Cliente: Estudio Morales
+Evento: Boda Clara Beltrán - 15/05/2026
+
+Artículos Reservados:
+1. Rosas Blancas Avalanche (500 uds): 450,00 EUR
+2. Eucalipto Cinerea (50 manojos): 150,00 EUR
+3. Follaje Verde Variado (30 manojos): 90,00 EUR
+
+Subtotal: 690,00 EUR
+IVA (21%): 144,90 EUR
+Total Estimado: 834,90 EUR
+
+Estado: Confirmado
+Ventana de Entrega: 14/05/2026, 08:00 - 10:00
+Lugar: Calle de la Madera, Valencia
+
+Nota: Este documento es una confirmación de pedido de materiales. La factura se emitirá tras la recepción de la mercancía."
+"qwen-sofia-morales-6-5","sofia-morales","2026-03-28","return","sofia-morales:flower-supplier","Autorización de Devolución (RMA)","450,00 EUR","","Estimada Sofía,
+
+Hemos procesado su solicitud. Aquí tiene la autorización de devolución.
+
+Referencia Original: MA-2026-0325
+Referencia Devolución: RA-2026-0328
+Motivo: Daño en transporte (tallos rotos en caja 3).
+Estado: Pendiente de recogida.
+Fecha Recogida: 29/03/2026 (14:00-16:00).
+Destino Reembolso: Visa terminada en 6418.
+Importe a reembolsar: 450,00 EUR.
+
+Por favor, prepare la caja 3 para la recogida. El reembolso se emitirá tras la inspección física en nuestro almacén de Valencia."
+"qwen-sofia-morales-7-3","sofia-morales","2026-04-09","invoice","sofia-morales:cold-room","Factura de Servicios - Taller Alba","450,00 EUR","SEPA bank transfer","FACTURA Nº INV-2026-0409-ALBA
+
+Emisor: Taller Alba Refrigeración
+Cliente: Estudio Morales (Sofía Morales)
+Fecha de Emisión: 09/04/2026
+Fecha de Servicio: 04/03/2026
+
+Conceptos:
+1. Compresor frigorífico modelo CF-200: 450,00 EUR
+2. Mano de obra técnica (3h): 120,00 EUR
+3. Calibración de sensores y certificado: 50,00 EUR
+
+Subtotal: 620,00 EUR
+IVA (21%): 130,20 EUR
+TOTAL: 750,20 EUR
+
+Método de Pago: Transferencia SEPA
+Cuenta: ES**...8821 (Taller Alba)
+Referencia: INV-2026-0409-ALBA
+Estado: Pendiente de pago
+Vencimiento: 24/04/2026
+
+Nota: Se adjunta informe técnico confirmando temperatura estable a 4°C tras la intervención."
+"qwen-sofia-morales-7-4","sofia-morales","2026-04-12","payment","sofia-morales:home-budget","Confirmación de Pago Bizum","45,00 EUR","Bizum personal transfers","CONFIRMACIÓN DE TRANSFERENCIA BIZUM
+
+Fecha: 12/04/2026
+Hora: 10:45
+Emisor: Sofía Morales
+Receptor: Tomás Vidal
+Importe: 45,00 EUR
+Concepto: Cuota colegio Nico - Abril
+Referencia: BZM-20260412-554
+Estado: Completado
+
+Nota adicional: El cargo duplicado de la cuota escolar (45,00 EUR) detectado en marzo ha sido compensado mediante el voucher de Stripe VCH-2026-0318-45. No se ha realizado nuevo cargo por este concepto en la tarjeta Visa 6418."
+"qwen-sofia-morales-7-5","sofia-morales","2026-04-15","card-statement","sofia-morales:quotes","Extracto de Tarjeta Visa - Estudio Morales","320,00 EUR","Stripe event deposits","EXTRACTO DE TARJETA DE CRÉDITO
+
+Titular: Sofía Morales
+Tarjeta: Visa terminada en 6418
+Periodo: 01/04/2026 - 15/04/2026
+
+Movimientos:
+1. 02/04/2026 - Mar Azul Importación - 320,00 EUR (Cargo)
+2. 03/04/2026 - Mar Azul Reembolso - 180,00 EUR (Abono)
+3. 05/04/2026 - Taller Alba Refrigeración - 750,20 EUR (Cargo)
+4. 08/04/2026 - Rent-a-Car Valencia - 145,00 EUR (Cargo)
+5. 10/04/2026 - Stripe Payout - 500,00 EUR (Abono)
+
+Saldo Anterior: 1.200,00 EUR
+Total Cargos: 1.215,20 EUR
+Total Abonos: 680,00 EUR
+Saldo Actual: 1.735,20 EUR
+Fecha de Vencimiento: 28/04/2026
+Estado: Pendiente de pago"
+"qwen-sofia-morales-8-1","sofia-morales","2026-04-18","bank-statement","sofia-morales:quotes","Extracto de Cuenta Comercial Estudio Morales","1.850,00 EUR","Stripe event deposits","EXTRACTO DE CUENTA COMERCIAL
+
+Titular: Estudio Morales (Sofía Morales)
+Cuenta: ES**...6418 (Etiqueta: Estudio Morales)
+Periodo: 15/04/2026 - 18/04/2026
+Saldo Inicial: 1.850,00 EUR
+
+Movimientos:
+1. 16/04/2026 - Pago Nómina Lucía Ferrer - 450,00 EUR (Cargo)
+2. 17/04/2026 - Alquiler Furgoneta Refrigerada - 145,00 EUR (Cargo)
+3. 18/04/2026 - Ingreso Anticipo Clara Beltrán (Stripe) - 500,00 EUR (Ingreso)
+
+Saldo Final: 1.755,00 EUR
+Estado: Conciliado parcialmente. Pendiente de vincular ingreso con factura INV-2026-0427."
+"qwen-sofia-morales-9-1","sofia-morales","2026-05-03","receipt","sofia-morales:school","Recibo de Excursión Escolar","45,00 EUR","","RECIBO DE PAGAMENTO
+
+Estabelecimento: Colégio de Nico
+Cliente: Sofía Morales
+Data: 03/05/2026
+
+Descrição:
+1. Inscrição na Excursão à Serra da Estrela: 45,00 EUR
+2. Seguro de Viagem Escolar: 5,00 EUR
+
+Total: 50,00 EUR
+Método de Pagamento: Visa terminada em 6418
+Estado: Pago
+Referência: ESC-2026-0503-PT
+
+Nota: Este recibo confirma o pagamento integral da atividade extracurricular."
+"qwen-sofia-morales-9-2","sofia-morales","2026-05-06","transport-ticket","sofia-morales:running","Pase móvil C2 · Valencia–Xàtiva","6,50 EUR","","RENFE CERCANÍAS · PASE MÓVIL
+
+Viajera: Sofía Morales
+Localizador: REN-20260506-7721
+Estado del QR: emitido
+
+SÁBADO 09 MAY 2026
+08:15  Valencia Nord
+  C2 dirección Moixent
+09:05  Xàtiva
+
+Tarifa zona C · 6,50 EUR
+Asiento libre, sin reserva.
+
+Uso: valida el QR antes de subir y consérvalo hasta salir en Xàtiva. El pase cubre solo este trayecto de ida. Consulta la pantalla de la estación por si cambia la vía."
+"qwen-sofia-morales-9-3","sofia-morales","2026-05-09","event-ticket","sofia-morales:running","Pase digital · 10K San Vicente","15,00 EUR","","PASE DIGITAL · CAV-10K-1042
+
+CORREDORA
+Sofía Morales · Dorsal 4521
+
+CONTROL DE SALIDA
+Carrera Popular de San Vicente (10K)
+Plaza de la Reina, Valencia
+17 de mayo de 2026, 09:30
+Cajón popular · acceso desde las 08:45
+
+IMPORTE COBRADO
+15,00 EUR · inscripción confirmada
+Referencia: CPV-2026-1042
+
+ANTES DE CORRER
+Recoge el dorsal en Deportes Run Valencia el sábado 16, de 10:00 a 14:00. Presenta este pase y un documento de identidad; el chip va pegado al reverso del dorsal. No se admite cambio de titular después del 14 de mayo."
+"qwen-sofia-morales-9-4","sofia-morales","2026-05-12","voucher","sofia-morales:home-budget","Voucher de Compensación Emitido","45,00 EUR","Stripe event deposits","Estimada Sofía,
+
+En relación con el caso STR-2026-0318-CLARA, confirmamos que la disputa sobre el cargo duplicado ha sido resuelta a su favor. Como compensación por las molestias, hemos emitido un voucher de crédito.
+
+Detalles del Voucher:
+- Valor: 45,00 EUR
+- Moneda: EUR
+- Fecha de emisión: 12/05/2026
+- Caducidad: 30/06/2026
+- Referencia: VCH-2026-0512-45
+- Restricciones: Utilizable en pagos futuros con la tarjeta Visa terminada en 6418.
+
+Atentamente,
+Vera Martín
+Soporte de Pagos Stripe"
+"qwen-sofia-morales-9-5","sofia-morales","2026-05-15","booking","sofia-morales:porto-visit","Confirmación de Reserva de Viaje","45,00 EUR","","Estimada Sofía Morales,
+
+Adjuntamos su confirmación de reserva para el viaje Valencia - Porto.
+
+Itinerario:
+1. Renfe: Valencia Joaquín Sorolla - Madrid Atocha. 20/05/2026, 07:30 - 09:00. Tarifa: 45,00 EUR.
+2. Renfe: Madrid Atocha - Vigo-Guixar. 20/05/2026, 10:15 - 14:30. Tarifa: 65,00 EUR.
+3. CP Celta: Vigo-Guixar - Porto Campanhã. 20/05/2026, 15:45 - 17:30. Tarifa: 25,00 EUR.
+
+Total: 135,00 EUR
+Estado: Confirmado
+Referencia: VIA-2026-0515-PT
+Nota: El tramo Vigo-Valença opera con tren normal en mayo. No se requiere bus sustitutivo."
+"qwen-sofia-morales-10-1","sofia-morales","2026-05-18","transaction","sofia-morales:porto-visit","Extracto de Cuenta Comercial Estudio Morales","1.240,00 EUR","","EXTRACTO DE CUENTA COMERCIAL
+
+Titular: Estudio Morales (Sofía Morales)
+Cuenta: ES**...6418 (Etiqueta: Estudio Morales)
+Periodo: 15/05/2026 - 18/05/2026
+Saldo Inicial: 1.240,00 EUR
+
+Movimientos:
+1. 16/05/2026 - Pago Nómina Lucía Ferrer - 450,00 EUR (Cargo)
+2. 17/05/2026 - Alquiler Furgoneta Refrigerada - 120,00 EUR (Cargo)
+3. 18/05/2026 - Pago Hotel Porto Central (Visa) - 120,00 EUR (Cargo)
+   Referencia: HPC-20260518-99
+   Estado: Completado
+
+Saldo Final: 550,00 EUR"
+"qwen-sofia-morales-10-2","sofia-morales","2026-05-21","order","sofia-morales:valencia-wedding","CONFIRMACIÓN DE PEDIDO EXTRA - MAR AZUL","90,00 EUR","","CONFIRMACIÓN DE PEDIDO
+Nº Pedido: ORD-2026-0521-MA
+Fecha: 21/05/2026
+Cliente: Estudio Morales
+Evento: Arreglos Post-Boda Clara Beltrán
+
+Artículos Reservados:
+1. Rosas Blancas Avalanche (100 uds): 90,00 EUR
+2. Eucalipto Cinerea (10 manojos): 30,00 EUR
+3. Follaje Verde Variado (5 manojos): 15,00 EUR
+
+Subtotal: 135,00 EUR
+IVA (21%): 28,35 EUR
+Total Estimado: 163,35 EUR
+
+Estado: Confirmado
+Ventana de Entrega: 29/05/2026, 17:00 - 18:00
+Dirección: Venue Central, Valencia
+Nota: Este pedido es independiente de la factura principal de la boda del 15/05/2026."
+"qwen-sofia-morales-10-3","sofia-morales","2026-05-24","return","sofia-morales:flower-supplier","Autorización de Devolución (RMA)","","","AUTORIZACIÓN DE DEVOLUCIÓN (RMA)
+
+Estimada Sofía,
+
+Hemos procesado su solicitud. Aquí tiene la autorización de devolución.
+
+Referencia Original: MA-2026-0510
+Referencia Devolución: RA-2026-0524
+Motivo: Calidad de tallos insuficiente (caja 2).
+Estado: Pendiente de recogida.
+Fecha Recogida: 25/05/2026 (08:00-10:00).
+Destino Reembolso: Visa terminada en 6418.
+
+Nota: Incluir referencia de envío ORANGE-64 en la hoja de relevo."
+"qwen-sofia-morales-11-1","sofia-morales","2026-06-03","invoice","sofia-morales:flower-supplier","Factura Proforma Ajustada - Sustitución Peonías","320.00 EUR","","Dear Sofía,
+
+Please find attached the adjusted proforma invoice for the peony substitution order MA-2026-0510.
+
+Case Reference: MA-EXP-2026-0527
+Original Order Total: 320.00 EUR
+Refund Applied (RMA RA-2026-0524): -180.00 EUR
+Net Amount Due: 140.00 EUR
+
+The refund of 180.00 EUR has been processed to your original payment method, the Visa ending in 6418. Please allow 3-5 business days for the funds to appear in your statement. We appreciate your patience.
+
+Best regards,
+Oliver Kent
+Mar Azul Export Support"
+"qwen-sofia-morales-11-2","sofia-morales","2026-06-06","payment","sofia-morales:home-budget","Confirmación de Transferencia Bizum","45,00 EUR","Bizum personal transfers","CONFIRMACIÓN DE TRANSFERENCIA BIZUM
+
+Fecha: 06/06/2026
+Hora: 11:20
+Emisor: Sofía Morales
+Receptor: Tomás Vidal
+Importe: 45,00 EUR
+Concepto: Cuota colegio Nico - Junio
+Referencia: BZM-20260606-882
+Estado: Completado
+
+Nota adicional: Se ha aplicado el voucher de compensación STR-2026-0318-CLARA (45,00 EUR) para cubrir la diferencia del cargo duplicado anterior."
+"qwen-sofia-morales-11-3","sofia-morales","2026-06-09","card-statement","sofia-morales:quotes","Extracto de Tarjeta Visa - Estudio Morales","320,00 EUR","Stripe event deposits","EXTRACTO DE TARJETA DE CRÉDITO
+
+Titular: Sofía Morales
+Tarjeta: Visa terminada en 6418
+Periodo: 01/06/2026 - 09/06/2026
+
+Movimientos:
+1. 02/06/2026 - Mar Azul Importación - 320,00 EUR (Cargo)
+2. 03/06/2026 - Mar Azul Reembolso - 180,00 EUR (Abono)
+3. 05/06/2026 - Taller Alba Refrigeración - 750,20 EUR (Cargo)
+4. 08/06/2026 - Stripe Payout (Anticipo Clara 15%) - 750,00 EUR (Abono)
+
+Saldo Anterior: 1.240,00 EUR
+Total Cargos: 1.070,20 EUR
+Total Abonos: 930,00 EUR
+Saldo Actual: 1.380,20 EUR"
+"qwen-sofia-morales-11-4","sofia-morales","2026-06-12","bank-statement","sofia-morales:flower-supplier","Extracto de Cuenta Comercial Estudio Morales","1.240,00 EUR","","EXTRACTO DE CUENTA COMERCIAL
+
+Titular: Estudio Morales (Sofía Morales)
+Cuenta: ES**...6418 (Etiqueta: Estudio Morales)
+Periodo: 20/05/2026 - 12/06/2026
+Saldo Inicial: 1.240,00 EUR
+
+Movimientos:
+1. 25/05/2026 - Pago Nómina Lucía Ferrer - 450,00 EUR (Cargo)
+2. 27/05/2026 - Mar Azul Reembolso RMA RA-2026-0524 - 180,00 EUR (Abono)
+3. 01/06/2026 - Alquiler Furgoneta Refrigerada - 85,00 EUR (Cargo)
+4. 05/06/2026 - Anticipo Clara Beltrán - 500,00 EUR (Abono)
+
+Saldo Final: 1.385,00 EUR"
+"qwen-sofia-morales-12-4","sofia-morales","2026-06-27","receipt","sofia-morales:staff","Comprobante de Pago Nómina Extraordinaria","18,00 EUR","SEPA bank transfer","COMPROBANTE DE TRANSFERENCIA SEPA
+FECHA: 27/06/2026
+EMISOR: Estudio Morales (Sofía Morales)
+BENEFICIARIOS: Lucía Ferrer, Mario Costa
+CONCEPTO: Pago horas extra montaje evento 27/06/2026
+
+DETALLE:
+- Lucía Ferrer: 3 horas extra @ 18,00 EUR/h = 54,00 EUR
+- Mario Costa: 2 horas extra @ 16,00 EUR/h = 32,00 EUR
+TOTAL ABONADO: 86,00 EUR
+REFERENCIA: SEPA-20260627-EXTRA
+ESTADO: Completado
+NOTA: Incluye suplemento por trabajo en exterior."
+"qwen-sofia-morales-12-5","sofia-morales","2026-06-28","transport-ticket","sofia-morales:running","Confirmación de Billete Renfe","4,80 EUR","","BILLETE MÓVIL CERCANÍAS
+
+Operador: Renfe Cercanías
+Viajero: Sofía Morales
+Fecha de viaje: 04/07/2026
+Trayecto: Valencia Nord - Sagunt (Ida y Vuelta)
+Hora de salida: 08:00
+Hora de llegada: 08:35
+Tarifa: 4,80 EUR
+Clase: Turista
+Asiento: No asignado (Cercanías)
+Referencia de reserva: REN-20260628-8890
+
+Estado: Emitido
+Condiciones: ida y vuelta el 04/07/2026; sin asiento reservado. Validar el código QR antes de cada trayecto. Cambios sujetos a la tarifa Cercanías."

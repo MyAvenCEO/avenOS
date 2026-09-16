@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-01-03",
+        "intentId": "lena-weber:glaze-supplier",
+        "kind": "email",
+        "user": "Hi Nora, checking on the sample kit for the new matte glazes. Timo mentioned a delay but didn't give a date. When can we expect the shipment?",
+        "assistant": "Thanks for the update. I'll note the Feb 10th date for our internal planning. Please send the tracking number once it's dispatched.",
+        "artifact": {
+          "title": "RE: Sample Kit Status - Nordton Export Desk",
+          "from": "Nora Wells <n.wells@nordton-export.test>",
+          "to": "Lena Weber <lena@weber-keramik.test>",
+          "language": "en",
+          "body": "Dear Ms. Weber,\n\nThank you for your inquiry regarding the sample kit for the Matte Series (Ref: NT-SMP-2026-04).\n\nStatus: The samples are currently undergoing final quality control checks at our Berlin warehouse. Due to a minor labeling adjustment, the release date has been shifted.\n\nNext Step: The shipment is scheduled to leave our facility on February 10, 2026. You will receive a DHL tracking number via email on that date.\n\nWe apologize for any inconvenience this may cause to your production schedule.\n\nBest regards,\n\nNora Wells\nQuality Support Employee\nNordton Export Desk"
+        },
+        "probe": {
+          "question": "When is the sample kit scheduled to leave the facility?",
+          "answer": "February 10, 2026"
+        }
+      },
+      {
+        "date": "2026-01-06",
+        "intentId": "lena-weber:flat-move",
+        "kind": "document",
+        "user": "Mira, ich hab die Liste für den Umzug durchgesehen. Kannst du das absegnen, bevor ich Britta anfrage?",
+        "assistant": "Sieht gut aus. Ich hab die Kaution für die neue Wohnung schon überwiesen. Bitte prüf noch die Fristen für die alte Wohnung.",
+        "artifact": {
+          "title": "Umzugsplan Sommer 2026 - Version 1.2",
+          "from": "Lena Weber",
+          "to": "Mira",
+          "language": "de",
+          "body": "Status: Entwurf zur Freigabe\nDatum: 06.01.2026\n\n1. Finanzierung\n- Kaution neue Wohnung: 2.400,00 EUR (überwiesen am 05.01.2026)\n- Umzugskartons: 150,00 EUR (Budget)\n- Transporter: 300,00 EUR (Budget)\n\n2. Logistik\n- Übergabetermin alte Wohnung: 15.07.2026, 10:00 Uhr\n- Übergabetermin neue Wohnung: 16.07.2026, 14:00 Uhr\n- Helfer: Britta Seidel (Sa, 15.07.), Jonas Beck (So, 16.07.)\n\n3. Aufgaben\n- [ ] Kartons besorgen (bis 01.06.)\n- [ ] Sperrmüll anmelden (bis 01.07.)\n- [ ] Nachsendeauftrag Post (bis 01.07.)\n\nHinweis: Britta kann nur am Samstag helfen, nicht am Sonntag."
+        },
+        "probe": {
+          "question": "Wann ist der Übergabetermin für die alte Wohnung?",
+          "answer": "15.07.2026, 10:00 Uhr"
+        }
+      },
+      {
+        "date": "2026-01-09",
+        "intentId": "lena-weber:glaze-supplier",
+        "kind": "calendar",
+        "user": "Erinnerung für morgen: Call mit Timo wegen der neuen Preisstaffel. Bitte die alten Konditionen raussuchen.",
+        "assistant": "Erinnerung gesetzt. Ich habe die PDF mit den alten Konditionen (Stand 2025) in den Ordner 'Verträge' gelegt.",
+        "artifact": {
+          "title": "Call: Nordton Preisverhandlung",
+          "from": "Lena Weber",
+          "to": null,
+          "language": "de",
+          "body": "Titel: Call: Nordton Preisverhandlung\nDatum: 10.01.2026\nStartzeit: 14:00\nEndzeit: 14:30\nOrt: Zoom (Link im Kalender)\nTeilnehmer: Lena Weber, Timo Falk\nStatus: Bestätigt\n\nAgenda:\n1. Vergleich Preisstaffel 2025 vs. 2026\n2. Bestätigung Chargenfreigabe für März\n3. Klärung Zahlungsziele (SEPA vs. Kreditkarte)\n\nNotiz: Timo hat die neuen Konditionen per Mail geschickt, aber die Unterschrift fehlt noch."
+        },
+        "probe": {
+          "question": "Wann findet der Call mit Timo Falk statt?",
+          "answer": "10.01.2026"
+        }
+      },
+      {
+        "date": "2026-01-12",
+        "intentId": "lena-weber:family-weekend",
+        "kind": "todo",
+        "user": "Papa braucht den Termin für die Ostsee. Bitte DB Ticket buchen und Barrierefreiheit checken.",
+        "assistant": "Ich buche das Ticket für den 24.01. und schicke dir die Bestätigung. Bitte prüf, ob die Unterkunft den Aufzug hat.",
+        "artifact": {
+          "title": "Aufgabe: Familienwochenende Ostsee buchen",
+          "from": "Lena Weber",
+          "to": null,
+          "language": "de",
+          "body": "Aufgabe: Familienwochenende Ostsee buchen\nBesitzer: Lena Weber\nFälligkeitsdatum: 13.01.2026\nStatus: Offen\nVerknüpft mit: Familienwochenende an der Ostsee\n\nSchritte:\n1. DB Fahrkarte Berlin Hbf -> Stralsund Hbf buchen (24.01.2026, 09:00 Uhr)\n2. Barrierefreie Unterkunft in Stralsund bestätigen\n3. Abholung durch Taxi-Service organisieren\n\nNotiz: Papa braucht einen Rollstuhlplatz im Zug. Bitte Sitzplatzreservierung mitmachen."
+        },
+        "probe": {
+          "question": "Welche Strecke soll für das Familienwochenende gebucht werden?",
+          "answer": "Berlin Hbf -> Stralsund Hbf"
+        }
+      },
+      {
+        "date": "2026-01-15",
+        "intentId": "lena-weber:orders",
+        "kind": "receipt",
+        "user": "Jonas, das Paket für Amira ist raus. Hier der Beleg. Bitte im Shop als 'versendet' markieren.",
+        "assistant": "Alles klar. Ich aktualisiere den Status. Die DHL Sendungsnummer ist im Beleg.",
+        "artifact": {
+          "title": "Zahlungsbeleg DHL Paket",
+          "from": "DHL",
+          "to": "Weber Keramik",
+          "language": "de",
+          "body": "Händler: DHL\nArtikel: Paket International (2kg)\nDatum: 15.01.2026\nBetrag: 14,90 EUR\nWährung: EUR\nZahlungsmethode: Visa Debit ****4821\nStatus: Bezahlt\nReferenz: DHL-2026-01-15-8892\n\nSendungsnummer: 00340434271234567890\nEmpfänger: Amira Yilmaz\nVersandart: Standard\n\nHinweis: Sendungsverfolgung aktiv."
+        },
+        "probe": {
+          "question": "Welche Sendungsnummer wurde für das Paket an Amira Yilmaz verwendet?",
+          "answer": "00340434271234567890"
+        }
+      }
+    ],
+    "continuity": "Open: Nordton sample kit delayed until Feb 10 (Nora Wells). Flat move plan v1.2 awaiting Mira's final sign-off on helper schedule. Family weekend DB ticket booking pending (due Jan 13). Closed: DHL shipment to Amira Yilmaz completed and paid (Jan 15)."
+  }
+}

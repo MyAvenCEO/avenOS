@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-03-18",
+        "intentId": "rowan-chen:family-visit",
+        "kind": "voucher",
+        "user": "Ellis, check the GWR email. Did that delay repay from Feb come through as cash or credit?",
+        "assistant": "It’s a voucher. £25.00 credit. Expires in 12 months. Use it for the Glasgow leg if we book soon.",
+        "artifact": {
+          "title": "GWR Delay Repay Voucher Issued",
+          "from": "GWR Customer Support <support@gwr.test>",
+          "to": "Rowan Chen <rowan.chen@consultancy.test>",
+          "language": "en",
+          "body": "Dear Rowan Chen,\n\nWe have reviewed your claim for the delay on 2026-02-07 (Booking Reference: GWR-9921-ATLAS). As the delay exceeded 30 minutes, you are eligible for compensation.\n\nA voucher has been issued to your account:\nValue: £25.00 GBP\nExpiry Date: 2027-03-18\nRestrictions: Valid for one use on any GWR service. Cannot be exchanged for cash. Must be applied at checkout.\nReference: GWR-VCH-2026-0318-9921\n\nWe apologise for the inconvenience caused.\n\nKind regards,\nDani Brooks\nCustomer Support Agent"
+        },
+        "probe": {
+          "question": "What is the expiry date for the GWR voucher?",
+          "answer": "2027-03-18"
+        }
+      },
+      {
+        "date": "2026-03-21",
+        "intentId": "rowan-chen:family-visit",
+        "kind": "booking",
+        "user": "Jamie, booked the return leg. Using the GWR credit + Avanti for the Glasgow bit. Can you confirm Bea is free for the 28th?",
+        "assistant": "Bea is free. Jo approved the handoff. Just send me the train times so I can plan the dinner.",
+        "artifact": {
+          "title": "Rail Booking Confirmation: Bristol to Glasgow",
+          "from": "National Rail / Avanti West Coast <bookings@avanti.test>",
+          "to": "Rowan Chen <rowan.chen@consultancy.test>",
+          "language": "en",
+          "body": "Booking Reference: NRC-2026-0321-GLA\nTraveller: Rowan Chen\nTravel Date: 2026-03-28\nRoute: Bristol Temple Meads to Glasgow Central\nConnections: Change at London Euston\nDeparture: 09:45 (GWR to London Paddington)\nArrival: 15:30 (Avanti West Coast to Glasgow)\nFare: £85.00 GBP\nPayment Method: GWR Voucher (£25.00) + Monzo Debit ending 5526 (£60.00)\nStatus: Confirmed\nCancellation Terms: Non-refundable. Change fee £10.00.\n\nPlease arrive 15 minutes before departure."
+        },
+        "probe": {
+          "question": "Which station does the train arrive at in Glasgow?",
+          "answer": "Glasgow Central"
+        }
+      },
+      {
+        "date": "2026-03-24",
+        "intentId": "rowan-chen:household",
+        "kind": "transaction",
+        "user": "Ellis, paid Tess. Check the bank. Did the £1,200 hit Morgan Joinery?",
+        "assistant": "Yes, cleared. Reserve balance is down but safe. Invoice INV-MJ-2026-004 marked paid.",
+        "artifact": {
+          "title": "Monzo Transaction Detail",
+          "from": "Monzo <support@monzo.test>",
+          "to": "Rowan Chen <rowan.chen@consultancy.test>",
+          "language": "en",
+          "body": "Transaction ID: MON-2026-0324-5526\nDate: 2026-03-24\nMerchant: Morgan Joinery Ltd\nAmount: -£1,200.00 GBP\nCurrency: GBP\nMethod: Monzo Household Debit ending 5526\nStatus: Completed\nReference: INV-MJ-2026-004\nDescription: Stage 1 Cabinet Deposit\n\nAccount Balance After Transaction: £4,500.00 GBP\nNote: This payment was made from the protected renovation reserve."
+        },
+        "probe": {
+          "question": "What was the account balance after the payment?",
+          "answer": "£4,500.00 GBP"
+        }
+      },
+      {
+        "date": "2026-03-27",
+        "intentId": "rowan-chen:kitchen",
+        "kind": "order",
+        "user": "Ordered the SALT-312 paint and rollers. Need it before the fitters arrive. Check delivery window.",
+        "assistant": "Confirmed. Delivery Thursday. Order ref KS-2026-0327-88. Total £45.50.",
+        "artifact": {
+          "title": "Kitchen Supplier Order Confirmation",
+          "from": "Kitchen Supplier Ltd <orders@kitchensupplier.test>",
+          "to": "Rowan Chen <rowan.chen@consultancy.test>",
+          "language": "en",
+          "body": "Order Reference: KS-2026-0327-88\nDate: 2026-03-27\nItems:\n1x Dulux Easycare Kitchen Paint (SALT-312, 2.5L) - £28.00\n1x Microfibre Roller Set - £12.50\n1x Masking Tape Pack - £5.00\nSubtotal: £45.50\nVAT (20%): Included in price\nTotal Paid: £45.50 GBP\nPayment Method: PayPal\nDelivery Window: 2026-03-29, 09:00 - 17:00\nStatus: Processing\n\nPlease ensure someone is available to sign for the delivery."
+        },
+        "probe": {
+          "question": "What is the delivery window for the paint order?",
+          "answer": "2026-03-29, 09:00 - 17:00"
+        }
+      },
+      {
+        "date": "2026-03-28",
+        "intentId": "rowan-chen:family-visit",
+        "kind": "return",
+        "user": "Bea can't do the 28th. Cancelled the dog sit. Refund status?",
+        "assistant": "Cancelled. £25.00 refund pending to PayPal. Jo notified.",
+        "artifact": {
+          "title": "Dog Sitting Cancellation and Refund",
+          "from": "Bea Fox <bea.fox@fostercare.test>",
+          "to": "Rowan Chen <rowan.chen@consultancy.test>",
+          "language": "en",
+          "body": "Cancellation Confirmation\nBooking Reference: BEA-DOG-2026-03\nOriginal Dates: 2026-03-28 to 2026-03-29\nReason: Sitter unavailable\nStatus: Cancelled\nRefund Amount: £25.00 GBP\nRefund Destination: Original Payment Method (PayPal)\nEstimated Processing Time: 3-5 business days\n\nNote: Foster coordinator Jo Harding has been notified of the cancellation. Please arrange alternative cover if needed."
+        },
+        "probe": {
+          "question": "What is the refund amount for the cancelled dog sitting?",
+          "answer": "£25.00 GBP"
+        }
+      }
+    ],
+    "continuity": "Open: DPA-42 v3.0 awaiting countersignature from Malik Ahmed (Atlas Legal); production data exchange blocked. Open: Sam Patel access pending DPA signature. Resolved: GWR delay repay issued as £25.00 voucher (Ref: GWR-VCH-2026-0318-9921). Resolved: Glasgow trip booked for 2026-03-28 (Ref: NRC-2026-0321-GLA) using voucher + card. Resolved: Morgan Joinery Stage 1 deposit paid (£1,200.00, Ref: INV-MJ-2026-004). Resolved: Paint order placed (Ref: KS-2026-0327-88). Open: Alternative dog cover needed for 2026-03-28 as Bea Fox cancelled (Ref: BEA-DOG-2026-03)."
+  }
+}

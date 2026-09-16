@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-05-03",
+        "intentId": "rowan-chen:security-audit",
+        "kind": "receipt",
+        "user": "Lucía sent the invoice for the test environment setup. Did the payment clear?",
+        "assistant": "Yes, paid via company card ending 3074. Reference RIO-588 is on the receipt.",
+        "artifact": {
+          "title": "Comprobante de pago - Entorno de pruebas RIO-588",
+          "from": "Lucía Ortega",
+          "to": "Rowan Chen",
+          "language": "es",
+          "body": "Hola Rowan,\n\nAquí tienes el comprobante de la configuración del entorno de pruebas para el lote RIO-588.\n\nMERCANTE: Iberia Retail Partner\nCONCEPTO: Setup entorno de pruebas (Lote RIO-588)\nFECHA: 2026-05-03\nTOTAL: £150.00 GBP\nMETODO: Tarjeta corporativa terminación 3074\nESTADO: Pagado\nREFERENCIA: INV-IRP-2026-0503-01\n\nGracias por la rapidez. Seguimos a la espera de la firma del DPA para el siguiente paso."
+        },
+        "probe": {
+          "question": "What is the total amount paid for the test environment setup?",
+          "answer": "£150.00 GBP"
+        }
+      },
+      {
+        "date": "2026-05-06",
+        "intentId": "rowan-chen:foster-dog",
+        "kind": "transport-ticket",
+        "user": "Need to check the ticket for the vet run tomorrow. Is it confirmed?",
+        "assistant": "Yes, GWR ticket confirmed for Bristol to London. Departure 08:15.",
+        "artifact": {
+          "title": "GWR E-Ticket Confirmation",
+          "from": "GWR",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Operator: GWR\nTraveller: Rowan Chen\nRoute: Bristol Temple Meads to London Paddington\nTravel Date: 2026-05-07\nDeparture: 08:15\nArrival: 10:10\nClass: Standard\nFare: £45.00\nBooking Reference: GWR-2026-0506-992\nStatus: Confirmed\nPayment Method: Monzo Household Debit ending 5526\nNote: Valid for the specified date and train only."
+        },
+        "probe": {
+          "question": "What is the departure time for the train to London?",
+          "answer": "08:15"
+        }
+      },
+      {
+        "date": "2026-05-09",
+        "intentId": "rowan-chen:garden",
+        "kind": "event-ticket",
+        "user": "Got the ticket for the seedling workshop. Is it free for volunteers?",
+        "assistant": "Yes, volunteer admission is free. Ticket ref BCGT-2026-0509-11.",
+        "artifact": {
+          "title": "Bristol Community Garden Seedling Workshop Ticket",
+          "from": "Bristol Community Garden",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Event: Spring Seedling Workshop\nVenue: Bristol Community Garden, Main Shed Area\nDate: 2026-05-16\nTime: 10:00 - 12:00\nHolder: Rowan Chen\nAdmission Category: Volunteer (Free)\nPrice: £0.00\nTicket Reference: BCGT-2026-0509-11\nStatus: Confirmed\nNote: Entry requires volunteer ID. Shed locker label GREEN-806 for tool access."
+        },
+        "probe": {
+          "question": "What is the ticket reference for the seedling workshop?",
+          "answer": "BCGT-2026-0509-11"
+        }
+      },
+      {
+        "date": "2026-05-12",
+        "intentId": "rowan-chen:family-visit",
+        "kind": "voucher",
+        "user": "Jamie mentioned a rail credit from the earlier delay. Did it come through?",
+        "assistant": "Yes, GWR issued a £25 voucher. Expiry is in 6 months.",
+        "artifact": {
+          "title": "GWR Delay Repay Voucher",
+          "from": "GWR",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Issuer: GWR\nOriginal Reason: Delay Repay Claim GWR-2026-0415-77\nValue: £25.00 GBP\nCurrency: GBP\nExpiry: 2026-11-12\nRedemption Limits: Valid for GWR services only. Cannot be exchanged for cash.\nReference: VOUCHER-GWR-2026-0512-44\nStatus: Active\nNote: Use this code at checkout for future bookings."
+        },
+        "probe": {
+          "question": "What is the value of the GWR voucher?",
+          "answer": "£25.00 GBP"
+        }
+      },
+      {
+        "date": "2026-05-15",
+        "intentId": "rowan-chen:family-visit",
+        "kind": "booking",
+        "user": "Booked the dog sitter for the Glasgow trip. Jo approved?",
+        "assistant": "Yes, Alex Thorne is confirmed. Deposit paid via PayPal.",
+        "artifact": {
+          "title": "Dog Sitting Booking Confirmation",
+          "from": "Alex Thorne",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Provider: Alex Thorne\nParty: Rowan Chen\nDates: 2026-05-22 to 2026-05-24\nService: Overnight dog sitting for Pip\nPrice: £60.00 GBP\nPayment Status: Deposit £20.00 paid via PayPal (Ref PAY-2026-0515-DOG)\nCancellation Terms: Full refund if cancelled 48 hours prior.\nReference: BOOK-DOG-2026-0515-AT\nStatus: Confirmed\nNote: Foster coordinator Jo Harding has approved the sitter."
+        },
+        "probe": {
+          "question": "What is the booking reference for the dog sitting?",
+          "answer": "BOOK-DOG-2026-0515-AT"
+        }
+      }
+    ],
+    "continuity": "Open: DPA-42 v3.0 and Atlas Renewal Appendix v2.1 remain unsigned drafts; production data exchange and 5% rebate application are blocked. Open: Invoice INV-2026-04-002 (£1,200.00) issued to Bristol Nonprofit, unpaid. Resolved: Missing roller set from order KS-2026-0327-88 resolved via replacement dispatch (Case KS-SUP-2026-0403-01). Resolved: Dog sitting cover for Glasgow trip secured with Alex Thorne (Deposit £20.00 paid); Bea Fox refund (£25.00) cleared to PayPal. Resolved: March card statement reconciled; GWR refund (£25.00) credited. New: GWR Voucher £25.00 issued (Ref VOUCHER-GWR-2026-0512-44). New: Dog sitting booking confirmed for 22-24 May (Ref BOOK-DOG-2026-0515-AT)."
+  }
+}

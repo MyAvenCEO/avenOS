@@ -1,0 +1,111 @@
+{
+  "synthetic": true,
+  "model": "qwen3.8-flash-next",
+  "baseUrl": "http://100.96.61.57:8000",
+  "revisionCount": 38,
+  "groups": [
+    {
+      "id": "clara-early",
+      "targets": [
+        "qwen-sofia-morales-3-4",
+        "qwen-sofia-morales-3-5",
+        "qwen-sofia-morales-4-4",
+        "qwen-sofia-morales-6-4"
+      ]
+    },
+    {
+      "id": "clara-late",
+      "targets": [
+        "qwen-sofia-morales-7-2",
+        "qwen-sofia-morales-10-2",
+        "qwen-sofia-morales-10-5"
+      ]
+    },
+    {
+      "id": "atlas-spring",
+      "targets": [
+        "qwen-rowan-chen-7-2",
+        "qwen-rowan-chen-8-2"
+      ]
+    },
+    {
+      "id": "atlas-summer",
+      "targets": [
+        "qwen-rowan-chen-10-5",
+        "qwen-rowan-chen-11-5",
+        "qwen-rowan-chen-12-4"
+      ]
+    },
+    {
+      "id": "nordton-dhl",
+      "targets": [
+        "qwen-lena-weber-6-5",
+        "qwen-lena-weber-7-1",
+        "qwen-lena-weber-10-4"
+      ]
+    },
+    {
+      "id": "lena-cashflow",
+      "targets": [
+        "qwen-lena-weber-8-1"
+      ]
+    },
+    {
+      "id": "rowan-kitchen",
+      "targets": [
+        "qwen-rowan-chen-10-2"
+      ]
+    },
+    {
+      "id": "lena-rail",
+      "targets": [
+        "qwen-lena-weber-2-1"
+      ]
+    },
+    {
+      "id": "lena-variety",
+      "targets": [
+        "qwen-lena-weber-9-3",
+        "qwen-lena-weber-7-2",
+        "qwen-lena-weber-10-2"
+      ]
+    },
+    {
+      "id": "sofia-variety",
+      "targets": [
+        "qwen-sofia-morales-6-3",
+        "qwen-sofia-morales-9-3",
+        "qwen-sofia-morales-12-5",
+        "qwen-sofia-morales-11-3"
+      ]
+    },
+    {
+      "id": "rowan-variety",
+      "targets": [
+        "qwen-rowan-chen-8-5",
+        "qwen-rowan-chen-9-2",
+        "qwen-rowan-chen-9-3",
+        "qwen-rowan-chen-12-5"
+      ]
+    },
+    {
+      "id": "lena-dedupe",
+      "targets": [
+        "qwen-lena-weber-4-3",
+        "qwen-lena-weber-7-5",
+        "qwen-lena-weber-9-5",
+        "qwen-lena-weber-10-3",
+        "qwen-lena-weber-10-5",
+        "qwen-lena-weber-11-4",
+        "qwen-lena-weber-12-5"
+      ]
+    },
+    {
+      "id": "sofia-running-dedupe",
+      "targets": [
+        "qwen-sofia-morales-5-5",
+        "qwen-sofia-morales-9-2"
+      ]
+    }
+  ]
+}

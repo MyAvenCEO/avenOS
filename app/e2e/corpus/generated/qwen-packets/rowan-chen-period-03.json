@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-02-03",
+        "intentId": "rowan-chen:foster-dog",
+        "kind": "order",
+        "user": "Ordered the sensitive kibble Jo mentioned. Did it go through?",
+        "assistant": "Yes, order confirmed. Delivery expected Thursday. Keep the receipt for the foster group expenses.",
+        "artifact": {
+          "title": "Order Confirmation: Sensitive Diet Kibble",
+          "from": "PetPro Supplies <orders@petpro.test>",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Order Reference: PP-2026-0203-8841\nDate: 2026-02-03\nItems: 1x 'Sensitive Stomach' Kibble (12kg)\nQuantity: 1\nGross Price: £42.50\nTax (VAT): £7.08\nShipping: £0.00\nTotal Paid: £49.58\nPayment Method: PayPal\nDelivery Window: 2026-02-05 to 2026-02-06\nStatus: Processing\nNote: This order fulfills the dietary change advised by Jo Harding on 2026-01-06."
+        },
+        "probe": {
+          "question": "What was the total cost for the kibble order?",
+          "answer": "£49.58"
+        }
+      },
+      {
+        "date": "2026-02-06",
+        "intentId": "rowan-chen:family-visit",
+        "kind": "return",
+        "user": "The dog harness was too big. Returned it. Refund status?",
+        "assistant": "Return received. Refund of £18.50 is pending to your Monzo card. Should clear in 3-5 days.",
+        "artifact": {
+          "title": "Return Authorization and Status",
+          "from": "PetPro Supplies <returns@petpro.test>",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Return Reference: RT-PP-2026-0206-112\nOriginal Order: PP-2026-0125-4420\nItem Returned: 1x Adjustable Dog Harness (Large)\nReason: Incorrect size\nStatus: Received at Warehouse\nRefund Amount: £18.50\nRefund Destination: Original Payment Method (Monzo Debit ending 5526)\nEstimated Processing Time: 3-5 business days\nNote: Refund initiated on 2026-02-06."
+        },
+        "probe": {
+          "question": "Which card will the refund go to?",
+          "answer": "Monzo Debit ending 5526"
+        }
+      },
+      {
+        "date": "2026-02-09",
+        "intentId": "rowan-chen:family-visit",
+        "kind": "support",
+        "user": "GWR delayed my train to Glasgow. Claim submitted. Any update?",
+        "assistant": "GWR confirmed the delay. They are processing the delay repay claim. Expect a decision within 10 working days.",
+        "artifact": {
+          "title": "GWR Delay Repay Claim Update",
+          "from": "Dani Brooks <support@gwr.test>",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Case Reference: GWR-DR-2026-0209-773\nTraveller: Rowan Chen\nBooking Reference: GWR-9921-ATLAS\nTravel Date: 2026-02-07\nRoute: Bristol Temple Meads to London Paddington\nDelay Duration: 45 minutes\nStatus: Under Review\nNext Action: Decision will be communicated via email within 10 working days.\nNote: We apologise for the inconvenience caused by the signal failure at Swindon."
+        },
+        "probe": {
+          "question": "How long is the delay repay decision taking?",
+          "answer": "within 10 working days"
+        }
+      },
+      {
+        "date": "2026-02-12",
+        "intentId": "rowan-chen:atlas-contract",
+        "kind": "legal",
+        "user": "Malik sent the draft renewal. Is the rebate fixed at 4%?",
+        "assistant": "Draft v2.0 is attached. It proposes a 5% rebate for 2026, superseding the old 4% term. Not signed yet.",
+        "artifact": {
+          "title": "Atlas Renewal Agreement Draft v2.0",
+          "from": "Malik Ahmed <m.ahmed@atlas.test>",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "Document: Atlas Consultancy Renewal Agreement\nVersion: 2.0 (Draft)\nDate: 2026-02-12\nParties: Atlas Ltd and Rowan Chen Consultancy\nKey Term: Annual Rebate\nClause 4.2: The Rebate for the 2026 contract year shall be 5 percent of net fees, superseding the 4 percent term in the 2025 appendix.\nStatus: Awaiting Countersignature\nNote: This draft is not binding until signed by both parties. Production data exchange remains blocked pending DPA-42 v3.0 signature."
+        },
+        "probe": {
+          "question": "What is the proposed rebate percentage in the draft?",
+          "answer": "5 percent"
+        }
+      },
+      {
+        "date": "2026-02-15",
+        "intentId": "rowan-chen:atlas-contract",
+        "kind": "invoice",
+        "user": "Sent the invoice for Jan work. Did Atlas pay it?",
+        "assistant": "Invoice INV-2026-02-001 is paid. Bank transfer received. Rebate applied at 4% as the renewal wasn't signed in Jan.",
+        "artifact": {
+          "title": "Invoice INV-2026-02-001",
+          "from": "Rowan Chen Consultancy",
+          "to": "Atlas Ltd",
+          "language": "en",
+          "body": "Invoice Number: INV-2026-02-001\nDate: 2026-02-15\nClient: Atlas Ltd\nPeriod: January 2026\nLine Item: Data Migration Support\nSubtotal: £2,000.00\nVAT (20%): £400.00\nTotal Due: £2,400.00\nRebate Applied: 4% (£80.00)\nNet Payable: £2,320.00\nStatus: Paid\nPayment Method: Bank Transfer\nReference: ATLAS-PAY-20260215\nNote: Rebate calculated at 4% per the 2025 appendix, as the 2026 renewal draft was unsigned during the billing period."
+        },
+        "probe": {
+          "question": "What rebate percentage was applied to this invoice?",
+          "answer": "4%"
+        }
+      }
+    ],
+    "continuity": "Open: DPA-42 v3.0 awaiting countersignature from Malik Ahmed (Atlas Legal); production data exchange blocked. Open: Atlas Renewal Agreement Draft v2.0 (5% rebate) awaiting signature; current billing uses 4% rebate. Open: GWR Delay Repay claim (Ref: GWR-DR-2026-0209-773) under review. Resolved: Sensitive kibble ordered (Ref: PP-2026-0203-8841). Resolved: Harness return processed, refund pending to Monzo 5526. Resolved: Jan invoice paid (Ref: ATLAS-PAY-20260215)."
+  }
+}

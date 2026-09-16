@@ -11,7 +11,7 @@ import tempfile
 spec=importlib.util.spec_from_file_location('archive',Path(__file__).with_name('archive.py'))
 archive=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(archive)
-image='postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73'
+image='postgres:18-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2'
 subprocess.run(['docker','pull',image],check=True,stdout=subprocess.DEVNULL)
 with tempfile.TemporaryDirectory(prefix='aven-release-archive-') as temporary:
  root=Path(temporary);bundle=root/'bundle';bundle.mkdir(mode=0o700)

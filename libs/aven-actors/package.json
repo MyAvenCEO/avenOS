@@ -16,6 +16,13 @@
 		"./registry": "./src/registry.ts",
 		"./run": "./src/run.ts",
 		"./sandbox": "./src/sandbox.ts",
+		"./studio": "./src/studio/index.ts",
+		"./studio/catalog": "./src/studio/catalog.ts",
+		"./studio/composer": "./src/studio/composer.ts",
+		"./studio/edit": "./src/studio/edit.ts",
+		"./studio/presentation": "./src/studio/presentation.ts",
+		"./studio/runtime": "./src/studio/runtime.ts",
+		"./studio/v2": "./src/studio/v2.ts",
 		"./abort": "./src/abort.ts"
 	},
 	"scripts": {

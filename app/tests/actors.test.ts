@@ -76,11 +76,11 @@ describe('actor core', () => {
 		expect(ids).toEqual([['source'], ['sink']])
 	})
 
-	test('the derived tool list carries every method plus the send primitive', () => {
+	test('the derived tool list carries named methods without a duplicate generic wrapper', () => {
 		const { bus } = pair()
 		const names = bus.toolSpecs().map((s) => s.name)
 		expect(names).toContain('make_thing')
-		expect(names).toContain('send')
+		expect(names).not.toContain('send')
 	})
 })
 

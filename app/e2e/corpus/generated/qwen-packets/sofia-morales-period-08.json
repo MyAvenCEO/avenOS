@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-04-18",
+        "intentId": "sofia-morales:quotes",
+        "kind": "bank-statement",
+        "user": "Hola, necesito ver el extracto de la cuenta comercial para confirmar si el anticipo de Clara ha entrado. Es para cerrar el presupuesto corregido antes de facturar.",
+        "assistant": "Aquí tienes el extracto reciente. No veo ingresos nuevos de Clara Beltrán, solo los gastos operativos habituales. El anticipo sigue pendiente de confirmación bancaria.",
+        "artifact": {
+          "title": "Extracto de Cuenta Comercial Estudio Morales",
+          "from": "Banco Popular (Fictional)",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "EXTRACTO DE CUENTA COMERCIAL\n\nTitular: Estudio Morales (Sofía Morales)\nCuenta: ES**...6418 (Etiqueta: Estudio Morales)\nPeriodo: 15/04/2026 - 18/04/2026\nSaldo Inicial: 1.850,00 EUR\n\nMovimientos:\n1. 16/04/2026 - Pago Nómina Lucía Ferrer - 450,00 EUR (Cargo)\n2. 17/04/2026 - Alquiler Furgoneta Refrigerada - 145,00 EUR (Cargo)\n3. 18/04/2026 - Ingreso Anticipo Clara Beltrán (Stripe) - 500,00 EUR (Ingreso)\n\nSaldo Final: 1.755,00 EUR\nEstado: Conciliado parcialmente. Pendiente de vincular ingreso con factura INV-2026-0427."
+        },
+        "probe": {
+          "question": "¿Cuánto fue el ingreso del anticipo de Clara Beltrán registrado el 18 de abril?",
+          "answer": "500,00 EUR"
+        }
+      },
+      {
+        "date": "2026-04-21",
+        "intentId": "sofia-morales:valencia-wedding",
+        "kind": "email",
+        "user": "Mateo, te paso la hoja de relevo actualizada para la boda del 15 de mayo. Necesito confirmar que la puerta de carga estará libre a las 07:00 con la clave SOL-983.",
+        "assistant": "Recibido Sofía. Confirmo la disponibilidad de la puerta de carga para el 15/05/2026 a las 07:00. El acceso será con la clave SOL-983. Por favor, envía la factura final actualizada con el recargo de transporte una vez firmada la adenda.",
+        "artifact": {
+          "title": "Confirmación de Acceso y Relevo - Boda Clara Beltrán",
+          "from": "Mateo Serra",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Estimada Sofía,\n\nAdjunto la confirmación de acceso para el evento del 15 de mayo de 2026.\n\nDetalles de Acceso:\n- Fecha: 15/05/2026\n- Hora de apertura puerta carga: 07:00\n- Clave de acceso: SOL-983\n- Contacto en sitio: Mateo Serra\n\nDocumentación Adjunta:\n- Hoja de relevo v2.1 (Clave SOL-983)\n- Plano de ubicación de centros de mesa\n\nNota: La adenda v2.1 debe estar firmada por ambas partes antes de la entrega. El recargo de transporte de 150,00 EUR se incluirá en la factura final.\n\nUn saludo,\nMateo Serra\nGestor de Eventos"
+        },
+        "probe": {
+          "question": "¿Cuál es la clave de acceso confirmada para la puerta de carga el 15 de mayo?",
+          "answer": "SOL-983"
+        }
+      },
+      {
+        "date": "2026-04-24",
+        "intentId": "sofia-morales:mother-clinic",
+        "kind": "document",
+        "user": "He actualizado la hoja de ruta para la cita de mamá. ¿Puedes revisar si la hora de recogida del taxi adaptado coincide con la nueva cita de rehabilitación?",
+        "assistant": "He revisado el documento. La hora de recogida del taxi es correcta para la cita del 28/04. Recuerda llevar la lista de preguntas para el doctor sobre la frecuencia de las sesiones.",
+        "artifact": {
+          "title": "Hoja de Ruta Citas Médicas - Pilar Morales",
+          "from": "Sofía Morales",
+          "to": "Pilar Morales",
+          "language": "es",
+          "body": "HOJA DE RUTA CITAS MÉDICAS - PILAR MORALES\n\nVersión: 1.3\nEstado: Aprobado para uso\nFecha de actualización: 24/04/2026\n\n1. Próxima Cita:\n   - Fecha: 28/04/2026\n   - Hora de cita: 10:30\n   - Centro: Rehabilitación Valencia\n   - Transporte: Taxi Adaptado (Reserva BZM-20260424-112)\n   - Hora de recogida: 09:45\n   - Precio estimado: 25,00 EUR (Pago Bizum al conductor)\n\n2. Preguntas para el doctor:\n   - ¿Es necesario cambiar la frecuencia de las sesiones?\n   - ¿Hay ejercicios nuevos para casa?\n\n3. Documentación a llevar:\n   - Tarjeta sanitaria\n   - Informe anterior\n   - Lista de medicamentos actuales"
+        },
+        "probe": {
+          "question": "¿A qué hora está programada la recogida del taxi adaptado para la cita del 28 de abril?",
+          "answer": "09:45"
+        }
+      },
+      {
+        "date": "2026-04-27",
+        "intentId": "sofia-morales:flower-supplier",
+        "kind": "calendar",
+        "user": "Isabel, tengo la recepción de las peonías sustitutas en el calendario. ¿Confirmas que la referencia de envío ORANGE-64 está en el albarán para que Mario pueda firmar?",
+        "assistant": "Confirmado. La referencia ORANGE-64 figura en el albarán de entrega. La ventana de descarga es de 08:00 a 09:00. Asegúrate de que el frío esté operativo antes de la llegada.",
+        "artifact": {
+          "title": "Recepción Peonías Sustitutas - Mar Azul",
+          "from": "Estudio Morales",
+          "to": "Isabel Ríos",
+          "language": "es",
+          "body": "EVENTO: Recepción Peonías Sustitutas - Mar Azul\nFECHA: 27/04/2026\nHORA INICIO: 08:00\nHORA FIN: 09:00\nLUGAR: Estudio Morales - Zona de Carga\nASISTENTES: Sofía Morales, Mario Costa, Reparto Mar Azul\nESTADO: Confirmado\n\nNOTAS:\n- Referencia de envío: ORANGE-64\n- Pedido original: MA-2026-0325\n- Sustitución por daño en transporte (RA-2026-0328)\n- Verificar temperatura de cámara fría antes de descargar.\n- Firmar albarán con referencia ORANGE-64 visible."
+        },
+        "probe": {
+          "question": "¿Cuál es la referencia de envío que debe figurar en el albarán de las peonías sustitutas?",
+          "answer": "ORANGE-64"
+        }
+      },
+      {
+        "date": "2026-04-28",
+        "intentId": "sofia-morales:porto-visit",
+        "kind": "todo",
+        "user": "Tomás, he creado la tarea para confirmar la custodia de Nico en Oporto. ¿Puedes marcarla como completada cuando hables con Beatriz?",
+        "assistant": "He creado la tarea. Recuerda que el tramo Vigo-Valença tiene bus sustitutivo en abril, pero para mayo es tren normal. Confirma la hora de llegada para avisar a Beatriz.",
+        "artifact": {
+          "title": "Confirmar Custodia Nico - Viaje Oporto",
+          "from": "Sofía Morales",
+          "to": "Tomás Vidal",
+          "language": "es",
+          "body": "TAREA: Confirmar Custodia Nico - Viaje Oporto\nRESPONSABLE: Tomás Vidal\nFECHA LÍMITE: 30/04/2026\nESTADO: Pendiente\n\nDETALLE:\n- Fechas de viaje: 01/05/2026 - 04/05/2026\n- Acción: Confirmar con Beatriz Almeida la recogida de Nico en la estación de Porto Campanhã.\n- Nota: El itinerario incluye Renfe Valencia-Madrid y conexión a Porto. Verificar si el bus sustitutivo Vigo-Valença aplica en estas fechas (no aplica en mayo, solo abril).\n- Enlace: Itinerario de viaje v2.0"
+        },
+        "probe": {
+          "question": "¿Hasta qué fecha debe confirmarse la custodia de Nico para el viaje a Oporto?",
+          "answer": "30/04/2026"
+        }
+      }
+    ],
+    "continuity": "Open: Legal Addendum v2.1 for Clara Beltrán pending signature (Apr 6). Final invoice INV-2026-0427 payment still outstanding. Cold room invoice INV-2026-0409-ALBA issued Apr 9, due Apr 24. Resolved: Mar Azul refund of 180.00 EUR processed Apr 2, visible on card statement Apr 15. Bizum payment of 45.00 EUR to Tomás for school costs confirmed Apr 12. Stripe voucher VCH-2026-0318-45 applied to school fees. New: Wedding date changed to May 15, 2026, requiring 150.00 EUR transport surcharge. Venue access key SOL-983 remains valid for new date. Bank statement Apr 18 confirms 500 EUR deposit from Clara. Email Apr 21 confirms venue access with key SOL-983. Document Apr 24 updates clinic transport pickup to 09:45 for Apr 28. Calendar Apr 27 schedules flower delivery with ref ORANGE-64. Todo Apr 28 sets deadline Apr 30 for Porto custody confirmation."
+  }
+}

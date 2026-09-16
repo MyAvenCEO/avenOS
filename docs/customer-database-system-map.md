@@ -74,21 +74,42 @@ documents, or chat history.
 
 ## One database per customer
 
-Each paid customer environment receives one PostgreSQL database named from its stable
-environment UUID. It contains:
+Each paid platform name creates one customer environment. The same identity subject
+may own several names and therefore several environments. Each environment receives
+one PostgreSQL database named from its stable environment UUID. It contains:
 
 ```text
 cust_<environment-id>
 ├── aven_platform      reconciliation metadata
 ├── artifact_store     artifacts, blobs, evidence, and production runs
 ├── aven_intents       intents and contribution history, including chat
-└── aven_actor_runs    durable Actor run state
+└── aven_actor_runs    durable Actor runs, Studio drafts, connections, deliveries
 ```
 
 `PUBLIC` access is revoked. Database and schema owners are `NOLOGIN`. Each executable
 function receives a customer-qualified login that can connect to exactly one customer
 database and access only its component schema. Artifact, Intent, and Actor roles cannot
 read each other's tables or create arbitrary objects.
+
+Actor component schema version 2 adds Skill Studio's revision-checked draft heads,
+subscription cursors and durable delivery intents. The Actor API role receives
+`SELECT`, `INSERT`, and `UPDATE` on these three tables; the worker role remains
+limited to the run table. Published Skills, synthetic Source definitions, captures,
+activation/invocation receipts and results remain in the Artifact Store, accessed
+through its scoped API. Studio does not read Artifact tables directly.
+
+Artifact component schema version 4 adds read indexes for the source-bound library.
+The library projects original documents and current validated financial observations
+from immutable artifacts; it does not create mutable entity records. Its scoped read
+path uses the verified customer database and environment, and the native client does
+not provide physical routing.
+
+Studio query and command requests use the existing customer `actor-runs` route.
+The exact `POST /studio/query` suffix requires `actor-runs:read` and rejects
+mutating operations; `POST /studio/command` requires `actor-runs:write`.
+Subscription dispatch currently requires a live authorized user request, not a
+persisted user token or unattended worker identity. See
+[Skill Studio verification](skill-studio-verification.md#fail-closed-boundaries) for current limits.
 
 ## Provisioning and reconciliation
 
@@ -110,6 +131,15 @@ requires observing the expected schema version, migration digest, privileges, an
 routing generation in the target database.
 
 ## Request path
+
+The native client lists the signed-in owner's ready environments. It selects the only
+ready environment automatically or requires an explicit choice when there are several.
+Switching the choice keeps the same identity session and remounts the customer workspace
+so prior conversations, Intents, artifacts, Studio selections, email import progress,
+and in-memory watchers do not appear in
+the newly selected environment. The client sends only the environment UUID, never a
+database name or credential. The facade currently admits owner access only; the stored
+`admin` and `member` labels do not define product permissions yet.
 
 For a customer request:
 
@@ -156,7 +186,7 @@ Fencing waits for the physical provisioning lock; reconciliation rejects a lower
 generation. Source customer roles become `NOLOGIN` and their remaining sessions are terminated
 before the final dump. A cluster marker rejects copying across installation targets.
 
-The movement driver uses pinned PostgreSQL 17 tools, private local dump files, an
+The movement driver uses pinned PostgreSQL 18 tools, private local dump files, an
 operation-bound destination marker, a closed staging database and transactional restore. It never overwrites an
 existing unrecognized database or deletes recovery copies. Rollback advances generation,
 preserves both histories, and leaves Actor execution disabled pending reconciliation.

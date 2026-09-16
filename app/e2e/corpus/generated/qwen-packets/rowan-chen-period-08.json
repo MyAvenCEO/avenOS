@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-04-18",
+        "intentId": "rowan-chen:invoices",
+        "kind": "bank-statement",
+        "user": "Reconciling cashflow. Did the Atlas payment clear? Also checking the GWR refund and software subs.",
+        "assistant": "Atlas payment of £2,300.00 cleared on 2026-03-09. GWR refund of £25.00 credited on 2026-03-20. Software subs total £45.00. Balance due on card ending 3074 is £1,245.00.",
+        "artifact": {
+          "title": "Company Mastercard Statement: March 2026",
+          "from": "Monzo Business",
+          "to": "Rowan Chen",
+          "language": "en",
+          "body": "CARD ENDING: 3074\nPERIOD: 2026-03-01 to 2026-03-31\n\nLINE ITEMS:\n2026-03-05 | Out | Adobe Creative Cloud | -£10.00\n2026-03-10 | Out | Microsoft 365 | -£12.00\n2026-03-15 | Out | GWR Rail Ticket | -£85.00\n2026-03-20 | In | GWR Delay Repay Refund | +£25.00\n2026-03-25 | Out | Zoom Pro | -£13.00\n\nTOTAL DUE: £1,245.00\nSTATUS: Pending Direct Debit"
+        },
+        "probe": {
+          "question": "What was the total due on the company card for March?",
+          "answer": "£1,245.00"
+        }
+      },
+      {
+        "date": "2026-04-21",
+        "intentId": "rowan-chen:atlas-contract",
+        "kind": "email",
+        "user": "Quick update on Atlas client renewal and rebate: confirm the billing start date.",
+        "assistant": "Okay, I recorded confirm the billing start date. Then use the most recently signed rebate term.",
+        "artifact": {
+          "title": "RE: Atlas Renewal Appendix v2.1 Status",
+          "from": "Malik Ahmed <malik.ahmed@atlas.test>",
+          "to": "Rowan Chen <rowan.chen@consultancy.test>",
+          "language": "en",
+          "body": "Dear Rowan,\n\nRegarding the Atlas Consultancy Renewal Appendix v2.1: The document remains in DRAFT state. It has not been countersigned by Atlas Legal. Therefore, the 5% rebate term is not yet active for April invoices. Please await the signed document before adjusting any calculations. The previous 4% term applies until signature is received.\n\nBest regards,\nMalik Ahmed\nAtlas Legal"
+        },
+        "probe": {
+          "question": "What is the current status of the Atlas renewal appendix v2.1?",
+          "answer": "DRAFT state"
+        }
+      },
+      {
+        "date": "2026-04-24",
+        "intentId": "rowan-chen:garden",
+        "kind": "document",
+        "user": "On Community garden volunteer rota: count spare tools. What comes next?",
+        "assistant": "Noted. Next, confirm who opens the shed.",
+        "artifact": {
+          "title": "Community Garden Volunteer Rota & Handoff Notes",
+          "from": "Bristol Community Garden Trust",
+          "to": "Volunteers",
+          "language": "en",
+          "body": "Version: 3.2\nDate: 2026-04-24\nStatus: Active for May 2026\n\nShift Schedule:\n- Sat 02 May: Open 09:00 (Asha), Close 13:00 (Rowan)\n- Sat 09 May: Open 09:00 (Rowan), Close 13:00 (Asha)\n\nHandoff Protocol:\n1. Opening volunteer checks tool count against checklist.\n2. Shed locker label: GREEN-806.\n3. Key exchange at main gate. Ensure all spades and rakes are returned to locker GREEN-806 before closing."
+        },
+        "probe": {
+          "question": "What is the shed locker label for the tool handoff?",
+          "answer": "GREEN-806"
+        }
+      },
+      {
+        "date": "2026-04-27",
+        "intentId": "rowan-chen:migration",
+        "kind": "calendar",
+        "user": "Retail data migration: compare source row counts. Please check the status.",
+        "assistant": "Noted. Next, run the next validation before cutover.",
+        "artifact": {
+          "title": "Calendar: Migration Dry Run Review",
+          "from": "Rowan Chen",
+          "to": null,
+          "language": "en",
+          "body": "Event: Migration Dry Run Review\nDate: 2026-04-27\nStart: 10:00\nEnd: 11:30\nPlace: Zoom (Link in invite)\nAttendees: Rowan Chen, Lucía Ortega, Sam Patel\nStatus: Confirmed\nNotes: Review RIO-588 test batch results. Sam to provide access logs. Lucía to confirm Spanish source file integrity. No production data exchange until DPA-42 v3.0 is signed."
+        },
+        "probe": {
+          "question": "Which test batch reference is being reviewed in this meeting?",
+          "answer": "RIO-588"
+        }
+      },
+      {
+        "date": "2026-04-28",
+        "intentId": "rowan-chen:household",
+        "kind": "todo",
+        "user": "review a utility bill. How do we move Household bills and renovation reserve along?",
+        "assistant": "I’ll keep this for the next review: update the shared budget with actual receipts.",
+        "artifact": {
+          "title": "Task: Verify Morgan Joinery Invoice",
+          "from": "Rowan Chen",
+          "to": null,
+          "language": "en",
+          "body": "Owner: Rowan Chen\nAction: Verify Tess Morgan's invoice against the signed quote for cabinet delivery.\nDue Date: 2026-04-30\nStatus: Pending\nLinked Matter: rowan-chen:household\nNotes: Ensure the £1,200.00 deposit matches the agreed stage 1 payment. Do not release funds from the protected reserve until measurements are confirmed by Ellis."
+        },
+        "probe": {
+          "question": "What is the due date for verifying the Morgan Joinery invoice?",
+          "answer": "2026-04-30"
+        }
+      }
+    ],
+    "continuity": "Open: DPA-42 v3.0 and Atlas Renewal Appendix v2.1 remain unsigned drafts; production data exchange and 5% rebate application are blocked. Open: Invoice INV-2026-04-002 (£1,200.00) issued to Bristol Nonprofit, unpaid. Resolved: Missing roller set from order KS-2026-0327-88 resolved via replacement dispatch (Case KS-SUP-2026-0403-01). Resolved: Dog sitting cover for Glasgow trip secured with Alex Thorne (Deposit £40.00 paid); Bea Fox refund (£25.00) cleared to PayPal. Resolved: March card statement reconciled; GWR refund (£25.00) credited."
+  }
+}

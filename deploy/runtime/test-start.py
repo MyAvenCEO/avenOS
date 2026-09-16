@@ -33,10 +33,20 @@ def run(args, data=None):
     return result.stdout.decode().strip()
 
 
+allocated_ports = set()
+
+
 def port():
-    with socket.socket() as listener:
-        listener.bind(('127.0.0.1', 0))
-        return listener.getsockname()[1]
+    # Closing an ephemeral listener allows the OS to immediately return that same
+    # port again. Keep all fixture allocations distinct, including later host tests.
+    for _ in range(100):
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1', 0))
+            candidate = listener.getsockname()[1]
+        if candidate not in allocated_ports:
+            allocated_ports.add(candidate)
+            return candidate
+    raise AssertionError('Could not allocate a distinct fixture port')
 
 
 def wait(work):
@@ -138,16 +148,17 @@ try:
     try:
         run(start)
     except AssertionError:
-        observed = json.loads(run(['docker', 'inspect', f'aven-runtime-{generation}-{generation}-database-1',
-                                  f'aven-runtime-{generation}-{generation}-database-roles-1',
-                                  f'aven-runtime-{generation}-{generation}-artifact-store-provisioner-1']))
-        environments = [dict(value.split('=', 1) for value in row['Config']['Env']) for row in observed]
-        actual_url = urlsplit(environments[2]['ARTIFACT_STORE_PROVISIONER_DATABASE_URL'])
-        print('Fixture credential agreement:', actual_url.password == environments[0]['ARTIFACT_STORE_PROVISIONER_DB_PASSWORD'],
-              actual_url.password == environments[1]['ARTIFACT_STORE_PROVISIONER_DB_PASSWORD'], flush=True)
-        print(run(['docker', 'logs', '--tail', '45', observed[0]['Id']]), flush=True)
-        print(run(['docker', 'logs', '--tail', '30', observed[1]['Id']]), flush=True)
+        # Only synthetic fixture configuration enters this harness. Preserve the
+        # original failure even when startup stopped before creating containers.
+        for arguments in (['ps', '--all'], ['logs', '--no-color', '--tail', '30']):
+            try:
+                result = subprocess.run(['docker', 'compose', '--project-directory', str(destination),
+                                         *arguments], capture_output=True, text=True, timeout=30)
+                print(result.stdout, result.stderr, flush=True)
+            except subprocess.SubprocessError as diagnostic_error:
+                print(f'Could not collect fixture diagnostics: {diagnostic_error}', flush=True)
         raise
+
     first = json.loads(run(['docker', 'compose', '--project-directory', str(destination), 'ps', '--format', 'json']).splitlines()[0])
     run(start)
     assert first['ID'] in run(['docker', 'compose', '--project-directory', str(destination), 'ps', '--format', 'json'])

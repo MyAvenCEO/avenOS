@@ -18,10 +18,12 @@ document-processing job: it is the durable context in which an Aven can continue
 piece of work and account for what happened.
 
 An account starts with checkout. After a verified purchase, the customer receives a
-link to create a passkey at `aven.id`. The Rust client then asks the customer to
-approve that device with the same identity. Once a customer environment is selected,
-the client reaches its data through `api.aven.ceo`; it never receives database
-credentials or chooses a database by name.
+link to create a passkey at `aven.id`. The same account can purchase more globally
+unique platform names, each with its own customer environment and database. The Rust
+client asks the customer to approve that device with the same identity and lets the
+customer switch among owned environments in that session. Once an environment is
+selected, the client reaches its data through `api.aven.ceo`; it never receives
+database credentials or chooses a database by name.
 
 The application is a work in progress. The current foundation proves customer-specific
 databases, bounded service roles, passkey identity, persistent Intents and Actor runs,
@@ -38,8 +40,9 @@ The current application brings these parts into one flow:
   identity dashboard. Each passkey has an editable name.
 - Checkout records purchases, subscriptions, invoices, and every verified Polar
   webhook, including event types the product does not act on yet.
-- Documents can be imported, processed, stored as artifacts, and discussed in the
-  same Intent history.
+- Documents can be imported, processed, stored as artifacts, found in a filtered
+  library, and discussed in the same Intent history. The artifact history remains
+  available beside the library, including an exact-artifact handoff to Skill Studio.
 - Skills describe reusable work; Actor Runner admits durable runs and keeps their
   status, attempts, and recovery state.
 - A customer environment owns its Intents, artifacts, Actor runs, and future domain

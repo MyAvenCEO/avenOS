@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "revisions": [
+    {
+      "id": "qwen-lena-weber-2-1",
+      "user": "hallo, ich brauche das ticket für papa am 20.1. bitte sicherstellen dass es kein ice ist, sondern re1 oder s7. er muss barrierefrei hinkommen.",
+      "assistant": "Hallo Lena, ich habe die Buchung für Klaus Weber am 20.01.2026 angepasst. Es wurde ein Ticket für die RE1-Verbindung von Berlin Hbf nach Potsdam Hbf ausgestellt. Die Barrierefreiheit ist wie gewünscht berücksichtigt, ohne Garantie auf einen festen Rollstuhlplatz. Das Ticket ist im Anhang.",
+      "artifact": {
+        "title": "Fahrkarte RE1 Berlin Hbf - Potsdam Hbf",
+        "from": "noreply@bahn.de.test",
+        "to": null,
+        "language": "de",
+        "body": "Deutsche Bahn AG\nBuchungsbestätigung\n\nReisender: Klaus Weber\nDatum: 20.01.2026\nStrecke: Berlin Hbf -> Potsdam Hbf\nVerbindung: RE1 (RegionalExpress)\nAbfahrt: 09:12 Uhr\nAnkunft: 09:45 Uhr\nKlasse: 2. Klasse\nPreis: 4,90 EUR\nReferenznummer: DB-2026-01-18-8842\n\nHinweis: Diese Fahrkarte ist für den RE1 gültig. Ein ICE ist nicht enthalten. Bitte melden Sie sich am Schalter für Unterstützung beim Einsteigen, da keine feste Platzreservierung für Rollstuhlfahrer garantiert werden kann."
+      },
+      "probe": {
+        "question": "Welche Zugverbindung wurde für Klaus Weber am 20.01.2026 gebucht?",
+        "answer": "Verbindung: RE1 (RegionalExpress)"
+      }
+    }
+  ]
+}

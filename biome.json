@@ -12,6 +12,11 @@
 		"includes": [
 			"**",
 			"!!**/bun.lock",
+			"// Synthetic corpus assets and recorded model traces are generated test data.",
+			"!!app/e2e/corpus/generated",
+			"!!review-evidence",
+			"// The email compiler verifies this output byte-for-byte.",
+			"!!services/checkout/src/lib/server/email/templates.generated.ts",
 			"!!.claude",
 			"!!**/permissions/schemas",
 			"!!app/src-tauri/gen",
@@ -87,10 +92,7 @@
 	},
 	"overrides": [
 		{
-			"includes": [
-				"app/src/app.css",
-				"services/aven-api/src/app.css"
-			],
+			"includes": ["app/src/app.css", "services/aven-api/src/app.css"],
 			"linter": {
 				"rules": {
 					"suspicious": {
@@ -109,9 +111,7 @@
 			}
 		},
 		{
-			"includes": [
-				"**/*.svelte"
-			],
+			"includes": ["**/*.svelte"],
 			"linter": {
 				"rules": {
 					"correctness": {
@@ -126,9 +126,7 @@
 			}
 		},
 		{
-			"includes": [
-				"scripts/tauri-ios-asc.ts"
-			],
+			"includes": ["scripts/tauri-ios-asc.ts"],
 			"linter": {
 				"rules": {
 					"suspicious": {

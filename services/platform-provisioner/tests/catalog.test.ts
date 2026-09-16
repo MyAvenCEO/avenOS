@@ -12,7 +12,10 @@ describe('static customer component catalog', () => {
 		])
 		const actors = catalog.get('os.aven:component:actors:run-repository@1')
 		expect(actors?.grants['os.aven:db-role:actors:api@1']?.tables).toEqual([
-			{ name: 'runs', privileges: ['SELECT', 'INSERT', 'UPDATE'] }
+			{ name: 'runs', privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+			{ name: 'studio_drafts', privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+			{ name: 'studio_connections', privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+			{ name: 'studio_deliveries', privileges: ['SELECT', 'INSERT', 'UPDATE'] }
 		])
 		expect(actors?.grants['os.aven:db-role:actors:worker@1']?.tables).toEqual([
 			{ name: 'runs', privileges: ['SELECT', 'UPDATE'] }

@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//avenOS//Synthetic Corpus//EN
+BEGIN:VEVENT
+UID:qwen-rowan-chen-5-1@synthetic.test
+DTSTAMP:20260303T180200Z
+DTSTART;TZID=Europe/London:20260303T100000
+DTEND;TZID=Europe/London:20260303T103000
+SUMMARY:Sync de migración Atlas - Lote de prueba
+DESCRIPTION:Evento: Sync de migración Atlas - Lote de prueba\nFecha: 2026-03-03\nHora: 10:00 - 10:30 GMT\nUbicación: Microsoft Teams\nAsistentes: Lucía Ortega (Iberia retail partner)\, Rowan Chen (Consultancy)\nEstado: Confirmado\n\nAgenda:\n1. Revisión de los campos de cliente en el entorno de staging.\n2. Confirmación de la referencia de handoff RIO-588 para la carga de prueba.\n\nNota importante: No podemos ejecutar la carga en producción hasta que el DPA esté firmado. El equipo legal de Atlas aún no ha devuelto la versión firmada de DPA-42.
+X-SYNTHETIC-TEST-RECORD:TRUE
+END:VEVENT
+END:VCALENDAR

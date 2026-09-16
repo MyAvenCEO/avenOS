@@ -146,7 +146,9 @@ function onKey(event: KeyboardEvent) {
 		<p class="flow-card-description">{info?.priceEur ?? 30} € einmalig, zzgl. USt.</p>
 
 		{#if info && !info.available}
-			<div class="flow-card-alert">Dieser Name ist nicht mehr frei. <a href="/">Anderen wählen</a></div>
+			<div class="flow-card-alert">
+				Dieser Name ist nicht mehr frei. <a href="/">Anderen wählen</a>
+			</div>
 		{:else}
 			<div class="steps" aria-hidden="true">
 				{#each Array(TOTAL_STEPS) as _, i (i)}
@@ -155,61 +157,61 @@ function onKey(event: KeyboardEvent) {
 			</div>
 			<p class="text text--label">Schritt {step + 1} von {TOTAL_STEPS}</p>
 
-				{#if step === 1}
-					<span class="field">
-						<label class="field-label" for="secure-email">E‑Mail</label>
-						<span class="field-shell">
-							<input
-								class="field-control"
-								id="secure-email"
-								bind:value={email}
-								type="email"
-								autocomplete="email"
-								placeholder="du@beispiel.de"
-								onkeydown={onKey}
-							>
-						</span>
-						<span class="field-hint">Hierhin schicken wir deinen Link — und sonst nichts.</span>
+			{#if step === 1}
+				<span class="field">
+					<label class="field-label" for="secure-email">E‑Mail</label>
+					<span class="field-shell">
+						<input
+							class="field-control"
+							id="secure-email"
+							bind:value={email}
+							type="email"
+							autocomplete="email"
+							placeholder="du@beispiel.de"
+							onkeydown={onKey}
+						>
 					</span>
-				{:else if step === 2}
-					<span class="field">
-						<label class="field-label" for="secure-salutation">Wie dürfen wir dich nennen?</label>
-						<span class="field-shell">
-							<input
-								class="field-control"
-								id="secure-salutation"
-								bind:value={salutation}
-								maxlength="120"
-								autocomplete="name"
-								placeholder="z. B. Samuel"
-								onkeydown={onKey}
-							>
-						</span>
-						<span class="field-hint">
-							Damit wir dich anschreiben können wie ein Mensch, nicht wie ein Formular.
-						</span>
+					<span class="field-hint">Hierhin schicken wir deinen Link — und sonst nichts.</span>
+				</span>
+			{:else if step === 2}
+				<span class="field">
+					<label class="field-label" for="secure-salutation">Wie dürfen wir dich nennen?</label>
+					<span class="field-shell">
+						<input
+							class="field-control"
+							id="secure-salutation"
+							bind:value={salutation}
+							maxlength="120"
+							autocomplete="name"
+							placeholder="z. B. Samuel"
+							onkeydown={onKey}
+						>
 					</span>
-				{:else}
-					<span class="field field--type-multiline">
-						<label class="field-label" for="secure-idea">
-							Was wünschst du dir, dass {name} für dich tut?
-						</label>
-						<span class="field-shell">
-							<textarea
-								class="field-control"
-								id="secure-idea"
-								bind:value={idea}
-								rows="5"
-								maxlength="2000"
-								placeholder="{name} soll …"
-							></textarea>
-						</span>
-						<span class="field-hint">
-							Ein paar Sätze reichen. Wir vergeben <strong>Wildcard‑Einladungen</strong> an die
-							Ideen, die uns umhauen — unabhängig vom Platz in der Warteliste.
-						</span>
+					<span class="field-hint">
+						Damit wir dich anschreiben können wie ein Mensch, nicht wie ein Formular.
 					</span>
-				{/if}
+				</span>
+			{:else}
+				<span class="field field--type-multiline">
+					<label class="field-label" for="secure-idea">
+						Was wünschst du dir, dass {name} für dich tut?
+					</label>
+					<span class="field-shell">
+						<textarea
+							class="field-control"
+							id="secure-idea"
+							bind:value={idea}
+							rows="5"
+							maxlength="2000"
+							placeholder="{name} soll …"
+						></textarea>
+					</span>
+					<span class="field-hint">
+						Ein paar Sätze reichen. Wir vergeben <strong>Wildcard‑Einladungen</strong> an die Ideen,
+						die uns umhauen — unabhängig vom Platz in der Warteliste.
+					</span>
+				</span>
+			{/if}
 
 			{#if error}
 				<div class="flow-card-alert">{error}</div>
@@ -222,9 +224,21 @@ function onKey(event: KeyboardEvent) {
 					<a class="btn btn--ghost" href="/">Anderer Name</a>
 				{/if}
 				{#if step < 3}
-					<button class="btn btn--primary" type="button" disabled={step === 1 && !emailOk} onclick={next}>Weiter</button>
+					<button
+						class="btn btn--primary"
+						type="button"
+						disabled={step === 1 && !emailOk}
+						onclick={next}
+					>
+						Weiter
+					</button>
 				{:else}
-					<button class="btn btn--primary" type="button" disabled={loading || !email || !name} onclick={secure}>
+					<button
+						class="btn btn--primary"
+						type="button"
+						disabled={loading || !email || !name}
+						onclick={secure}
+					>
 						{loading ? 'Einen Moment …' : idea.trim() ? 'Platz sichern' : 'Ohne Idee absenden'}
 					</button>
 				{/if}

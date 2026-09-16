@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-06-18",
+        "intentId": "sofia-morales:running",
+        "kind": "document",
+        "user": "Inés, mira el plan de la semana. El domingo tengo la boda de Clara y no puedo hacer la tirada larga. ¿Hacemos series cortas el martes por la tarde en el Turia?",
+        "assistant": "Perfecto Sofía. Martes 18:00 en el puente del mar. Así llego fresca al domingo. Llevo el cronómetro.",
+        "artifact": {
+          "title": "Plan de Entrenamiento Semanal - Junio 2026",
+          "from": "Sofía Morales",
+          "to": null,
+          "language": "es",
+          "body": "PLAN DE ENTRENAMIENTO SEMANAL\nTitular: Sofía Morales\nSemana: 15-21 de junio de 2026\nObjetivo: Media Maratón Valencia\n\nLUNES: Descanso activo (estiramientos).\nMARTES: Series cortas en el Turia. 6x400m a ritmo 4:45/km. Recuperación 2 min. Hora: 18:00.\nMIÉRCOLES: Rodaje suave 8km.\nJUEVES: Fuerza core y movilidad.\nVIERNES: Descanso total. Preparación logística boda Clara Beltrán.\nSÁBADO: Montaje y carga. No correr.\nDOMINGO: Evento Boda Clara Beltrán. No correr. Descanso post-evento.\n\nNota: Ajustar volumen si hay retrasos en la carga de la furgoneta. Priorizar descanso antes del evento."
+        },
+        "probe": {
+          "question": "¿Qué actividad tengo programada para el martes a las 18:00?",
+          "answer": "Series cortas en el Turia. 6x400m a ritmo 4:45/km. Recuperación 2 min."
+        }
+      },
+      {
+        "date": "2026-06-21",
+        "intentId": "sofia-morales:staff",
+        "kind": "calendar",
+        "user": "Lucía, Mario, confirmad turno sábado 27 para la boda de Clara. Lucía montaje 07:00, Mario carga 06:30. Clave SOL-983 sigue activa. Elena, ¿el acuerdo de confidencialidad está firmado?",
+        "assistant": "Recibido Sofía. Yo llevo las tijeras. Mario, ¿furgoneta lista? Elena, el borrador v2.1 está pendiente de firma digital por ambas partes.",
+        "artifact": {
+          "title": "Turnos Confirmados - Boda Clara Beltrán (27/06/2026)",
+          "from": "Sofía Morales",
+          "to": null,
+          "language": "es",
+          "body": "EVENTO: Boda Clara Beltrán\nFECHA: Sábado, 27 de junio de 2026\nLUGAR: Valencia Event Venue (Puerta de carga lateral)\n\nLUCÍA FERRER:\n- Hora: 07:00 - 15:00\n- Tarea: Montaje floral en jardín y salón principal.\n- Acceso: Clave SOL-983.\n- Notas: Revisar sustitución de peonías (Ref ORANGE-64).\n\nMARIO COSTA:\n- Hora: 06:30 - 11:00\n- Tarea: Carga de material y descarga de flores. Verificación temperatura cámara fría antes de salida.\n- Vehículo: Furgoneta Estudio Morales.\n\nESTADO: Confirmado. Pendiente firma acuerdo confidencialidad v2.1 (Elena Soler)."
+        },
+        "probe": {
+          "question": "¿A qué hora empieza el turno de Lucía Ferrer para la boda de Clara?",
+          "answer": "07:00 - 15:00"
+        }
+      },
+      {
+        "date": "2026-06-24",
+        "intentId": "sofia-morales:running",
+        "kind": "todo",
+        "user": "Inés, he marcado la tarea de recoger los dorsales. ¿Te acuerdas si hay que llevar DNI o vale la confirmación en el móvil? Y gracias por cubrir el martes.",
+        "assistant": "Vale la confirmación en el móvil Sofía. Pero lleva el DNI por si acaso. Nos vemos el martes, no faltes que te espero en el puente.",
+        "artifact": {
+          "title": "Tarea: Recogida Dorsales Carrera Popular",
+          "from": "Sofía Morales",
+          "to": null,
+          "language": "es",
+          "body": "TAREA: Recogida de dorsales\nREFERENCIA: CPV-2026-0991\nEVENTO: Carrera Popular Barrio del Carmen\nFECHA LÍMITE: 26 de junio de 2026\nUBICACIÓN: Stand de recogida, Plaza de la Virgen\nESTADO: Pendiente\nNOTAS:\n- Llevar código QR de inscripción.\n- Confirmar talla de camiseta técnica.\n- Recibir chip de cronometraje.\n- Inés Navarro recoge su dorsal el mismo día."
+        },
+        "probe": {
+          "question": "¿Cuál es la fecha límite para recoger los dorsales?",
+          "answer": "26 de junio de 2026"
+        }
+      },
+      {
+        "date": "2026-06-27",
+        "intentId": "sofia-morales:staff",
+        "kind": "receipt",
+        "user": "Lucía, Mario, aquí está el pago de las horas extra del montaje de hoy. Gracias por el aguante con el calor. Revisad el desglose en el Bizum.",
+        "assistant": "Gracias Sofía. Todo correcto. He registrado 3 horas extra por el retraso en el montaje del arco floral. Mario ha hecho 2 por la carga.",
+        "artifact": {
+          "title": "Comprobante de Pago Nómina Extraordinaria",
+          "from": "Estudio Morales",
+          "to": "Lucía Ferrer, Mario Costa",
+          "language": "es",
+          "body": "COMPROBANTE DE TRANSFERENCIA SEPA\nFECHA: 27/06/2026\nEMISOR: Estudio Morales (Sofía Morales)\nBENEFICIARIOS: Lucía Ferrer, Mario Costa\nCONCEPTO: Pago horas extra montaje evento 27/06/2026\n\nDETALLE:\n- Lucía Ferrer: 3 horas extra @ 18,00 EUR/h = 54,00 EUR\n- Mario Costa: 2 horas extra @ 16,00 EUR/h = 32,00 EUR\nTOTAL ABONADO: 86,00 EUR\nREFERENCIA: SEPA-20260627-EXTRA\nESTADO: Completado\nNOTA: Incluye suplemento por trabajo en exterior."
+        },
+        "probe": {
+          "question": "¿Cuántas horas extra ha registrado Lucía Ferrer para este evento?",
+          "answer": "3 horas extra"
+        }
+      },
+      {
+        "date": "2026-06-28",
+        "intentId": "sofia-morales:running",
+        "kind": "transport-ticket",
+        "user": "Inés, ya tengo los billetes para el entreno del sábado. Renfe a Sagunto, ida y vuelta. ¿Te los paso? Así nos vemos en la estación a las 8:00.",
+        "assistant": "Perfecto. Así nos vemos en la estación a las 8:00. Llevo dorsal si quieres. Gracias por organizarlo.",
+        "artifact": {
+          "title": "Confirmación de Billete Renfe",
+          "from": "Renfe",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "CONFIRMACIÓN DE BILLETE\n\nOperador: Renfe Cercanías\nViajero: Sofía Morales\nFecha de viaje: 04/07/2026\nTrayecto: Valencia Nord - Sagunt (Ida)\nHora de salida: 08:00\nHora de llegada: 08:35\nTarifa: 2,40 EUR\nClase: Turista\nAsiento: No asignado (Cercanías)\nReferencia de reserva: REN-20260628-8842\n\nEstado: Confirmado\nNota: Válido para el día indicado. Presentar código QR en validador."
+        },
+        "probe": {
+          "question": "¿Cuál es la hora de salida del tren de Valencia Nord?",
+          "answer": "08:00"
+        }
+      }
+    ],
+    "continuity": "Open: Legal Addendum v2.1 for Clara Beltrán pending signature (May 28). Final invoice INV-2026-0427 payment still outstanding. Cold room invoice INV-2026-0409-ALBA issued Apr 9, due Apr 24. Resolved: Mar Azul refund of 180.00 EUR processed May 25, visible on card statement May 27. Bizum payment of 45.00 EUR to Tomás for school costs confirmed Apr 12. Stripe voucher VCH-2026-0318-45 applied to school fees. New: Wedding date changed to May 15, 2026, requiring 150.00 EUR transport surcharge. Venue access key SOL-983 remains valid for new date. Bank statement May 18 confirms 120 EUR payment to Hotel Porto Central. Email May 21 confirms venue access with key SOL-983. Document May 24 updates clinic transport pickup to 09:45 for Apr 28. Calendar Apr 27 schedules flower delivery with ref ORANGE-64. Todo Apr 28 sets deadline Apr 30 for Porto custody confirmation. May 3: Paid 50.00 EUR for Nico's school trip (ESC-2026-0503-PT). May 6: Booked Renfe ticket REN-20260506-7721 for training. May 9: Registered for Carrera Popular (CPV-2026-0991). May 12: Received Stripe voucher VCH-2026-0512-45 (45.00 EUR, expires 30/06/2026). May 15: Confirmed Porto trip VIA-2026-0515-PT (135.00 EUR, May 20-23). J"
+  }
+}

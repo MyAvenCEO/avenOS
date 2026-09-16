@@ -1,0 +1,528 @@
+{
+  "baseUrl": "http://100.96.61.57:8000",
+  "model": "qwen3.8-flash-next",
+  "intentCount": 300,
+  "corpus": "persona-temporal",
+  "results": [
+    {
+      "case": "lena-weber 2026-03-02 legal",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nTwo things, and only one is still outstanding.\n\nThe clause § 4.2 on evening classes is suspended in draft v2.1 until the fire-safety report B-17 is signed by Paul Neumann and on file with the landlord. That part is done — the report is dated 15.02. and Berlin Hausverwaltung confirmed receipt.\n\nWhat is missing is their release: Frau Becker's safety department is still reviewing, and she promised an answer on the clause by 01.03. Once that green light arrives, the clause goes live and the contract can be signed. So the next move is a nudge to Frau Becker if nothing lands by that date.",
+      "calls": [
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "evening classes clause"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "evening classes clause"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Abendkurs Klausel"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Abendkurse"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {}
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "evening"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "clause"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:classes"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:studio-lease"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "lena-weber:studio-lease"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-3-4:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-4-4:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 7477,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "lena-weber:studio-lease",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "lena-weber 2026-04-27 invoice",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nThe total due is 60,57 EUR on invoice NT-2026-04-09, dated 09.04.2026. That breaks down as 45,00 EUR for five matte sample plates plus 5,90 EUR shipping, giving 50,90 EUR net and 9,67 EUR VAT. Payment is due within 14 days by SEPA transfer, reference NT-2026-04-09.\n\nOne thing worth flagging: the invoice prices are based on the confirmed spring tier from 15.01.2026, the old 4,20 EUR per kilo figure. The new confirmed tier is 4,65 EUR per kilo, so this invoice reflects superseded pricing rather than an error on the sample plates themselves.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "sample plates invoice"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "sample plates invoice"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Musterplatten Rechnung"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "samples invoice total due"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "invoice",
+            "limit": 40
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Rechnung Muster",
+            "limit": 20
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-7-3:artifact"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "lena-weber:glaze-supplier"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 5445,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "lena-weber:glaze-supplier",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "lena-weber 2026-06-15 legal",
+      "language": "de",
+      "pass": true,
+      "answer": "\n\nUnterschreiben ja, aber nur mit ruhender Klausel. Dr. Maiers Stellungnahme vom 28. Mai erlaubt die Unterschrift unter Version 2.2, solange § 4.2 (Nutzung zu Unterrichtszwecken, also die Abendkurse) im Vertrag ausdrücklich als „vorläufig ausgesetzt\" gekennzeichnet bleibt.\n\nDie zwei Bedingungen im Einzelnen: Abendkurse erst nach dem von Paul Neumann unterschriebenen Brandschutzbericht B-17, und zusätzlich erst nach schriftlicher Freigabe durch die Berlin Hausverwaltung. Beides zusammen, nicht eines davon.\n\nDer Entwurf selbst ist noch nicht final, also muss die Kennzeichnung vor der Unterschrift noch hinein. Der Grund, warum Sie trotzdem unterschreiben sollten: die Schlüsselübergabe am 1. Juni. Die steht sonst auf dem Spiel, wenn Sie auf Pauls Bericht warten.\n\nDer Versicherungsnachweis liegt derweil als eigener Punkt bei Ihnen. Wollen Sie, dass ich die Aussetzung von § 4.2 als nächsten Schritt festhalte?",
+      "calls": [
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "lena-weber:studio-lease"
+          }
+        },
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "lena-weber:studio-lease"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-lena-weber-10-5:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "lena-lease-draft"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 4821,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "lena-weber:studio-lease",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "sofia-morales 2026-03-02 legal",
+      "language": "es",
+      "pass": true,
+      "answer": "\n\nLa fecha vigente es el 15 de mayo de 2026.\n\nEso lo confirma la cláusula 4.2.1 del borrador de adenda v2.1 (estado: borrador, pendiente de revisión). Cualquier cambio a junio se trataría como una reserva nueva, sujeta a disponibilidad y a reevaluar costes logísticos, y el anticipo de 500 euros quedaría ligado al 15/05; para junio pedirían un anticipo nuevo del 12% del presupuesto actualizado.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "borrador legal contrato fecha evento"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "borrador legal contrato evento"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "contrato"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "legal draft"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-3-4:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 3122,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "sofia-morales:one-off-060",
+      "switchExpected": false,
+      "switched": false,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "sofia-morales 2026-04-27 invoice",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nThe total due is 750,20 EUR, VAT included. That breaks down as 450,00 for the CF-200 compressor, 120,00 for three hours of technical labour, and 50,00 for sensor calibration and certificate, giving a subtotal of 620,00 plus 130,20 VAT. Invoice INV-2026-0409-ALBA is still marked pending payment, due 24/04/2026 by SEPA transfer.",
+      "calls": [
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "sofia-morales:cold-room"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "invoice compressor calibration cold room"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "invoice"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-sofia-morales-7-3:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 4074,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "sofia-morales:cold-room",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "sofia-morales 2026-06-15 legal",
+      "language": "es",
+      "pass": true,
+      "answer": "\n\nEl 29 de mayo de 2026, entre las 17:00 y las 18:00, en el Venue Central. La cláusula 5.2 añade además que el importe es de 163,35 EUR con IVA incluido y que se factura aparte del saldo de la boda.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "adenda servicio adicional cláusula 5.2 fecha de entrega"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "adenda servicio adicional"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "adenda"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "cláusula entrega servicio adicional contrato"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "ADENDA SERVICIO ADICIONAL - CONTRATO V2"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "sofia-morales:quotes"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 4319,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "sofia-morales:quotes",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "rowan-chen 2026-03-02 legal",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nFive percent. Draft v2.0, clause 4.2, sets the 2026 rebate at 5% of net fees, replacing the 4% term in the 2025 appendix. Malik has since countersigned, so 5% now applies to the next invoice; the January one stays at 4%.",
+      "calls": [
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "rowan-chen:atlas-contract"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "rebate draft"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Atlas renewal"
+          }
+        },
+        {
+          "name": "intent_messages",
+          "args": {
+            "intent": "rowan-chen:atlas-contract",
+            "query": "rebate percentage draft"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-3-4:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 3164,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:atlas-contract",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "rowan-chen 2026-04-27 invoice",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nNo invoice sits on the garden tools matter. The most recent one on file is INV-2026-04-002 for the security audit preparation, and its total due is 1,200.00 GBP — 1,000 for ten hours of preparation and review plus 200 for documentation and compliance, with no VAT charged. It is dated 2026-04-09, was due 2026-04-23, and is still marked unpaid. If you meant the older Atlas invoice INV-2026-02-001 instead, that one totals 2,400.00 before a 4% rebate of 80.00, leaving a net payable of 2,320.00, already paid by bank transfer.",
+      "calls": [
+        {
+          "name": "intent_detail",
+          "args": {
+            "intent": "rowan-chen:one-off-116"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "invoice"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "invoice total due",
+            "intent": "rowan-chen:invoices"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "invoice",
+            "offset": 20
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-7-3:artifact"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-3-5:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 5893,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:one-off-116",
+      "switchExpected": false,
+      "switched": false,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    },
+    {
+      "case": "rowan-chen 2026-06-15 legal",
+      "language": "en",
+      "pass": true,
+      "answer": "\n\nYes, both sides signed it on 28 May. The addendum is marked fully countersigned — Malik Ahmed for Atlas Ltd and you for the consultancy, same date. It carries reference ATLAS-ADD-2026-0528-01 and locks in the 7% rebate for services from 1 May onward, replacing the 5% interim rate. Production data transfer is still held until DPA-42 is countersigned separately.",
+      "calls": [
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Malik addendum May 28 signed"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "Malik addendum"
+          }
+        },
+        {
+          "name": "artifact_list",
+          "args": {
+            "query": "Malik"
+          }
+        },
+        {
+          "name": "intent_list",
+          "args": {
+            "query": "addendum"
+          }
+        },
+        {
+          "name": "intent_switch",
+          "args": {
+            "intent": "rowan-chen:atlas-contract"
+          }
+        },
+        {
+          "name": "artifact_detail",
+          "args": {
+            "artifact": "qwen-rowan-chen-10-5:artifact"
+          }
+        }
+      ],
+      "error": null,
+      "model": "qwen3.8-flash-next",
+      "elapsedMs": 5178,
+      "retrieved": true,
+      "lookedUp": true,
+      "correctLanguage": true,
+      "selected": "rowan-chen:atlas-contract",
+      "switchExpected": false,
+      "switched": true,
+      "routingPass": true,
+      "validToolCalls": true,
+      "artifactUsed": true
+    }
+  ],
+  "passed": 9
+}

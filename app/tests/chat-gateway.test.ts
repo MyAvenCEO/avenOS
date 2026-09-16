@@ -52,3 +52,18 @@ describe('Tauri OpenAI gateway parity', () => {
 		})
 	})
 })
+
+test('verification supports a separately bounded JSON completion without reasoning', () => {
+	const request = openAiGatewayRequest({
+		messages,
+		tools: [],
+		model: 'qwen-test',
+		thinking: false,
+		json: true,
+		max_tokens: 2048
+	})
+	expect(request.max_tokens).toBe(2048)
+	expect(request.chat_template_kwargs).toEqual({ enable_thinking: false })
+	expect(request.response_format).toEqual({ type: 'json_object' })
+	expect(request.tools).toBeUndefined()
+})

@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-03-18",
+        "intentId": "sofia-morales:home-budget",
+        "kind": "voucher",
+        "user": "Vera, revisa el caso de la disputa de Clara. Necesito saber si el voucher de compensación cubre la cuota del colegio de Nico que pagué con la misma tarjeta.",
+        "assistant": "Hola Sofía. El caso STR-2026-0318-CLARA sigue en revisión. El voucher de compensación por el error de cobro es de 45,00 EUR. Puede usarse para cualquier gasto, incluida la cuota escolar, hasta el 30/06/2026.",
+        "artifact": {
+          "title": "Voucher de Compensación Emitido",
+          "from": "Vera Martín (Stripe Support)",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Estimada Sofía,\n\nEn relación con el caso STR-2026-0318-CLARA, confirmamos que la disputa sobre el cargo duplicado ha sido resuelta a su favor. Como compensación por las molestias, hemos emitido un voucher de crédito.\n\nDetalles del Voucher:\n- Valor: 45,00 EUR\n- Moneda: EUR\n- Fecha de emisión: 18/03/2026\n- Caducidad: 30/06/2026\n- Restricciones: Utilizable en cualquier transacción procesada por Stripe. No canjeable por efectivo.\n- Referencia: VCH-2026-0318-45\n\nPuede aplicar este saldo a futuros cobros o reembolsos. Quedamos a su disposición."
+        },
+        "probe": {
+          "question": "¿Cuánto vale el voucher de compensación?",
+          "answer": "45,00 EUR"
+        }
+      },
+      {
+        "date": "2026-03-21",
+        "intentId": "sofia-morales:porto-visit",
+        "kind": "booking",
+        "user": "Tomás, ya tengo la reserva de Oporto cerrada. Renfe a Madrid y luego conexión a Porto. ¿Confirmas que te quedas con Nico del 20 al 23? Mamá necesita taxi el 21.",
+        "assistant": "Vale, me quedo con Nico. He visto que el tramo Vigo-Valença tiene bus sustitutivo en abril, pero para marzo es tren normal. Confirma la hora de llegada para avisar a Beatriz.",
+        "artifact": {
+          "title": "Confirmación de Reserva de Viaje",
+          "from": "Renfe / CP Comboios de Portugal",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Estimada Sofía Morales,\n\nAdjuntamos su confirmación de reserva para el viaje Valencia - Porto.\n\nItinerario:\n1. Renfe: Valencia Joaquín Sorolla - Madrid Atocha. 20/03/2026, 07:30 - 09:00. Tarifa: 45,00 EUR.\n2. Renfe: Madrid Atocha - Vigo-Guixar. 20/03/2026, 10:15 - 14:30. Tarifa: 65,00 EUR.\n3. CP Celta: Vigo-Guixar - Porto Campanhã. 20/03/2026, 15:15 - 16:45. Tarifa: 25,00 EUR.\n\nTotal: 135,00 EUR. Pagado con Visa terminada en 6418.\nReferencia: REN-CP-20260321-889\nPolítica de cancelación: Reembolso del 80% hasta 48h antes de la salida."
+        },
+        "probe": {
+          "question": "¿Cuál es la referencia de la reserva de viaje?",
+          "answer": "REN-CP-20260321-889"
+        }
+      },
+      {
+        "date": "2026-03-24",
+        "intentId": "sofia-morales:porto-visit",
+        "kind": "transaction",
+        "user": "Tomás, te paso mi parte del hotel en Oporto. Son 60 euros por Bizum. Ya he pagado los trenes con la Visa. Revisa que te ha llegado bien.",
+        "assistant": "Recibido. Gracias. Así cuadramos los gastos del viaje. Mañana te paso el desglose de la comida de Nico.",
+        "artifact": {
+          "title": "Extracto de Movimiento Bancario",
+          "from": "Banco Santander (Etiqueta: Estudio Morales)",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Movimientos recientes en cuenta ES**...6418\n\n1. Fecha: 24/03/2026\n   Concepto: Bizum a Tomás Vidal\n   Importe: -60,00 EUR\n   Estado: Completado\n   Referencia: BZM-20260324-112\n\n2. Fecha: 24/03/2026\n   Concepto: Pago Hotel Porto Central\n   Importe: -120,00 EUR\n   Estado: Pendiente de liquidación\n   Referencia: HPC-20260324-09\n\n3. Fecha: 24/03/2026\n   Concepto: Renfe Viajes\n   Importe: -135,00 EUR\n   Estado: Completado\n   Referencia: REN-CP-20260321-889\n\nSaldo actual: 1.850,00 EUR"
+        },
+        "probe": {
+          "question": "¿Cuánto se pagó al Hotel Porto Central?",
+          "answer": "120,00 EUR"
+        }
+      },
+      {
+        "date": "2026-03-27",
+        "intentId": "sofia-morales:valencia-wedding",
+        "kind": "order",
+        "user": "Mateo, te paso la factura final de la boda de Clara. Incluye el montaje extra que pedisteis el sábado. ¿Me confirmas que la puerta de carga estará libre a las 07:00 del día 20?",
+        "assistant": "Sofía, factura recibida. Confirmo la disponibilidad de la puerta de carga para el 20/04/2026 a las 07:00. El acceso será con la clave SOL-983. Procederemos al pago una vez verifiquemos la entrega de los centros de mesa.",
+        "artifact": {
+          "title": "Factura Final #INV-2026-0427",
+          "from": "Estudio Morales (Sofía Morales)",
+          "to": "Clara Beltrán",
+          "language": "es",
+          "body": "FACTURA FINAL\n\nEmisor: Estudio Morales (Sofía Morales)\nCliente: Clara Beltrán\nNº Factura: INV-2026-0427\nFecha: 27/03/2026\nEvento: Boda Valencia - 20/04/2026\n\nConceptos:\n1. Ramo de novia y boutonniere: 150.00 EUR\n2. Centros de mesa (10 uds): 600.00 EUR\n3. Montaje extra y transporte (20/04): 200.00 EUR\n\nSubtotal: 950.00 EUR\nIVA (21%): 199.50 EUR\nTotal: 1.149.50 EUR\n\nAnticipo recibido (Stripe): 500.00 EUR\nSaldo pendiente: 649.50 EUR\n\nPor favor, realice el pago restante antes del 10/04/2026."
+        },
+        "probe": {
+          "question": "¿Cuál es el saldo pendiente de la factura?",
+          "answer": "649.50 EUR"
+        }
+      },
+      {
+        "date": "2026-03-28",
+        "intentId": "sofia-morales:flower-supplier",
+        "kind": "return",
+        "user": "Isabel, las peonías llegaron con los tallos rotos en la caja 3. No las puedo usar para la boda de Clara. Necesito la autorización de devolución ya.",
+        "assistant": "Sofía, recibido. Autorización de devolución RA-2026-0328 emitida. Motivo: Daño en transporte (tallos rotos). Recogida programada para el 29/03/2026 entre 14:00 y 16:00. El reembolso se procesará a la Visa terminada en 6418 tras la inspección en almacén.",
+        "artifact": {
+          "title": "Autorización de Devolución (RMA)",
+          "from": "Isabel Ríos (Mar Azul)",
+          "to": "Sofía Morales",
+          "language": "es",
+          "body": "Estimada Sofía,\n\nHemos procesado su solicitud. Aquí tiene la autorización de devolución.\n\nReferencia Original: MA-2026-0325\nReferencia Devolución: RA-2026-0328\nMotivo: Daño en transporte (tallos rotos en caja 3).\nEstado: Pendiente de recogida.\nFecha Recogida: 29/03/2026 (14:00-16:00).\nDestino Reembolso: Visa terminada en 6418.\nImporte a reembolsar: 450,00 EUR.\n\nPor favor, prepare la caja 3 para la recogida. El reembolso se emitirá tras la inspección física en nuestro almacén de Valencia."
+        },
+        "probe": {
+          "question": "¿Cuál es la referencia de la devolución?",
+          "answer": "RA-2026-0328"
+        }
+      }
+    ],
+    "continuity": "Open: Legal contract v2.0 for Clara Beltrán pending client review/signature (Feb 12). Final invoice INV-2026-0427 issued Mar 27, payment due Apr 10. Return RA-2026-0328 for damaged peonies collected Mar 29, refund pending inspection. Resolved: Order MA-2026-0325 dispatched Mar 25. Staff shift adjustment for Lucía Ferrer confirmed Feb 9. Venue access confirmed with Mateo Serra for Apr 20. New: Taxi payment for Pilar confirmed Feb 18 (BZM-20260218-442). Bank statement Mar 24 shows Clara's 500 EUR deposit received via Stripe, but legal adenda unsigned. Wedding access confirmed for Apr 20 (SOL-983). Next clinic appointment scheduled for Mar 5. Cold room maintenance scheduled Mar 4 (Case TA-2026-0303-ALB). Porto trip logistics confirmed with Tomás (Task Mar 21). Van hire for Mar 14 paid via Visa 6418 (Ref RCV-20260309-882). Running train ticket to Sagunt booked for Mar 15 (Ref REN-20260312-4419). Race registration for Mar 22 confirmed (Ref CPV-2026-0991). Voucher VCH-2026-0318-45 issued Mar 18 for 45 EUR. Porto trip booking REN-CP-20260321-889 confirmed Mar 21. Hotel payment HPC-20260324-09 pending liquidation Mar 24."
+  }
+}

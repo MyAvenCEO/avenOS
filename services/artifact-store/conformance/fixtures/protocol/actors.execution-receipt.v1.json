@@ -1,0 +1,35 @@
+{
+  "typeKey": "actors.execution-receipt",
+  "version": 1,
+  "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["invocationId", "capabilityId", "implementationRef", "outcome"],
+    "properties": {
+      "invocationId": { "type": "string", "minLength": 1, "maxLength": 160 },
+      "capabilityId": { "type": "string", "minLength": 1, "maxLength": 256 },
+      "implementationRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+      "outcome": { "enum": ["completed", "uncertain", "failed"] }
+    }
+  },
+  "blobPolicy": "forbidden",
+  "referenceRules": [
+    {
+      "role": "input",
+      "minimum": 0,
+      "maximum": 16,
+      "allowedTargetTypes": { "kind": "any" },
+      "attributesSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["slot", "role"],
+        "properties": {
+          "slot": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
+          "role": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" }
+        }
+      }
+    }
+  ]
+}

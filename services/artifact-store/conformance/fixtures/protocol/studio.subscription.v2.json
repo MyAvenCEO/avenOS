@@ -1,0 +1,76 @@
+{
+  "typeKey": "studio.subscription",
+  "version": 2,
+  "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "contractVersion",
+      "subscriptionId",
+      "name",
+      "skillArtifactId",
+      "sourceArtifactId",
+      "inputType",
+      "inputPort",
+      "fixedInputs",
+      "parameters",
+      "generation"
+    ],
+    "properties": {
+      "contractVersion": { "const": 2 },
+      "subscriptionId": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+      },
+      "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+      "skillArtifactId": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+      },
+      "sourceArtifactId": { "type": ["string", "null"], "maxLength": 64 },
+      "inputType": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "version"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "version": { "type": "integer", "minimum": 1, "maximum": 10000 }
+        }
+      },
+      "inputPort": { "type": "string", "minLength": 1, "maxLength": 64 },
+      "fixedInputs": {
+        "type": "object",
+        "maxProperties": 16,
+        "additionalProperties": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "parameters": { "type": "object", "maxProperties": 16 },
+      "generation": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+      }
+    }
+  },
+  "blobPolicy": "forbidden",
+  "referenceRules": [
+    {
+      "role": "skill",
+      "minimum": 1,
+      "maximum": 1,
+      "allowedTargetTypes": {
+        "kind": "exact",
+        "types": [{ "typeKey": "studio.skill", "version": 2 }]
+      },
+      "attributesSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      }
+    }
+  ]
+}

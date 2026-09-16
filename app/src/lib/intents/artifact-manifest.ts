@@ -3,12 +3,13 @@ import { artifactTypeLabel } from '../artifacts/processing'
 /**
  * The model's artifact awareness, sized for a system prompt.
  *
- * One line per file — name, kind, size, state, and at most one summary line —
- * so the model knows WHAT is in the conversation without reading any of it.
+ * One line per recent file — name, kind, size, state, and at most one summary line —
+ * so the model sees likely relevant attachments without reading any of them.
  * The details stay behind the artifact_detail tool: the model fetches one
  * file when it needs one, and only that file's summary and figures ride into
  * the context. Everything here is bounded by construction: a cap on lines,
- * a cap on summary length, no bytes, no stages, no payloads.
+ * a cap on summary length, no bytes, no stages, no payloads. artifact_list
+ * can search the full metadata index when an older file is needed.
  */
 
 /** One artifact of one intent, as the intent list knows it. */
@@ -34,6 +35,7 @@ export interface ArtifactLiveInfo {
 }
 
 export const MAX_MANIFEST_ENTRIES = 20
+export const ARTIFACT_LOOKUP_LIMIT = 20
 const MAX_SUMMARY_CHARS = 140
 
 /** "512 B", "2 KB", "1.2 MB" — one human-readable size per line, never more. */
@@ -87,7 +89,7 @@ export function artifactManifest(
 	liveFor?: (artifactId: string) => ArtifactLiveInfo | undefined
 ): string {
 	const lines: string[] = []
-	for (const entry of entries.slice(0, MAX_MANIFEST_ENTRIES)) {
+	for (const entry of entries.slice(-MAX_MANIFEST_ENTRIES).reverse()) {
 		const live = entry.artifactId ? liveFor?.(entry.artifactId) : undefined
 		// A live view, when present, is authoritative: it shadows the persisted
 		// state and summary wholesale (a persisted summary is stale the moment
@@ -103,8 +105,56 @@ export function artifactManifest(
 	}
 	if (lines.length === 0) return ''
 	const hidden = entries.length - lines.length
-	const more = hidden > 0 ? `\n…and ${hidden} more` : ''
+	const more =
+		hidden > 0
+			? `\n…and ${hidden} older files; use workspace_search with kind document to search them`
+			: ''
 	return `ARTIFACTS in this conversation right now:\n${lines.join('\n')}${more}`
+}
+
+export interface ArtifactIndexEntry {
+	intentId: string
+	artifactId?: string
+	title: string
+	kind: string
+	state?: string
+	summary?: string | null
+	note?: string
+}
+
+/** Bounded metadata search over files in all Intents, including archived ones. */
+export function lookupArtifacts(
+	entries: ArtifactIndexEntry[],
+	query = '',
+	offset = 0,
+	limit = ARTIFACT_LOOKUP_LIMIT
+): { rows: ArtifactIndexEntry[]; total: number; offset: number; hasMore: boolean } {
+	const terms = query.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []
+	const matches =
+		terms.length === 0
+			? entries
+			: entries.filter((entry) => {
+					const haystack =
+						`${entry.intentId} ${entry.artifactId ?? ''} ${entry.title} ${entry.kind} ${entry.state ?? ''} ${entry.summary ?? ''} ${entry.note ?? ''}`.toLocaleLowerCase()
+					return terms.every((term) => haystack.includes(term))
+				})
+	const start = Math.max(
+		0,
+		Math.min(matches.length, Math.floor(Number.isFinite(offset) ? offset : 0))
+	)
+	const count = Math.max(
+		1,
+		Math.min(
+			ARTIFACT_LOOKUP_LIMIT,
+			Math.floor(Number.isFinite(limit) ? limit : ARTIFACT_LOOKUP_LIMIT)
+		)
+	)
+	return {
+		rows: matches.slice(start, start + count),
+		total: matches.length,
+		offset: start,
+		hasMore: start + count < matches.length
+	}
 }
 
 /**

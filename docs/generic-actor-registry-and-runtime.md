@@ -27,17 +27,18 @@ private working state, and describes the methods it can perform. A view is merel
 possible actor client; the same actor may run without a view in a desktop process, a
 worker, or a server host.
 
-A skill does not hard-code a sequence of actors. It names an outcome, its ingredients,
-and its policy. The planner finds a program from the capabilities that are both
-available **and authorized for the current principal**. The runner materializes that
-program, commits immutable artifacts, and can stop at a durable boundary when it needs
-new evidence or human input.
+A skill names its ingredients, outcomes, and policy. It may also preserve explicit
+capability steps and exact nested Skills. The planner fills its unresolved outcomes
+from capabilities that are both available **and authorized for the current
+principal**; it does not replace fixed steps. The runner materializes that program,
+commits immutable artifacts, and can stop at a durable boundary when it needs new
+evidence or human input.
 
 Five values must remain distinct:
 
 1. an **actor definition** describes one versioned kind of actor;
 2. a **capability** describes one invocable transformation or effect;
-3. a **skill** describes a desired outcome and planning policy;
+3. a **skill** describes reusable composition, desired outcomes, and planning policy;
 4. a **plan** freezes a principal-specific program and its placements; and
 5. a **run** records attempts, artifacts, continuations, and completion.
 
@@ -71,8 +72,24 @@ supported fact available from installed and authorized non-effecting capabilitie
 then presents the actions enabled by those facts. An explicit exact goal prioritizes a
 route through the same enrichment machinery. The target behavior is specified in
 [Artifact-first semantic enrichment and affordance discovery](artifact-first-semantic-enrichment.md).
-The current planner implements exact goals; exploratory saturation and affordance
-discovery remain part of the target design.
+The shared libraries contain exact-goal, guaranteed-output enrichment, and
+receipt-driven observation planning. Their complete durable generic integration
+remains part of the target design.
+
+## Studio integration
+
+Studio and agent authoring must consume the shared authorized catalog. A conforming
+installed Actor contributes its manifests, schemas, trusted fact projectors, and
+executable offers once; it must not require another editor or executor registration.
+Actor methods without guaranteed outputs remain discoverable without becoming
+fictional proof-producing transformations. A manifest alone grants neither an
+implementation nor permission to run it.
+
+The proposed [shared Studio runtime specification](skill-studio-shared-runtime.md)
+defines generic bindings, execution and review boundaries, artifact-library previews,
+clean cutover, and independent-package acceptance tests. The current Studio still
+has a fixed two-operation catalog and dedicated dispatch. The generic server host
+remains unconfigured; these requirements are new implementation work.
 
 ## Begin with one document
 

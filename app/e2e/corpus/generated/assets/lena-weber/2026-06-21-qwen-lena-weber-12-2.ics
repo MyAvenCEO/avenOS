@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//avenOS//Synthetic Corpus//EN
+BEGIN:VEVENT
+UID:qwen-lena-weber-12-2@synthetic.test
+DTSTAMP:20260621T180200Z
+DTSTART;TZID=Europe/Berlin:20260627T100000
+DTEND;TZID=Europe/Berlin:20260627T140000
+SUMMARY:Kalendereintrag: Kursvertretung Samstag
+DESCRIPTION:Event: Samstagskurs Drehen & Glasieren\nDatum: 2026-06-27\nStart: 10:00\nEnde: 14:00\nOrt: Weber Keramik Studio\nStatus: Bestätigt\nTeilnehmer: Jonas Beck (Vertretung für Eva Richter)\nNotiz: Eva im Urlaub. Jonas übernimmt. Kursliste finalisiert. 8 Teilnehmer. Nordton-Glasurpreis 4\,65 EUR/kg.
+X-SYNTHETIC-TEST-RECORD:TRUE
+END:VEVENT
+END:VCALENDAR

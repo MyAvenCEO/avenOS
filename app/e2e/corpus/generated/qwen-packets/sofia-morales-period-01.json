@@ -1,0 +1,98 @@
+{
+  "promptVersion": 9,
+  "packet": {
+    "episodes": [
+      {
+        "date": "2026-01-03",
+        "intentId": "sofia-morales:cold-room",
+        "kind": "email",
+        "user": "Hola Oliver, gracias por la actualización. ¿Puedes confirmar si el reemplazo de las peonías llega antes del viernes? Tengo la cámara fría en mantenimiento y necesito saber si puedo recibir la entrega en la puerta trasera o si debo posponerla hasta que Alba confirme la temperatura.",
+        "assistant": "Entendido, Sofía. El reemplazo de las peonías (referencia MA-EXP-2026-014) está programado para llegar el jueves 08/01 a las 10:00. Dado el estado de la cámara fría, te sugiero coordinar con Mario para una recepción rápida en la zona de carga seca, evitando la entrada a la cámara hasta que Alba confirme la estabilización. Quedo a la espera de tu confirmación para liberar la reserva.",
+        "artifact": {
+          "title": "Re: Substitution Update - Order MA-EXP-2026-014",
+          "from": "Oliver Kent <oliver.kent@marazul-export.test>",
+          "to": "Sofía Morales <sofia.morales@estudiomorales.test>",
+          "language": "en",
+          "body": "Dear Sofía,\n\nThank you for your patience regarding the substitution for the missing Peony varieties in order MA-EXP-2026-014.\n\nStatus: Approved.\nThe replacement shipment (15 stems of 'Sarah Bernhardt' Peonies) has been cleared by our export desk. The new delivery window is Thursday, January 8, 2026, between 10:00 and 12:00.\n\nNext Step: Please confirm with your logistics team if the receiving dock is accessible for a quick drop-off outside the main refrigerated unit, given the ongoing maintenance on your cold room. We cannot guarantee the integrity of the flowers if they are held in a non-temperature-controlled environment for more than 2 hours.\n\nBest regards,\n\nOliver Kent\nExport Support Employee\nMar Azul Export Desk\nCase Ref: MA-EXP-2026-014-SUB"
+        },
+        "probe": {
+          "question": "When is the replacement peony shipment scheduled to arrive?",
+          "answer": "Thursday, January 8, 2026, between 10:00 and 12:00"
+        }
+      },
+      {
+        "date": "2026-01-06",
+        "intentId": "sofia-morales:running",
+        "kind": "document",
+        "user": "Inés, no puedo hacer la tirada larga el domingo por las entregas de la boda de Clara. ¿Te vale el martes a las 7am en el cauce? Necesito recuperar el ritmo para la media.",
+        "assistant": "Vale, martes 7am en el cauce. Yo llevo el cronómetro. Si llueve, lo pasamos al gimnasio del barrio. Avísame si Tomas te dice algo raro sobre los horarios de Nico, que a veces se confunde con los turnos.",
+        "artifact": {
+          "title": "Plan de Entrenamiento Semanal - Enero 2026",
+          "from": "Sofía Morales",
+          "to": null,
+          "language": "es",
+          "body": "DOCUMENTO DE TRABAJO: PLAN DE ENTRENAMIENTO\nVersión: 1.2 (Actualizado 06/01/2026)\nEstado: Activo\n\nOBJETIVO: Media Maratón de Valencia (Marzo 2026)\n\nSEMANA 2 (05-11 ENERO)\n- Lunes: Descanso activo (estiramientos). Motivo: Recuperación tras evento del 04/01.\n- Martes 06/01: 10km a ritmo conversacional. Ruta: Cauce del Turia (Puente de las Flores a Puente de Exposiciones). Compañía: Inés Navarro. Hora: 07:00.\n- Miércoles 07/01: Fuerza específica (piernas/core). Gimnasio local.\n- Jueves 08/01: 8km intervalos (4x1000m). Parque de Cabecera.\n- Viernes 09/01: Descanso total. Preparación logística entregas.\n- Sábado 10/01: Montaje evento (Estudio Morales). No correr.\n- Domingo 11/01: ENTREGA BODA CLARA BELTRÁN. No correr. Prioridad logística.\n\nNOTAS:\n- Ajustar horarios si hay imprevistos con la cámara fría o Nico.\n- Hidratación extra por el frío.\n- Próxima revisión: Lunes 12/01."
+        },
+        "probe": {
+          "question": "What is the scheduled activity for Tuesday, January 6th?",
+          "answer": "10km a ritmo conversacional. Ruta: Cauce del Turia (Puente de las Flores a Puente de Exposiciones). Compañía: Inés Navarro. Hora: 07:00."
+        }
+      },
+      {
+        "date": "2026-01-09",
+        "intentId": "sofia-morales:cold-room",
+        "kind": "calendar",
+        "user": "Alba, ¿puedes pasar a las 16:00? Mario ya ha sacado las flores delicadas a la zona fresca. Necesito el informe de temperatura antes de que entre el pedido de Oliver.",
+        "assistant": "Anotado. Confirmo la visita para las 16:00. Traeré el termómetro calibrado. Por favor, ten el registro de las últimas 24 horas a mano para comparar con los datos del sensor interno.",
+        "artifact": {
+          "title": "Visita Técnica: Diagnóstico Cámara Fría",
+          "from": "Calendario Estudio Morales",
+          "to": null,
+          "language": "es",
+          "body": "EVENTO: Visita Técnica - Taller Alba\nFECHA: Viernes, 09 de Enero de 2026\nHORA: 16:00 - 17:30\nLUGAR: Estudio Morales - Zona de Almacén/Cámara Fría\nASISTENTES: Sofía Morales (Propietaria), Alba Pérez (Técnico Taller Alba), Mario Costa (Florista/Logística)\nESTADO: Confirmado\n\nDETALLES:\n- Objetivo: Diagnóstico de la avería recurrente en el compresor de la cámara fría.\n- Preparación: Mario Costa ha trasladado las peonías de la orden MA-EXP-2026-014 a la zona de carga seca (temperatura ambiente controlada) para evitar daño térmico durante la intervención.\n- Requerimientos: Acceso libre al panel de control. Registro de temperaturas de las últimas 48 horas.\n- Resultado esperado: Informe de estado y confirmación de si la temperatura se estabiliza por debajo de 4°C antes de la próxima entrega."
+        },
+        "probe": {
+          "question": "Who is the technician attending the cold room diagnosis?",
+          "answer": "Alba Pérez (Técnico Taller Alba)"
+        }
+      },
+      {
+        "date": "2026-01-12",
+        "intentId": "sofia-morales:home-budget",
+        "kind": "todo",
+        "user": "Tomás, te paso el Bizum de la cuota del colegio de Nico. Revisa el recibo de la luz que te envié, creo que hay un desajuste. Y no olvides confirmar la reserva de Oporto para las vacaciones.",
+        "assistant": "Recibido el Bizum. El recibo de la luz lo miro esta noche, parece que el consumo subió por la calefacción. Sobre Oporto: he visto una oferta de Renfe+CP, pero el tramo Vigo-Valença tiene bus sustitutivo en abril. ¿Te vale o buscamos vuelo?",
+        "artifact": {
+          "title": "Tarea: Cuadrar Gastos Familiares y Viaje",
+          "from": "Lista de Tareas Sofía",
+          "to": null,
+          "language": "es",
+          "body": "TAREA: Revisión Presupuestos Familiares Q1\nFECHA LÍMITE: 15/01/2026\nESTADO: En Progreso\n\nSUBTAREAS:\n1. [HECHO] Enviar Bizum a Tomás Vidal por cuota colegio Nico (Importe: 45,00 EUR). Ref: Bizum 12/01/2026.\n2. [PENDIENTE] Revisar recibo de luz hogar compartido. Diferencia detectada: +12,50 EUR vs media anterior. Causa probable: Calefacción extra por visita de Pilar.\n3. [PENDIENTE] Confirmar reserva viaje Oporto (Abril 2026).\n   - Opción A: Tren (Renfe Valencia-Madrid + CP Celta). Problema: Bus sustitutivo Vigo-Valença por obras.\n   - Opción B: Vuelo Valencia-Porto. Coste estimado: +120 EUR por persona vs tren.\n   - Decisión: Esperar confirmación de Tomás sobre preferencia de transporte.\n4. [PENDIENTE] Archivar factura de Mar Azul (Orden MA-EXP-2026-014) en contabilidad."
+        },
+        "probe": {
+          "question": "What is the amount sent via Bizum for Nico's school fee?",
+          "answer": "45,00 EUR"
+        }
+      },
+      {
+        "date": "2026-01-15",
+        "intentId": "sofia-morales:staff",
+        "kind": "receipt",
+        "user": "Lucía, Mario, aquí está el pago de las horas extra del montaje de la boda de Clara. Gracias por el aguante con la cámara fría. Revisad el desglose.",
+        "assistant": "Gracias Sofía. Todo correcto. Mario ha registrado 4 horas extra por la espera en la carga. Yo he añadido 2 por el montaje en el jardín. Queda pendiente firmar el acuerdo de confidencialidad con Elena para el próximo cliente corporativo.",
+        "artifact": {
+          "title": "Comprobante de Pago Nómina Extraordinaria",
+          "from": "Estudio Morales",
+          "to": "Lucía Ferrer, Mario Costa",
+          "language": "es",
+          "body": "COMPROBANTE DE TRANSFERENCIA SEPA\nFECHA: 15/01/2026\nEMISOR: Estudio Morales (Sofía Morales)\nBENEFICIARIOS: Lucía Ferrer, Mario Costa\nCONCEPTO: Pago horas extra montaje evento 11/01/2026\n\nDETALLE:\n- Lucía Ferrer: 2 horas extra @ 18,00 EUR/h = 36,00 EUR\n- Mario Costa: 4 horas extra @ 16,00 EUR/h = 64,00 EUR\n- TOTAL NETO: 100,00 EUR\n- MÉTODO: Transferencia SEPA (Cuenta origen: ES**...6418)\n- ESTADO: Ejecutado\n- REFERENCIA: SEPA-2026-01-15-EM-001\n\nNOTA: Este pago cubre las horas adicionales derivadas del retraso en la recepción de flores por la avería de la cámara fría. No incluye dietas de transporte."
+        },
+        "probe": {
+          "question": "How many extra hours did Mario Costa work?",
+          "answer": "4 horas extra"
+        }
+      }
+    ],
+    "continuity": "Open: Cold room diagnosis pending final temperature confirmation from Alba (Jan 9). Travel to Oporto undecided between train (with bus substitution) and flight. Legal agreement with Elena Soler for corporate clients unsigned. Resolved: Peony substitution shipment scheduled for Jan 8. Training plan adjusted for delivery conflicts. School fee Bizum sent to Tomás. Staff extra hours paid via SEPA."
+  }
+}
