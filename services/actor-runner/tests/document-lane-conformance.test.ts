@@ -648,6 +648,12 @@ async function modelParityRun(model: () => GoldenInvoiceModel) {
 	return { localModel, serverModel, record }
 }
 
+// Independent page jobs publish in completion order. Compare their full results
+// as a multiset while preserving payloads, duplicates, and all within-run ordinals.
+function canonicalParallelResults<T>(values: T[]): T[] {
+	return [...values].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
+}
+
 function canonicalPresentation(presentation: ArtifactProcessingPresentation) {
 	return {
 		state: presentation.state,
@@ -655,11 +661,13 @@ function canonicalPresentation(presentation: ArtifactProcessingPresentation) {
 		summary: presentation.summary,
 		warnings: presentation.warnings,
 		stages: presentation.stages,
-		derivedTypes: presentation.derivedArtifacts.map((artifact) => ({
-			typeKey: artifact.typeKey,
-			typeVersion: artifact.typeVersion,
-			stageKey: artifact.stageKey
-		})),
+		derivedTypes: canonicalParallelResults(
+			presentation.derivedArtifacts.map((artifact) => ({
+				typeKey: artifact.typeKey,
+				typeVersion: artifact.typeVersion,
+				stageKey: artifact.stageKey
+			}))
+		),
 		metadata: Object.fromEntries(
 			Object.entries(presentation.metadata).filter(
 				// Receipt IDs are store-local; the graph comparison below checks
@@ -671,62 +679,66 @@ function canonicalPresentation(presentation: ArtifactProcessingPresentation) {
 }
 
 function canonicalLocalRuns(runs: ClientRunPublication[]) {
-	return runs.map((run) => ({
-		procedureKey: run.procedureKey,
-		inputs: run.inputs.map(({ role, ordinal }) => ({ role, ordinal })),
-		parameters: run.parameters,
-		artifacts: run.artifacts.map((artifact) => ({
-			...artifact,
-			...(artifact.blob && {
-				blob: {
-					mediaType: artifact.blob.mediaType,
-					length: Buffer.from(artifact.blob.base64, 'base64').length,
-					sha256: createHash('sha256')
-						.update(Buffer.from(artifact.blob.base64, 'base64'))
-						.digest('hex')
-				}
-			})
-		})),
-		evidence: run.evidence
-	}))
+	return canonicalParallelResults(
+		runs.map((run) => ({
+			procedureKey: run.procedureKey,
+			inputs: run.inputs.map(({ role, ordinal }) => ({ role, ordinal })),
+			parameters: run.parameters,
+			artifacts: run.artifacts.map((artifact) => ({
+				...artifact,
+				...(artifact.blob && {
+					blob: {
+						mediaType: artifact.blob.mediaType,
+						length: Buffer.from(artifact.blob.base64, 'base64').length,
+						sha256: createHash('sha256')
+							.update(Buffer.from(artifact.blob.base64, 'base64'))
+							.digest('hex')
+					}
+				})
+			})),
+			evidence: run.evidence
+		}))
+	)
 }
 
 function canonicalServerRuns(publications: Array<Record<string, unknown>>) {
-	return publications.map((publication) => {
-		const run = record(publication.run)
-		return {
-			procedureKey: run.procedureKey,
-			inputs: array(run.inputs).map((value) => {
-				const input = record(value)
-				return { role: input.role, ordinal: input.ordinal }
-			}),
-			parameters: run.parameters,
-			artifacts: array(publication.artifacts).map((value) => {
-				const artifact = record(value)
-				const blob = artifact.blob
-				return {
-					localKey: artifact.localKey,
-					typeKey: artifact.typeKey,
-					typeVersion: artifact.typeVersion,
-					payload: artifact.payload,
-					output: artifact.output,
-					...(blob
-						? {
-								blob: {
-									mediaType:
-										artifact.typeKey === 'core.file-inspection'
-											? 'application/json'
-											: 'text/plain; charset=utf-8',
-									length: record(blob).length,
-									sha256: record(blob).sha256
+	return canonicalParallelResults(
+		publications.map((publication) => {
+			const run = record(publication.run)
+			return {
+				procedureKey: run.procedureKey,
+				inputs: array(run.inputs).map((value) => {
+					const input = record(value)
+					return { role: input.role, ordinal: input.ordinal }
+				}),
+				parameters: run.parameters,
+				artifacts: array(publication.artifacts).map((value) => {
+					const artifact = record(value)
+					const blob = artifact.blob
+					return {
+						localKey: artifact.localKey,
+						typeKey: artifact.typeKey,
+						typeVersion: artifact.typeVersion,
+						payload: artifact.payload,
+						output: artifact.output,
+						...(blob
+							? {
+									blob: {
+										mediaType:
+											artifact.typeKey === 'core.file-inspection'
+												? 'application/json'
+												: 'text/plain; charset=utf-8',
+										length: record(blob).length,
+										sha256: record(blob).sha256
+									}
 								}
-							}
-						: {})
-				}
-			}),
-			evidence: publication.evidence
-		}
-	})
+							: {})
+					}
+				}),
+				evidence: publication.evidence
+			}
+		})
+	)
 }
 
 function record(value: unknown): Record<string, unknown> {
