@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { parseStudioDefinition, type StudioDefinition } from '@avenos/actors/studio'
 import {
 	type ArtifactJson,
 	type ArtifactStoreClient,
@@ -9,6 +8,8 @@ import {
 
 export interface StudioArtifact {
 	artifactId: string
+	scopeId: string
+	artifactSha256: string
 	typeKey: string
 	typeVersion: number
 	payload: Record<string, unknown>
@@ -20,12 +21,13 @@ export interface StudioArtifact {
 export interface StudioDraftArtifact {
 	key: string
 	type: string
+	version?: number
 	payload: unknown
 	bytes?: Uint8Array
 	references?: Array<{ role: string; id?: string; local?: string }>
 }
 export const studioIdentity = (scope: string, ...parts: unknown[]) =>
-	clientRunIdentity(JSON.stringify(['studio-v1', scope, ...parts]))
+	clientRunIdentity(JSON.stringify(['studio-v2', scope, ...parts]))
 export const studioPlanDigest = (program: unknown) =>
 	createHash('sha256')
 		.update(canonicalArtifactJson(program as ArtifactJson))
@@ -48,22 +50,6 @@ export class StudioArtifacts {
 		if (envelope.scopeId !== this.scope || envelope.artifactId !== id)
 			throw new Error('Artifact scope mismatch.')
 		return envelope as StudioArtifact
-	}
-	async library(ids: string[]): Promise<Map<string, StudioDefinition>> {
-		const library = new Map<string, StudioDefinition>()
-		const pending = [...ids]
-		while (pending.length) {
-			const id = pending.shift()!
-			if (library.has(id)) continue
-			if (library.size >= 64) throw new Error('The Skill dependency limit was reached.')
-			const a = await this.get(id)
-			if (a.typeKey !== 'studio.skill' || a.typeVersion !== 1)
-				throw new Error('Expected an exact Skill artifact.')
-			const definition = parseStudioDefinition(a.payload)
-			library.set(id, definition)
-			pending.push(...definition.steps.filter((s) => s.kind === 'skill').map((s) => s.ref!))
-		}
-		return library
 	}
 	async list(typeKey: string) {
 		return studioObject(await this.client.queryArtifacts(this.scope, { typeKey, limit: 128 }))
@@ -138,7 +124,7 @@ export class StudioArtifacts {
 			artifacts.push({
 				localKey: a.key,
 				typeKey: a.type,
-				typeVersion: 1,
+				typeVersion: a.version ?? 1,
 				payload: a.payload,
 				blob,
 				output: { role: 'result', ordinal },
@@ -170,7 +156,7 @@ export class StudioArtifacts {
 						executor: { kind: 'service', id: 'studio' },
 						inputs,
 						parameters: options.parameters,
-						implementation: { adapter: 'studio-v1' },
+						implementation: { adapter: 'studio-v2', version: 2 },
 						receipt: { outcome: 'succeeded' }
 					},
 					artifacts,

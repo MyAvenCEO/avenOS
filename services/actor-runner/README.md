@@ -67,16 +67,48 @@ open metadata request; persisting the password to make retries convenient is for
 ## Skill Studio
 
 Studio commands use a strict `{ operation, data }` envelope. The query route allows
-only state, inspect, explore, preview and compare, under `actor-runs:read`. The
+catalog and saved-Skill presentation alongside state, inspect, explore, preview and
+compare, under `actor-runs:read`. The
 command route requires `actor-runs:write`; neither accepts caller-supplied security.
 The native `studio_request` command and agent `studio_*` methods use this same path.
 
+The Runner's shared catalog lists release-owned Actor manifests for an authenticated
+customer without constructing Actors for discovery. Every permitted method is visible;
+only methods with complete trusted installation, Store and procedure descriptors are
+authorable/executable. The deterministic email-brief Actor is the first production
+generic installation. Document methods stay visibly contract-incomplete until their
+owning package installs equivalent descriptors.
+
+`StudioV2SkillPublisher` is the v2-only publication path. It
+requires an authenticated CAS-read draft, subject-specific Skill reads, discover
+authorization for every transitive Actor call, complete trusted installations, and
+the exact registered `studio.skill@2` type digest. It writes immutable Skill payloads
+with exact child references and causal producer inputs, including predecessor history.
+The native editor, Studio Actor and production host use this same seam.
+`StudioV2Drafts` and `StudioV2Authoring` provide the corresponding fresh v2 draft
+CAS and immutable-head orchestration. Creation is serialized per subject, exact
+revision updates never overwrite another client, and a Store commit that loses the
+draft-head race reports the committed artifact ID for recovery. No v1 reader or
+definition conversion exists in these seams. The authoring boundary also provides
+subject-scoped list/get and the shared side-effect-free preview; replay of an already
+published head verifies the returned artifact's exact identity and scope.
+`StudioV2SkillValidator` is shared by publication and the side-effect-free v2
+authoring preview. It resolves exact readable children transitively and validates
+every nested Skill interface and Actor call against the same trusted installation
+set. Preview reports structured issues and never invokes an Actor, model, Source or
+effect. Unsupported control-step/runtime combinations return structured preview
+issues and cannot be published as runnable Skills.
+
 The shared compiler is exported from `@avenos/actors/studio`. Immutable Skill
-definitions pin child artifact IDs. Activations pin the resolved program's canonical
-digest; execution refuses a changed catalog resolution. Every child invocation and
-document Actor publication carries its activation/program/invocation provenance.
-The initial adapters run document understanding and deterministic brief creation.
-Model assistance is opt-in and constrained by every enclosing Skill.
+definitions pin child artifact IDs, while activations pin the exact root Skill and
+input artifact IDs. Execution revalidates the current trusted installation contracts
+before compiling. Every child invocation and Actor publication retains its causal
+inputs and stable step identity.
+The initial generic adapter runs deterministic brief creation; document operations
+remain discoverable while their generic installations are incomplete. Runtime
+admission revalidates the exact Skill/child graph, current authority and trusted Store
+projections. Cancellation stops new work/publication, and subscription admission
+rejects cycles over internal as well as public outputs.
 
 Customer Actor schema version 2 stores draft revisions, connection cursors and
 delivery intents. The API role manages these records; the worker still accesses
@@ -91,8 +123,8 @@ artifact subscriptions are implemented; IMAP/HTTP supervision, service identitie
 related-artifact joins, Review execution and cross-device execution are not.
 Definitions do not confer authority to perform external effects.
 
-See [Skill Studio](../../docs/skill-studio.md#implemented-first-slice) for exact
-limits and [build and test](../../docs/operations/build-and-test.md) for the
+See [Skill Studio verification](../../docs/skill-studio-verification.md) for exact
+coverage and [build and test](../../docs/operations/build-and-test.md) for the
 database-backed and browser checks.
 
 ## Persistent backend and recovery

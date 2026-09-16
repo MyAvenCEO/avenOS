@@ -117,7 +117,6 @@ function methodCapabilities(
 	return manifest.methods.flatMap((method) => {
 		const requires = method.requires ?? actorRequires
 		const produces = method.produces ?? actorProduces
-		if (produces.length === 0) return []
 		return [
 			{
 				id: resourceId({
@@ -189,6 +188,12 @@ export class ActorRegistry {
 	}
 
 	registerDefinition(definition: ActorDefinition): void {
+		const existing = this.#definitions.get(definition.ref)
+		if (existing) {
+			if (canonicalDefinition(existing) !== canonicalDefinition(definition))
+				throw new Error(`ACTOR_CONTRACT_IDENTITY_CONFLICT: ${definition.ref}`)
+			return
+		}
 		this.#definitions.set(definition.ref, immutableCopy(definition))
 		this.#changed()
 	}
@@ -281,6 +286,18 @@ export class ActorRegistry {
 
 function immutableCopy<Value>(value: Value): Value {
 	return deepFreeze(structuredClone(value))
+}
+
+/** Registration identity is structural; object key insertion order is not a new contract. */
+function canonicalDefinition(value: unknown): string {
+	if (Array.isArray(value)) return `[${value.map(canonicalDefinition).join(',')}]`
+	if (value && typeof value === 'object')
+		return `{${Object.entries(value)
+			.filter(([, item]) => item !== undefined)
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([key, item]) => `${JSON.stringify(key)}:${canonicalDefinition(item)}`)
+			.join(',')}}`
+	return JSON.stringify(value)
 }
 
 function deepFreeze<Value>(value: Value): Value {

@@ -1,0 +1,219 @@
+{
+  "typeKey": "studio.skill",
+  "version": 2,
+  "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+      "name": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
+      "port": {
+        "type": "object", "additionalProperties": false,
+        "required": ["schema", "type", "predicate", "role", "cardinality"],
+        "properties": {
+          "schema": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "type": {
+            "type": "object", "additionalProperties": false,
+            "required": ["key", "version"],
+            "properties": {
+              "key": { "type": "string", "pattern": "^[a-z][a-z0-9.-]{0,127}$" },
+              "version": { "type": "integer", "minimum": 1, "maximum": 10000 }
+            }
+          },
+          "predicate": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "role": { "$ref": "#/$defs/name" },
+          "cardinality": { "enum": ["one", "optional", "many"] }
+        }
+      },
+      "outputPort": {
+        "type": "object", "additionalProperties": false,
+        "required": ["schema", "type", "predicate", "role", "cardinality", "from"],
+        "properties": {
+          "schema": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "type": {
+            "type": "object", "additionalProperties": false,
+            "required": ["key", "version"],
+            "properties": {
+              "key": { "type": "string", "pattern": "^[a-z][a-z0-9.-]{0,127}$" },
+              "version": { "type": "integer", "minimum": 1, "maximum": 10000 }
+            }
+          },
+          "predicate": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "role": { "$ref": "#/$defs/name" },
+          "cardinality": { "enum": ["one", "optional", "many"] },
+          "from": { "$ref": "#/$defs/binding" }
+        }
+      },
+      "binding": {
+        "oneOf": [
+          { "type": "object", "additionalProperties": false,
+            "required": ["kind", "port"],
+            "properties": { "kind": { "const": "input" }, "port": { "$ref": "#/$defs/name" } } },
+          { "type": "object", "additionalProperties": false,
+            "required": ["kind", "stepId", "port"],
+            "properties": { "kind": { "const": "step" }, "stepId": { "$ref": "#/$defs/name" },
+              "port": { "$ref": "#/$defs/name" } } },
+          { "type": "object", "additionalProperties": false,
+            "required": ["kind", "loopId"],
+            "properties": { "kind": { "const": "item" }, "loopId": { "$ref": "#/$defs/name" } } },
+          { "type": "object", "additionalProperties": false,
+            "required": ["kind"], "properties": { "kind": { "const": "none" } } }
+        ]
+      },
+      "parameterBinding": {
+        "oneOf": [
+          { "type": "object", "additionalProperties": false,
+            "required": ["kind", "value"],
+            "properties": { "kind": { "const": "literal" }, "value": {} } },
+          { "type": "object", "additionalProperties": false,
+            "required": ["kind", "name"],
+            "properties": { "kind": { "const": "parameter" }, "name": { "$ref": "#/$defs/name" } } }
+        ]
+      },
+      "portMap": { "type": "object", "maxProperties": 16,
+        "propertyNames": { "$ref": "#/$defs/name" },
+        "additionalProperties": { "$ref": "#/$defs/port" } },
+      "bindingMap": { "type": "object", "maxProperties": 16,
+        "propertyNames": { "$ref": "#/$defs/name" },
+        "additionalProperties": { "$ref": "#/$defs/binding" } },
+      "parameterMap": { "type": "object", "maxProperties": 16,
+        "propertyNames": { "$ref": "#/$defs/name" },
+        "additionalProperties": { "$ref": "#/$defs/parameterBinding" } },
+      "after": { "type": "array", "maxItems": 32,
+        "items": { "$ref": "#/$defs/name" } },
+      "step": {
+        "oneOf": [
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "label", "kind", "capabilityId", "inputs", "parameters", "outputs"],
+            "properties": {
+              "id": { "$ref": "#/$defs/name" }, "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "after": { "$ref": "#/$defs/after" }, "kind": { "const": "invoke" },
+              "capabilityId": { "type": "string", "minLength": 1, "maxLength": 256 },
+              "inputs": { "$ref": "#/$defs/bindingMap" },
+              "parameters": { "$ref": "#/$defs/parameterMap" },
+              "configuration": { "$ref": "#/$defs/parameterMap" },
+              "outputs": { "$ref": "#/$defs/portMap" }
+            }
+          },
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "label", "kind", "skillArtifactId", "skillVersion", "inputs", "parameters", "outputs"],
+            "properties": {
+              "id": { "$ref": "#/$defs/name" }, "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "after": { "$ref": "#/$defs/after" }, "kind": { "const": "skill" },
+              "skillArtifactId": { "type": "string", "format": "uuid" }, "skillVersion": { "const": 2 },
+              "inputs": { "$ref": "#/$defs/bindingMap" },
+              "parameters": { "$ref": "#/$defs/parameterMap" },
+              "outputs": { "$ref": "#/$defs/portMap" }
+            }
+          },
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "label", "kind", "goals", "ingredients", "factFamilies", "excludedCapabilityIds", "outputs"],
+            "properties": {
+              "id": { "$ref": "#/$defs/name" }, "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "after": { "$ref": "#/$defs/after" }, "kind": { "const": "achieve" },
+              "goals": { "type": "array", "maxItems": 16, "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+              "ingredients": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/binding" } },
+              "factFamilies": { "type": "array", "maxItems": 16, "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+              "excludedCapabilityIds": { "type": "array", "maxItems": 32,
+                "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+              "outputs": { "$ref": "#/$defs/portMap" }
+            }
+          },
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "label", "kind", "subjectSchema", "subjects", "outputs"],
+            "properties": {
+              "id": { "$ref": "#/$defs/name" }, "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "after": { "$ref": "#/$defs/after" }, "kind": { "const": "review" },
+              "subjectSchema": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "subjects": { "$ref": "#/$defs/bindingMap" },
+              "outputs": { "$ref": "#/$defs/portMap" }
+            }
+          },
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "label", "kind", "collection", "itemName", "childSkillArtifactId", "childInputs", "concurrency", "failureMode", "outputs"],
+            "properties": {
+              "id": { "$ref": "#/$defs/name" }, "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "after": { "$ref": "#/$defs/after" }, "kind": { "const": "forEach" },
+              "collection": { "$ref": "#/$defs/binding" }, "itemName": { "$ref": "#/$defs/name" },
+              "childSkillArtifactId": { "type": "string", "format": "uuid" },
+              "childInputs": { "$ref": "#/$defs/bindingMap" },
+              "concurrency": { "type": "integer", "minimum": 1, "maximum": 4 },
+              "failureMode": { "enum": ["fail-fast", "collect-results"] },
+              "outputs": { "$ref": "#/$defs/portMap" }
+            }
+          },
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "label", "kind", "condition", "branches", "outputs"],
+            "properties": {
+              "id": { "$ref": "#/$defs/name" }, "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "after": { "$ref": "#/$defs/after" }, "kind": { "const": "when" },
+              "condition": {
+                "oneOf": [
+                  { "type": "object", "additionalProperties": false,
+                    "required": ["kind", "from"],
+                    "properties": { "kind": { "const": "presence" }, "from": { "$ref": "#/$defs/binding" } } },
+                  { "type": "object", "additionalProperties": false,
+                    "required": ["kind", "from", "caseId"],
+                    "properties": { "kind": { "const": "observation" }, "from": { "$ref": "#/$defs/binding" },
+                      "caseId": { "$ref": "#/$defs/name" } } }
+                ]
+              },
+              "branches": {
+                "type": "object", "minProperties": 2, "maxProperties": 2,
+                "propertyNames": { "$ref": "#/$defs/name" },
+                "additionalProperties": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["steps", "outputs"],
+                  "properties": {
+                    "steps": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/step" } },
+                    "outputs": { "$ref": "#/$defs/bindingMap" }
+                  }
+                }
+              },
+              "outputs": { "$ref": "#/$defs/portMap" }
+            }
+          }
+        ]
+      }
+    },
+    "type": "object", "additionalProperties": false,
+    "required": ["version", "name", "inputs", "parametersSchema", "steps", "outputs", "policy"],
+    "properties": {
+      "version": { "const": 2 },
+      "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+      "inputs": { "$ref": "#/$defs/portMap" },
+      "parametersSchema": { "type": "object", "maxProperties": 8 },
+      "steps": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/step" } },
+      "outputs": { "type": "object", "maxProperties": 16,
+        "propertyNames": { "$ref": "#/$defs/name" },
+        "additionalProperties": { "$ref": "#/$defs/outputPort" } },
+      "policy": {
+        "type": "object", "additionalProperties": false,
+        "required": ["maxInvocations", "maxDepth", "maxMembers", "maxConcurrentChildren", "allowModel"],
+        "properties": {
+          "maxInvocations": { "type": "integer", "minimum": 1, "maximum": 64 },
+          "maxDepth": { "type": "integer", "minimum": 1, "maximum": 8 },
+          "maxMembers": { "type": "integer", "minimum": 1, "maximum": 256 },
+          "maxConcurrentChildren": { "type": "integer", "minimum": 1, "maximum": 4 },
+          "allowModel": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "blobPolicy": "forbidden",
+  "referenceRules": [
+    {
+      "role": "child", "minimum": 0, "maximum": 32,
+      "allowedTargetTypes": { "kind": "exact", "types": [
+        { "typeKey": "studio.skill", "version": 2 }
+      ] },
+      "attributesSchema": { "type": "object", "additionalProperties": false,
+        "required": [], "properties": {} }
+    }
+  ]
+}

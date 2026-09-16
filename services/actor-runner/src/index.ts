@@ -1,5 +1,4 @@
-import { createActorPlanExecutor } from '@avenos/actors'
-import { STUDIO_SKILL } from '@avenos/actors/studio'
+import { createActorPlanExecutor, TrustedActorInstallations } from '@avenos/actors'
 import { ArtifactStoreClient } from '@avenos/artifact-store'
 import { importTenantGrantPublicKey } from '@avenos/aven-customer-contracts'
 import { TenantPoolProvider } from '@avenos/aven-customer-runtime'
@@ -16,14 +15,23 @@ import { HttpLlmGatewayClient } from '@avenos/llm-client/http'
 import type pg from 'pg'
 import { createApplicationExecutor } from './application-executor.js'
 import { loadActorRunnerConfig } from './config.js'
+import { createDocumentCatalogSource } from './document-catalog.js'
 import { createActorRunnerHandler } from './handler.js'
 import { createServerActorExecutionHost } from './host.js'
 import { SqlPlanRunner } from './sql-runner.js'
 import { StudioArtifacts } from './studio-artifacts.js'
-import { createStudioExecutor } from './studio-executor.js'
 import { StudioService } from './studio-service.js'
+import { createStudioV2Executor, STUDIO_SKILL_V2 } from './studio-v2-executor.js'
+import {
+	createStudioRuntimeAuthorizer,
+	createStudioRuntimeFactory,
+	createStudioRuntimeRegistry,
+	installStudioRuntimeActors
+} from './studio-runtime.js'
 
 const config = loadActorRunnerConfig()
+const studioInstallations = new TrustedActorInstallations()
+await installStudioRuntimeActors(studioInstallations)
 const componentRef = 'os.aven:component:actors:run-repository@1'
 const runners = new WeakMap<
 	pg.Pool,
@@ -107,11 +115,22 @@ const handler = createActorRunnerHandler(
 			}
 			const documents = createDocumentSkillExecutor(documentDependencies)
 			const studioArtifacts = new StudioArtifacts(artifactClient, grant.environmentId)
+			const studioRegistry = createStudioRuntimeRegistry()
+			const studioFactory = createStudioRuntimeFactory()
+			const studioAuthorizer = createStudioRuntimeAuthorizer(grant.environmentId)
 			const execute = createApplicationExecutor(
 				[
 					{
-						skillRef: STUDIO_SKILL,
-						execute: createStudioExecutor(studioArtifacts, documentDependencies)
+						skillRef: STUDIO_SKILL_V2,
+						execute: createStudioV2Executor(studioArtifacts, {
+							registryFor: () => studioRegistry.snapshot(),
+							authorizerFor: () => studioAuthorizer,
+							factoriesFor: () => ({
+								resolve: (factoryId) =>
+									factoryId === studioFactory.offer.factoryId ? studioFactory : undefined
+							}),
+							installations: studioInstallations
+						})
 					},
 					{ skillRef: DOCUMENT_INGEST_SKILL, execute: documents },
 					{
@@ -135,7 +154,18 @@ const handler = createActorRunnerHandler(
 				15 * 60_000,
 				config.ACTOR_RUNNER_MAX_PARALLELISM
 			)
-			const entry = { runner, studio: new StudioService(api, studioArtifacts, runner), api, worker }
+			const entry = {
+				runner,
+				studio: new StudioService(
+					api,
+					studioArtifacts,
+					runner,
+					createDocumentCatalogSource(grant.environmentId, studioInstallations),
+					studioInstallations
+				),
+				api,
+				worker
+			}
 			runners.set(api, entry)
 			runners.set(worker, entry)
 			void runner

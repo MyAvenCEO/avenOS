@@ -1,7 +1,14 @@
 # Skill Studio: discover possibilities and build reusable programs
 
-Status: initial vertical slice implemented. The target design below includes
-future functionality; the following section is the authority for current coverage.
+Status: clean-cut `studio.skill@2` Studio implemented and verified for authorized
+Actor discovery, visual and agent composition, immutable reuse, finite execution,
+artifact preview, provenance, and authenticated-session connections. Advanced
+goal-solving, review, collection, observation branching, and unattended Source
+supervision remain explicit foundations and are never reported as runnable.
+
+The executable acceptance record is
+[Skill Studio verification](skill-studio-verification.md). It is the authority for
+current coverage; older slice notes below are retained only as design history.
 
 Skill Studio lets a person and their Aven turn available material into useful work.
 Start with any artifact, explore possible outcomes, shape a program together, and
@@ -21,14 +28,95 @@ owns execution and authorization. The
 owns immutable occurrences, composition references, production receipts, and
 publication history. Extensions below must preserve those boundaries.
 
-## Implemented first slice
+The [shared Actor integration specification](skill-studio-shared-runtime.md) owns
+the wider implementation: one authorized catalog and runtime, general bindings,
+visual Skill previews in the artifact library, and a clean cutover without legacy
+compatibility. Its full all-Actor runtime and continuous Source gates are not met.
+
+## Historical slice notes
+
+This section describes the earlier implementation sequence and is superseded by the
+verification record above. It must not be used to infer current versions or readiness.
 
 The native client's **Skills** surface now uses the customer-backed Studio API.
 It supports artifact exploration, solver-filled goals, fixed steps, exact nested
-Skill references, revision-checked drafts, immutable `studio.skill@1` publication,
+Skill references, revision-checked drafts, immutable `studio.skill@2` publication,
 execution, provenance inspection, and planning-only budget comparisons. The
 Artifact browser can open any selected artifact in Studio. Unknown types remain
 inspectable and report that no installed route is available.
+
+The Artifact library also has a Skills filter and a read-only visual preview of a
+selected saved Skill: its exact artifact revision, named interface, authored route,
+nested child reference, bounded public settings and current limits. Conditional
+branch steps are retained with their branch context instead of disappearing from the
+top-level route. This preview does not run the solver,
+Actor, model or subscription. Exact v2 definitions can be opened and reused by the
+shared editor. File previews continue to use the file viewer.
+
+The next foundation exists in this worktree but is **not production coverage**:
+the registry inventories zero-output methods, the `studio.skill@2` parser checks
+closed named-port definitions and installed method contracts, and a trusted-host
+authorized catalog can be supplied to the shared Studio/agent read boundary.
+Trusted release installation descriptors now reject same-version projector or
+implementation changes and produce a method-level proof/non-proof/incomplete
+inventory without instantiating Actors. A supplied installation digest is included
+in the visible catalog identity. Every page also carries an opaque authority-context
+binding, and the combined native/server view rejects pagination after a subject,
+session or environment change even when the visible contracts happen to be identical.
+The owning Actor packages have not yet exported a complete production installation
+set.
+The document package now exports all 18 built-in method manifests as static data,
+including model-backed entries when a model is unavailable. A test verifies parity
+with constructed Actors without calling the decoder or model. Those methods remain
+contract-incomplete for generic Studio execution; static presence is not a runnable
+installation.
+
+The immutable Store type `studio.skill@2` is also registered with closed step and
+binding variants. A separate v2-only publisher now validates exact child ports,
+public parameter bindings, installed Actor contracts, read authority, and the
+registered Store type digest before an immutable publication. It records child
+references and producer inputs, and a predecessor as a causal input. Idempotent
+replay is tested. The current Studio draft/editor workflow does not call this
+publisher yet, so v2 publication is not available in the native UI.
+A fresh v2 draft repository and authoring orchestrator now provide subject-scoped
+revision CAS, idempotent creation, immutable-head recording, predecessor handoff and
+an explicit committed-artifact result when a draft races after Store commit. They
+reject v1 definitions instead of converting them. These seams are tested but are not
+yet connected to the public Studio command while the native v2 composer is unfinished.
+A shared side-effect-free v2 validator now drives both authoring preview and
+publication admission. It resolves the exact readable transitive child graph and
+checks every nested interface and installed Actor capability, so a malformed
+child-of-child cannot pass preview and fail only during publication. Preview remains
+an authoring-contract check: it does not invoke an Actor or claim runtime readiness.
+The production Runner now exposes those 18 static document methods through the
+authorized Studio catalog as contract-incomplete entries; discover authority is
+customer-scoped, while plan/spawn/invoke remain denied. It does not install generic
+execution adapters, projector/implementation digests, or other client Actor families.
+Studio has an Operations drawer for this authorized inventory, with server-side
+search/ready filtering, named-port cues, and specific blocked status. Browsing it
+never adds a blocked method to a program or executes an Actor.
+The native drawer composes that server view with the live native Actor registry. It
+shows visible Actors separately from their operations, so event-flow Actors such as
+Listener, Speaker and Chat remain inspectable without invented callable methods. The
+agent-facing Studio Actor uses the same combined request path. Client operations
+without complete Store, retry, placement and public-form contracts remain blocked.
+An authorable catalog operation now carries exact Store-backed named ports from its
+matching trusted installation; a manifest or caller-provided digest cannot manufacture
+that state. A shared v2 composer can turn it into a valid step without JSON editing:
+exact preceding outputs connect automatically, unmatched artifacts become named Skill
+inputs, method settings become bounded public parameters, optional inputs remain
+explicit, and protected inputs stay on the trusted host path. The native visual editor
+does not call this composer yet. The agent already exposes the same rule as
+`studio_compose_operation`: it refreshes the authorized catalog, selects an exact
+capability ID and returns the changed definition plus compact wiring cues without
+saving, publishing or executing anything.
+
+The portable executor has a tested live-instance resolver, but still lacks named result publications,
+fenced durable attempts, review, protected ingress and general Store integration.
+The neutral `actors.port-result@1` and `actors.execution-receipt@1` Store types are
+registered as foundations, and a pure named-result checker builds ordered
+membership references, including empty ports and exact reuse. No production Actor
+path publishes these records yet, so this is not a BIND/RUN acceptance claim.
 
 The initial catalog contains document understanding through the existing document
 Actor pipeline and a deterministic brief derived from its committed report.
@@ -130,6 +218,7 @@ visible. It does not require a sentence, predicate, JSON, or drawn wire.
 | Explore | Artifact shelf, useful outcomes, missing ingredients | Evidence, discovery limits, available implementations |
 | Shape | One selected route, compact steps, alternatives | Typed inputs, parameters, nested programs, constraints |
 | Activity | Active Sources, waiting work, runs needing attention | Capture history, attempts, decisions, complete provenance |
+| Artifact library | Skill name, input/output chips, compact program preview | Named ports, nested Skills, effects, exact revision and provenance |
 
 These are views of the same selected work, not disconnected editors. Switching
 between them preserves the draft, selected artifacts, and navigation context.
@@ -140,6 +229,12 @@ Use restrained color, clear shapes, short labels, and generous spacing. Show a
 few ranked possibilities initially and offer further exploration. The agent can
 page the full authorized search space without putting every node on the canvas.
 Expand one nested section or inspector at a time.
+
+A Skill is previewable directly in Artifacts even though it has no file blob. Its
+preview renders the exact saved definition, not a speculative solver result or a
+mutable draft head. Opening it does not execute, plan, or advance subscriptions.
+The [artifact preview contract](skill-studio-shared-runtime.md#skill-previews-in-the-artifact-library)
+defines cards, expanded views, actions, access checks, and incomplete dependencies.
 
 A route card summarizes inputs, expected result, conditional observations,
 placement, measured or unknown cost, and significant effects. Selecting an
@@ -539,57 +634,29 @@ provenance inputs. The Source supervisor needs proactive customer discovery and
 renewable unattended authority. These are implementation prerequisites, not
 features already supplied by the repository.
 
-## Delivery: prove the foundations through one useful path
+## Delivery: shared Actors before protocol-specific expansion
 
-### First: a small complete Studio
+The first implemented slice proves the synthetic email, nested document Skill, and
+subscribed brief path described at the top of this document. The next delivery
+replaces its fixed catalog rather than adding more Studio-specific actor branches.
 
-Define the versioned program and input-binding contracts. Implement one-level
-nesting, exact invocation identity, and one truthful document preview. Support
-an arbitrary registered artifact with an honest unsupported result.
+Follow the [implementation sequence and acceptance gates](skill-studio-shared-runtime.md#12-implementation-sequence-and-file-ownership):
 
-Expose the same draft, exploration, validation, and editing operations to the
-Rust client and agent from this first slice. Keep the UI to an artifact shelf,
-one route, alternatives, and an inspector.
+1. Inventory installed Actor methods and define the shared authorized catalog and
+   richer program contracts.
+2. Build generic authoring and visual Skill previews in Artifacts from those same
+   contracts; give the agent the same structured operations.
+3. Configure durable generic execution, application policy, publication recovery,
+   and fencing before enabling new execution families.
+4. Prove observations, optional/collection results, nested review, protected inputs,
+   shared budgets, and full provenance.
+5. Integrate document and client Actor families and protected HTTP capabilities,
+   with explicit Device/Server placement and independent-package conformance.
+6. Add supervised Sources and bounded unattended subscriptions only after their
+   delegation, credential, restart, and revocation contracts pass.
 
-Use a synthetic Source to publish a complete email capture. Connect each supported
-attachment to a parent Skill calling the installed document Skill. Publish its
-result and trigger one deterministic follow-on Skill. Preserve provenance through
-the full chain, including separate activations on the same attachment.
-
-### Then: continuous work
-
-Add supervised HTTP or IMAP capture, beginning with deterministic transport
-fixtures. Prove restart discovery, fencing, stable acquisitions, source updates,
-pause/resume, and bounded replay. Enable live accounts only when the unattended
-delegation and revocation path exists.
-
-Add one related-input rule: an invoice waits for a matching committed payment.
-Prove both arrival orders, ambiguity, restart while waiting, and one admission
-under duplicate delivery. Add broader matching only after that behavior works.
-
-### Later: broader composition
-
-Expand the opportunity catalog, conditional route comparison, collections, deeper
-nesting, and measured cost ranking. Save/share scenarios and richer agent proposals.
-Keep the initial program and invocation contracts; new features extend versioned
-constructs rather than reinterpret old definitions.
-
-First-release acceptance must demonstrate:
-
-- No preview invokes an Actor; unknown observations remain conditional.
-- A second activation on the same artifact has distinct invocation provenance.
-- Duplicate delivery and a crash after admission produce one logical activation.
-- Two child calls preserve different parameters, identities, and outputs.
-- A child failure or required review cannot be presented as a completed parent goal.
-- Fixed steps and hard constraints survive a solver replan.
-- Source updates and subscription cutovers preserve the declared backlog policy.
-- Nested work shares its budget; limits preserve visible pending work.
-- A saved scenario cannot supply hypothetical facts to a real run.
-- Human and agent edits operate on the same revision and expose conflicts.
-- Result-to-source and source-to-consumer navigation survives edits and restart.
-- A person can discover, compose, connect, and recover through visual choices,
-  with keyboard and assistive access, without opening the technical inspector.
-
-The first complete path is the architectural proof. A broad canvas or catalog can
-grow after definitions, execution, and continuous inputs agree on what a program
-means.
+This is a clean-cut implementation: legacy program readers, adapters, and data
+conversion are not required. Immutable history is never rewritten to pretend it
+uses the new contract, and resetting an existing environment requires explicit
+authorization. Related-input joins, saved scenarios, and calibrated ranking remain
+separate expansions after the shared runtime works.

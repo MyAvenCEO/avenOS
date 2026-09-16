@@ -102,7 +102,7 @@ The exact `POST /studio/query` suffix requires `actor-runs:read` and rejects
 mutating operations; `POST /studio/command` requires `actor-runs:write`.
 Subscription dispatch currently requires a live authorized user request, not a
 persisted user token or unattended worker identity. See
-[Skill Studio](skill-studio.md#implemented-first-slice) for current limits.
+[Skill Studio verification](skill-studio-verification.md#fail-closed-boundaries) for current limits.
 
 ## Provisioning and reconciliation
 

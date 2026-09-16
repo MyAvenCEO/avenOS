@@ -1,13 +1,17 @@
 <script lang="ts">
-import type { PlanRunRecord } from '@avenos/actors'
 import {
-	parseStudioDefinition,
-	STUDIO_CATALOG,
-	type StudioDefinition,
-	type StudioType,
-	sameType
-} from '@avenos/actors/studio'
+	composeSkillArtifact,
+	editStudioSkillV2,
+	newStudioSkillV2,
+	parseStudioSkillV2,
+	type PlanRunRecord,
+	type StudioCatalogEntry,
+	type StudioSkillPort,
+	type StudioSkillV2
+} from '@avenos/actors'
 import { onMount } from 'svelte'
+import StudioOperations from './StudioOperations.svelte'
+import { composeAuthorizedStudioOperation } from './studio-compose'
 import {
 	refreshStudio,
 	type StudioArtifact,
@@ -20,2016 +24,267 @@ import {
 	studioRequest
 } from './studio.svelte'
 
-let tab = $state<'explore' | 'build' | 'activity'>('explore')
+let tab = $state<'explore' | 'compose' | 'activity'>('explore')
 let busy = $state(false)
 let error = $state('')
 let notice = $state('')
 let search = $state('')
-let lookupId = $state('')
-let exploration = $state<StudioExploration | null>(null)
 let selected = $state<StudioArtifact | null>(null)
+let exploration = $state<StudioExploration | null>(null)
 let draft = $state<StudioDraft | null>(null)
-let definition = $state<StudioDefinition | null>(null)
+let definition = $state<StudioSkillV2 | null>(null)
 let preview = $state<StudioPreview | null>(null)
 let bindings = $state<Record<string, string>>({})
-let inspectorDialog: HTMLDialogElement | undefined = $state()
-let inspecting = $state<Record<string, unknown> | null>(null)
+let parameters = $state<Record<string, unknown>>({})
+let showOperations = $state(false)
 let raw = $state('')
-let budget = $state(1)
-let comparison = $state<{ baseline: StudioPreview; variants: StudioPreview[] } | null>(null)
-let sourceFilter = $state('')
-let watchPort = $state('source')
+let inspector = $state<Record<string, any> | null>(null)
+let inspectorDialog: HTMLDialogElement | undefined = $state()
 let showConnection = $state(false)
-let pendingSample: { requestId: string; observedAt: string } | null = null
-let pendingRun: {
-	requestId: string
-	skillArtifactId: string
-	inputs: Record<string, string>
-} | null = null
-let pendingConnection: Record<string, unknown> | null = null
+let watchPort = $state('')
+let sourceFilter = $state('')
 let workspaceKey = ''
-let disposed = false
-let explorationSequence = 0
+let pendingSample: { requestId: string; observedAt: string } | null = null
+
 const snapshot = $derived(studio.snapshot)
-const reusableSkills = $derived(
-	(snapshot?.skills ?? []).flatMap((artifact) => {
-		try {
-			return [{ artifact, definition: parseStudioDefinition(artifact.payload) }]
-		} catch {
-			return []
-		}
-	})
-)
-const siblings = $derived(
-	(
-		inspecting?.production as
-			| { publication?: { artifacts?: Array<{ artifactId: string; localKey: string }> } }
-			| undefined
-	)?.publication?.artifacts ?? []
-)
-const dirty = $derived(
-	!!definition && JSON.stringify(definition) !== JSON.stringify(draft?.definition)
-)
-const conflict = $derived(
-	!!draft && !!snapshot?.drafts.some((d) => d.id === draft!.id && d.revision !== draft!.revision)
-)
-const published = $derived(
-	!dirty && draft?.published_revision === draft?.revision ? draft?.published_artifact_id : null
-)
 const artifacts = $derived(
-	(snapshot?.artifacts ?? []).filter((a) =>
-		(studioName(a) + a.typeKey).toLowerCase().includes(search.toLowerCase())
+	(snapshot?.artifacts ?? []).filter((artifact) =>
+		`${studioName(artifact)} ${artifact.typeKey}`.toLowerCase().includes(search.toLowerCase())
 	)
 )
-const portNames = $derived(Object.keys(definition?.inputs ?? {}))
-const compatible = (a: StudioArtifact, type: StudioType) =>
-	sameType({ key: a.typeKey, version: a.typeVersion }, type)
-const readableType = (t: StudioType) =>
-	({
-		'core.file': 'File',
-		'studio.understanding': 'Understanding',
-		'studio.brief': 'Brief',
-		'studio.email': 'Email',
-		'studio.skill': 'Skill'
-	})[t.key] ?? t.key
-const candidates = (type: StudioType) => [
-	...new Map(
-		[...(snapshot?.artifacts ?? []), ...(snapshot?.files ?? []), ...(selected ? [selected] : [])]
-			.filter((a) => compatible(a, type))
-			.map((a) => [a.artifactId, a])
-	).values()
-]
-const runArtifact = (run: PlanRunRecord): StudioArtifact | null =>
-	(run.checkpoints.at(-1)?.output as { artifact?: StudioArtifact } | undefined)?.artifact ?? null
-
-async function act(fn: () => Promise<void>) {
-	if (busy) return
-	busy = true
-	error = ''
-	notice = ''
-	try {
-		await fn()
-	} catch (e) {
-		error = e instanceof Error ? e.message : String(e)
-	} finally {
-		busy = false
-	}
-}
-async function explore(id: string) {
-	const sequence = ++explorationSequence
-	error = ''
-	try {
-		const result = await studioRequest<StudioExploration>('explore', { artifactId: id })
-		if (sequence !== explorationSequence || disposed) return
-		exploration = result
-		selected = result.source
-		tab = 'explore'
-	} catch (e) {
-		if (sequence === explorationSequence) error = String(e)
-	}
-}
-function create(def: StudioDefinition) {
-	definition = structuredClone($state.snapshot(def))
-	draft = {
-		id: crypto.randomUUID(),
-		revision: 0,
-		definition: structuredClone($state.snapshot(def)),
-		published_artifact_id: null,
-		published_revision: null
-	}
-	bindings =
-		selected && def.inputs.source && compatible(selected, def.inputs.source)
-			? { source: selected.artifactId }
-			: {}
-	raw = JSON.stringify(def, null, 2)
-	comparison = null
-	tab = 'build'
-}
-function openDraft(value: StudioDraft) {
-	draft = structuredClone($state.snapshot(value))
-	definition = structuredClone($state.snapshot(value.definition))
-	bindings = {}
-	comparison = null
-	tab = 'build'
-	raw = JSON.stringify(value.definition, null, 2)
-	if (selected)
-		for (const [name, type] of Object.entries(value.definition.inputs))
-			if (compatible(selected, type)) bindings[name] = selected.artifactId
-}
-function chooseSaved(artifact: StudioArtifact) {
-	const found = snapshot?.drafts.find((d) => d.published_artifact_id === artifact.artifactId)
-	if (found) openDraft(found)
-	else create(parseStudioDefinition(artifact.payload))
-}
-function wrapSkill(artifact: StudioArtifact) {
-	const child = parseStudioDefinition(artifact.payload)
-	create({
-		...child,
-		name: child.name + ' workflow',
-		steps: [
-			{
-				id: 'child',
-				kind: 'skill',
-				label: child.name,
-				ref: artifact.artifactId,
-				inputs: Object.fromEntries(
-					Object.keys(child.inputs).map((name) => [name, { kind: 'input', name }])
-				),
-				parameters: {}
-			}
-		],
-		output: { type: child.output.type, from: { kind: 'step', name: 'child' } }
+const savedSkills = $derived(
+	(snapshot?.skills ?? []).flatMap((artifact) => {
+		if (artifact.typeVersion !== 2) return []
+		try { return [{ artifact, definition: parseStudioSkillV2($state.snapshot(artifact.payload)) }] } catch { return [] }
 	})
+)
+const dirty = $derived(!!definition && JSON.stringify(definition) !== JSON.stringify(draft?.definition))
+const conflict = $derived(!!draft && !!snapshot?.drafts.some((item) => item.id === draft!.id && item.revision !== draft!.revision))
+const publishedArtifactId = $derived(
+	!dirty && draft?.publishedRevision === draft?.revision ? (draft?.publishedArtifactId ?? null) : null
+)
+const inputNames = $derived(Object.keys(definition?.inputs ?? {}))
+const requiredParameters = $derived((definition?.parametersSchema.required as string[] | undefined) ?? [])
+const parameterSchemas = $derived((definition?.parametersSchema.properties as Record<string, Record<string, unknown>> | undefined) ?? {})
+
+async function act(work: () => Promise<void>) {
+	if (busy) return
+	busy = true; error = ''; notice = ''
+	try { await work() } catch (cause) { error = cause instanceof Error ? cause.message : String(cause) }
+	finally { busy = false }
 }
-function removeLastStep() {
+
+function fresh(next: StudioSkillV2) {
+	const exact = parseStudioSkillV2($state.snapshot(next))
+	definition = exact
+	draft = {
+		id: crypto.randomUUID(), subjectId: snapshot?.subjectId ?? '', revision: 0,
+		definition: structuredClone(exact), publishedArtifactId: null, publishedRevision: null,
+		updatedAt: new Date().toISOString()
+	}
+	bindings = {}; parameters = {}; raw = JSON.stringify(next, null, 2); tab = 'compose'
+}
+
+function createBlank() { fresh(newStudioSkillV2('Untitled Skill')); showOperations = true }
+function openDraft(value: StudioDraft) {
+	draft = structuredClone($state.snapshot(value)); definition = parseStudioSkillV2($state.snapshot(value.definition))
+	bindings = {}; parameters = {}; raw = JSON.stringify(value.definition, null, 2); tab = 'compose'
+}
+async function openSkill(artifact: StudioArtifact) {
+	const exact = parseStudioSkillV2($state.snapshot(artifact.payload))
+	const found = snapshot?.drafts.find((item) => item.publishedArtifactId === artifact.artifactId)
+	if (found) openDraft(found); else fresh(exact)
+	selected = artifact
+}
+async function explore(artifact: StudioArtifact) {
+	selected = artifact
+	exploration = await studioRequest<StudioExploration>('explore', { artifactId: artifact.artifactId })
+	tab = 'explore'
+}
+async function addOperation(entry: StudioCatalogEntry) {
+	if (!definition) fresh(newStudioSkillV2('Untitled Skill'))
+	const result = await composeAuthorizedStudioOperation($state.snapshot(definition!), entry.capabilityId, studioRequest)
+	definition = result.definition; showOperations = false; tab = 'compose'
+	notice = result.cues.some((cue) => cue.kind === 'new-input') ? `${entry.label} added · one input is needed.` : `${entry.label} added and connected.`
+}
+function addChild(artifact: StudioArtifact, child: StudioSkillV2) {
 	if (!definition) return
-	const step = definition.steps.at(-1)
-	if (!step || Object.keys(step.inputs).length !== 1) return
-	const from = Object.values(step.inputs)[0]
-	const type =
-		from.kind === 'input'
-			? definition.inputs[from.name]
-			: preview?.program?.steps.find((s) => s.id === from.name)?.outputType
-	if (!type) return
-	definition.steps.pop()
-	definition.output = { type, from }
+	definition = composeSkillArtifact($state.snapshot(definition), artifact.artifactId, $state.snapshot(child)).definition
+	notice = `${child.name} nested as an exact reusable Skill.`
+}
+function rename(value: string) {
+	if (definition && value.trim()) definition = editStudioSkillV2($state.snapshot(definition), { kind: 'rename', name: value.trim() }).definition
+}
+function labelStep(stepId: string, value: string) {
+	if (definition && value.trim()) definition = editStudioSkillV2($state.snapshot(definition), { kind: 'set-step-label', stepId, label: value.trim() }).definition
+}
+function addGoal() {
+	if (!definition) return
+	const first = Object.keys(definition.inputs)[0]
+	definition.steps.push({
+		id: `goal-${crypto.randomUUID().slice(0, 7)}`, kind: 'achieve', label: 'Find a route',
+		goals: ['Describe the desired fact'], ingredients: first ? [{ kind: 'input', port: first }] : [],
+		factFamilies: [], excludedCapabilityIds: [], outputs: {}
+	})
+	definition = parseStudioSkillV2($state.snapshot(definition)); notice = 'Open goal added for the solver.'
+}
+function addReview() {
+	if (!definition) return
+	const first = Object.entries(definition.inputs)[0]
+	if (!first) { error = 'Add an operation with an input first.'; return }
+	definition.steps.push({
+		id: `review-${crypto.randomUUID().slice(0, 7)}`, kind: 'review', label: 'Human review',
+		subjectSchema: first[1].schema, subjects: { subject: { kind: 'input', port: first[0] } }, outputs: {}
+	})
+	definition = parseStudioSkillV2($state.snapshot(definition)); notice = 'Review gate added.'
 }
 async function save() {
-	if (!definition || !draft) return
-	if (draft.revision > 0 && !dirty) return
-	draft = await studioRequest<StudioDraft>('draft', {
-		id: draft.id,
-		revision: draft.revision,
-		definition: $state.snapshot(definition)
-	})
-	await refreshStudio()
-	notice = 'Draft saved'
+	if (!definition || !draft || (draft.revision > 0 && !dirty)) return
+	draft = await studioRequest<StudioDraft>('draft', { id: draft.id, revision: draft.revision, definition: $state.snapshot(definition) })
+	await refreshStudio(); notice = 'Draft saved everywhere.'
 }
-async function publish() {
-	await save()
-	if (!draft) return
-	draft = await studioRequest<StudioDraft>('publish', { id: draft.id, revision: draft.revision })
-	await refreshStudio()
-	notice = 'Skill published · exact revision saved'
-}
-function append(ref: string, kind: 'capability' | 'skill') {
+async function publishSkill() {
 	if (!definition) return
-	const cap = STUDIO_CATALOG.find((c) => c.id === ref)
-	const skill = snapshot?.skills.find((a) => a.artifactId === ref)
-	const child = skill ? parseStudioDefinition(skill.payload) : null
-	const type = cap?.output ?? child?.output.type
-	if (!type) return
-	const inputName = child ? Object.keys(child.inputs)[0] : 'source'
-	if (!inputName) return
-	const id = 'step-' + crypto.randomUUID().slice(0, 8)
-	definition.steps.push({
-		id,
-		kind,
-		label: cap?.label ?? child!.name,
-		inputs: { [inputName]: structuredClone($state.snapshot(definition.output.from)) },
-		parameters: {},
-		ref
+	if (!draft) {
+		draft = {
+			id: crypto.randomUUID(), subjectId: snapshot?.subjectId ?? '', revision: 0,
+			definition: structuredClone($state.snapshot(definition)),
+			publishedArtifactId: null, publishedRevision: null, updatedAt: new Date().toISOString()
+		}
+	}
+	await save(); if (!draft) return
+	const result = await studioRequest<{ draft: StudioDraft; artifact: StudioArtifact }>('publish', { id: draft.id, revision: draft.revision })
+	draft = result.draft; await refreshStudio(); notice = 'Immutable Skill published.'
+}
+function parameterReady() { return requiredParameters.every((name) => Object.hasOwn(parameters, name)) }
+async function run() {
+	if (!publishedArtifactId) return
+	await studioRequest('start', {
+		requestId: crypto.randomUUID(), skillArtifactId: publishedArtifactId,
+		inputs: $state.snapshot(bindings), parameters: $state.snapshot(parameters)
 	})
-	definition.output = { type, from: { kind: 'step', name: id } }
-}
-function pin(index: number) {
-	if (!definition) return
-	const step = definition.steps[index]
-	const resolved = preview?.program?.steps[index]
-	if (!step || !resolved?.capabilities?.length) return
-	const route = resolved.capabilities
-	definition.steps.splice(
-		index,
-		1,
-		...route.map((c, i) => ({
-			id: i === route.length - 1 ? step.id : step.id + '-part-' + i,
-			kind: 'capability' as const,
-			label: c.label,
-			ref: c.id,
-			parameters: {},
-			inputs: {
-				source:
-					i === 0
-						? step.inputs.source
-						: { kind: 'step' as const, name: step.id + '-part-' + (i - 1) }
-			}
-		}))
-	)
-}
-async function inspect(id: string) {
-	inspecting = await studioRequest<Record<string, unknown>>('inspect', { artifactId: id })
+	tab = 'activity'; await refreshStudio(); notice = 'Run accepted · provenance will be retained.'
 }
 async function sample() {
 	pendingSample ??= { requestId: crypto.randomUUID(), observedAt: new Date().toISOString() }
 	const result = await studioRequest<{ artifacts: StudioArtifact[] }>('sample', pendingSample)
-	pendingSample = null
-	await refreshStudio()
-	const file = result.artifacts.find((a) => a.typeKey === 'core.file')
-	if (file) await explore(file.artifactId)
-	notice = 'Sample email and attachment saved'
+	pendingSample = null; await refreshStudio()
+	const email = result.artifacts.find((artifact) => artifact.typeKey === 'studio.email')
+	if (email) await explore(email)
 }
-async function run() {
-	if (!published) return
-	const inputs = $state.snapshot(bindings)
-	if (
-		!pendingRun ||
-		pendingRun.skillArtifactId !== published ||
-		JSON.stringify(pendingRun.inputs) !== JSON.stringify(inputs)
-	)
-		pendingRun = { requestId: crypto.randomUUID(), skillArtifactId: published, inputs }
-	await studioRequest('start', pendingRun)
-	pendingRun = null
-	tab = 'activity'
-	await refreshStudio()
-}
+async function inspect(artifactId: string) { inspector = await studioRequest('inspect', { artifactId }) }
 async function connect() {
-	if (!published || !definition) return
-	const data = {
-		name: definition.name,
-		skillArtifactId: published,
-		sourceArtifactId: sourceFilter || null,
-		inputPort: watchPort,
-		fixedInputs: Object.fromEntries(
-			Object.entries(bindings).filter(([name]) => name !== watchPort)
-		),
-		enabled: true
-	}
-	if (
-		!pendingConnection ||
-		JSON.stringify({ ...pendingConnection, id: undefined }) !== JSON.stringify(data)
-	)
-		pendingConnection = { ...data, id: crypto.randomUUID() }
-	await studioRequest('connect', pendingConnection)
-	pendingConnection = null
-	showConnection = false
-	tab = 'activity'
-	await refreshStudio()
-	notice = 'Connected · new artifacts from now on'
+	if (!publishedArtifactId || !definition || !watchPort) return
+	await studioRequest('connect', {
+		id: crypto.randomUUID(), name: definition.name, skillArtifactId: publishedArtifactId,
+		sourceArtifactId: sourceFilter || null, inputPort: watchPort,
+		fixedInputs: Object.fromEntries(Object.entries(bindings).filter(([name]) => name !== watchPort)),
+		parameters: $state.snapshot(parameters), enabled: true
+	})
+	showConnection = false; tab = 'activity'; await refreshStudio(); notice = 'Connection enabled.'
 }
-async function control(c: StudioConnection) {
-	await studioRequest('control', { id: c.id, revision: c.revision, enabled: !c.enabled })
+async function control(connection: StudioConnection) {
+	await studioRequest('control', { id: connection.id, revision: connection.revision, enabled: !connection.enabled })
 	await refreshStudio()
 }
-async function controlRun(run: PlanRunRecord, action: 'retry' | 'cancel') {
-	await studioRequest('run-control', { runId: run.runId, requestId: crypto.randomUUID(), action })
-	await refreshStudio()
-}
-async function sync() {
-	await studioRequest('sync')
-	await refreshStudio()
-}
+const compatible = (artifact: StudioArtifact, port: StudioSkillPort) => artifact.typeKey === port.type.key && artifact.typeVersion === port.type.version
+const candidates = (port: StudioSkillPort) => (snapshot?.artifacts ?? []).filter((artifact) => compatible(artifact, port))
+const readableType = (key: string) => ({ 'studio.email': 'Email', 'studio.brief': 'Brief', 'studio.skill': 'Skill', 'core.file': 'File' } as Record<string, string>)[key] ?? key
+const runArtifact = (run: PlanRunRecord): StudioArtifact | null => (run.checkpoints.at(-1)?.output as { artifact?: StudioArtifact } | undefined)?.artifact ?? null
 
+$effect(() => { if (inspector && inspectorDialog && !inspectorDialog.open) inspectorDialog.showModal() })
 $effect(() => {
-	if (!snapshot?.scopeId || !snapshot.subjectId) return
-	const key = snapshot.scopeId + '/' + snapshot.subjectId
-	if (workspaceKey && workspaceKey !== key) {
-		selected = null
-		exploration = null
-		draft = null
-		definition = null
-		inspecting = null
-		bindings = {}
-		pendingSample = null
-		pendingRun = null
-		pendingConnection = null
-		tab = 'explore'
-		error = ''
-		notice = ''
-	}
+	const key = snapshot ? `${snapshot.scopeId}/${snapshot.subjectId}` : ''
+	if (!key || key === workspaceKey) return
+	if (workspaceKey) { selected = null; exploration = null; draft = null; definition = null; bindings = {}; parameters = {}; tab = 'explore' }
 	workspaceKey = key
 })
 $effect(() => {
-	if (inspecting && inspectorDialog && !inspectorDialog.open) inspectorDialog.showModal()
+	const id = studio.requestedSkillId
+	if (id) { studio.requestedSkillId = null; void act(async () => { const result = await studioRequest<{ artifact: StudioArtifact }>('inspect', { artifactId: id }); await openSkill(result.artifact) }) }
 })
 $effect(() => {
-	const request = studio.requestedArtifactId
-	if (request) {
-		studio.requestedArtifactId = null
-		void explore(request)
-	}
-})
-$effect(() => {
-	studio.refreshVersion
-	void refreshStudio().catch((e) => {
-		error = String(e)
-	})
-})
-$effect(() => {
-	const text = JSON.stringify(definition)
-	preview = null
-	comparison = null
-	if (!definition) return
+	const serialized = definition ? JSON.stringify(definition) : ''; preview = null
+	if (!serialized) return
 	let cancelled = false
-	const timer = setTimeout(() => {
-		void studioRequest<StudioPreview>('preview', { definition: JSON.parse(text) })
-			.then((p) => {
-				if (!cancelled) preview = p
-			})
-			.catch((e) => {
-				if (!cancelled) error = String(e)
-			})
-	}, 300)
-	return () => {
-		cancelled = true
-		clearTimeout(timer)
-	}
+	const timer = setTimeout(() => void studioRequest<StudioPreview>('preview', { definition: JSON.parse(serialized) }).then((value) => { if (!cancelled) preview = value }).catch((cause) => { if (!cancelled) error = String(cause) }), 220)
+	return () => { cancelled = true; clearTimeout(timer) }
 })
-onMount(() => {
-	let syncing = false
-	const timer = setInterval(async () => {
-		if (syncing || busy || document.visibilityState !== 'visible') return
-		syncing = true
-		try {
-			if (snapshot?.connections.some((c) => c.enabled)) await sync()
-			else await refreshStudio()
-		} catch (e) {
-			if (!disposed) error = String(e)
-		} finally {
-			syncing = false
-		}
-	}, 6000)
-	return () => {
-		disposed = true
-		clearInterval(timer)
-	}
-})
+$effect(() => { studio.refreshVersion; void refreshStudio().catch((cause) => { error = String(cause) }) })
+onMount(() => { const timer = setInterval(() => { if (!busy && document.visibilityState === 'visible') void refreshStudio().catch(() => {}) }, 7000); return () => clearInterval(timer) })
 </script>
 
 <section class="studio" aria-label="Skill Studio">
-	<header class="studio-head">
-		<div class="brand">
-			<span class="brand-mark" aria-hidden="true">✳</span>
-			<div>
-				<h1>Skill Studio</h1>
-				<p>Turn what you have into what you need.</p>
-			</div>
-		</div>
-		<div class="header-actions">
-			<span class="session"><i></i> Session dispatch</span
-			><button class="quiet" disabled={busy} onclick={() => act(sync)} aria-label="Refresh Studio">
-				↻
-			</button><button class="secondary" disabled={busy} onclick={() => act(sample)}>
-				＋ Sample email
-			</button>
-		</div>
+	<header class="topbar">
+		<div class="brand"><span>✳</span><div><h1>Skill Studio</h1><p>From what you have to what you need.</p></div></div>
+		<div class="top-actions"><span class="live"><i></i> Shared workspace</span><button class="secondary" onclick={() => showOperations = true}>◈ Operations</button><button class="secondary" disabled={busy} onclick={() => void act(sample)}>＋ Sample email</button><button class="icon" aria-label="Refresh" onclick={() => void act(async () => { await refreshStudio() })}>↻</button></div>
 	</header>
 	<nav class="tabs" aria-label="Studio views">
-		{#each [{ id: 'explore', label: 'Explore', icon: '◈' }, { id: 'build', label: 'Compose', icon: '⌘' }, { id: 'activity', label: 'Activity', icon: '↗' }] as item}
-			<button
-				class:active={tab === item.id}
-				aria-current={tab === item.id ? 'page' : undefined}
-				onclick={() => tab = item.id as typeof tab}
-			>
-				<span aria-hidden="true">{item.icon}</span>
-				{item.label}
-				{#if item.id === 'activity' && snapshot?.connections.length}
-					<small>{snapshot.connections.length}</small>
-				{/if}
-			</button>
-		{/each}
-		<span class="tab-hint">{busy ? 'Saving your changes…' : 'Every result keeps its history'}</span>
+		{#each [{ id: 'explore', label: 'Explore', icon: '◈' }, { id: 'compose', label: 'Compose', icon: '⌘' }, { id: 'activity', label: 'Activity', icon: '↗' }] as item}
+			<button class:active={tab === item.id} aria-current={tab === item.id ? 'page' : undefined} onclick={() => tab = item.id as typeof tab}><span>{item.icon}</span>{item.label}</button>
+		{/each}<small>{busy ? 'Working…' : 'Every result keeps its history'}</small>
 	</nav>
-	{#if error}
-		<div class="message warning" role="alert">
-			<span>{error}</span
-			><button onclick={() => act(async () => { await refreshStudio() })}>Try again</button>
-		</div>
-	{/if}
-	{#if notice}
-		<div class="message success" role="status">✓ {notice}</div>
-	{/if}
+	{#if error}<div class="banner error" role="alert"><span>! {error}</span><button onclick={() => error = ''}>Dismiss</button></div>{/if}
+	{#if notice}<div class="banner success" role="status">✓ {notice}</div>{/if}
+
 	<div class="workspace">
-		<aside class="shelf">
-			<div class="section-label">
-				Your material <span>{snapshot?.artifacts.length ?? '—'}</span>
-			</div>
-			<label class="search"
-				><span aria-hidden="true">⌕</span>
-				<input
-					bind:value={search}
-					placeholder="Find an artifact"
-					aria-label="Find an artifact"
-				></label
-			>
-			<div class="shelf-items">
-				{#each artifacts as a (a.artifactId)}
-					<button
-						class="material"
-						class:chosen={selected?.artifactId === a.artifactId}
-						onclick={() => explore(a.artifactId)}
-					>
-						<span class="material-icon" aria-hidden="true"
-							>{a.typeKey === 'studio.skill' ? '⌘' : a.typeKey === 'studio.email' ? '✉' : '▤'}</span
-						><span
-							><strong>{studioName(a)}</strong
-							><small>{readableType({ key: a.typeKey, version: a.typeVersion })}</small></span
-						><span class="chevron" aria-hidden="true">›</span>
-					</button>
-				{:else}
-					<p class="muted shelf-empty">
-						{snapshot ? 'Start with a sample email, or choose a file in Artifacts.' : 'Connecting to your workspace…'}
-					</p>
-				{/each}
-			</div>
-			<details class="lookup">
-				<summary>Find by artifact ID</summary>
-				<form onsubmit={e => { e.preventDefault(); void explore(lookupId) }}>
-					<input aria-label="Artifact ID" placeholder="Artifact ID" bind:value={lookupId}>
-					<button class="quiet">Go →</button>
-				</form>
-				<p class="muted">The shelf shows the first 128 artifacts. Any exact ID can be explored.</p>
-			</details>
-			<div class="section-label library-label">
-				Saved programs <span>{snapshot?.drafts.length ?? 0}</span>
-			</div>
-			{#each snapshot?.drafts ?? [] as d (d.id)}
-				<button
-					class="draft-link"
-					class:chosen={draft?.id === d.id && tab === 'build'}
-					onclick={() => openDraft(d)}
-				>
-					<span aria-hidden="true">{d.published_revision === d.revision ? '◇' : '◌'}</span
-					><span>{d.definition.name}</span
-					><small>{d.published_revision === d.revision ? 'Published' : 'Draft'}</small>
-				</button>
-			{/each}
+		<aside class="rail">
+			<div class="rail-title"><span>Artifacts</span><small>{snapshot?.artifacts.length ?? '—'}</small></div>
+			<label class="search"><span>⌕</span><input bind:value={search} placeholder="Find anything" aria-label="Find artifact"></label>
+			<div class="artifact-list">{#each artifacts as artifact (artifact.artifactId)}<button class:chosen={selected?.artifactId === artifact.artifactId} onclick={() => void act(() => explore(artifact))}><b>{artifact.typeKey === 'studio.email' ? '✉' : artifact.typeKey === 'studio.skill' ? '⌘' : '▤'}</b><span><strong>{studioName(artifact)}</strong><small>{readableType(artifact.typeKey)}</small></span><i>›</i></button>{:else}<p class="empty">Capture a sample email to begin.</p>{/each}</div>
+			<div class="rail-title programs"><span>Programs</span><small>{snapshot?.drafts.length ?? 0}</small></div>
+			<button class="new-skill" onclick={createBlank}>＋ New Skill</button>
+			{#each snapshot?.drafts ?? [] as item (item.id)}<button class="draft" class:chosen={draft?.id === item.id} onclick={() => openDraft(item)}><span>{item.publishedRevision === item.revision ? '◆' : '◇'}</span><b>{item.definition.name}</b><small>{item.publishedRevision === item.revision ? 'Published' : 'Draft'}</small></button>{/each}
 		</aside>
+
 		<main class="canvas">
 			{#if tab === 'explore'}
-				<div class="canvas-heading">
-					<span class="eyebrow">01 / Possibilities</span>
-					<h2>{selected ? 'What could this become?' : 'Start with something real.'}</h2>
-					<p class="muted">
-						{selected ? studioName(selected) : 'Pick an artifact, or capture a sample email to try the full path.'}
-					</p>
-				</div>
-				{#if !selected}
-					<div class="start-card">
-						<div class="orbit" aria-hidden="true">
-							<span>✉</span><b>→</b><span>▤</span><b>→</b><span>✳</span>
-						</div>
-						<h3>One email. Many possibilities.</h3>
-						<p class="muted">
-							Explore its attachment, compose a Skill, then connect it to future arrivals.
-						</p>
-						<button class="primary" disabled={busy} onclick={() => act(sample)}>
-							Try a sample email <span aria-hidden="true">↗</span>
-						</button><small>No mailbox connection or model call.</small>
-					</div>
-				{:else}
-					<div class="subject-card">
-						<span class="subject-icon" aria-hidden="true">▤</span>
-						<div>
-							<strong>{studioName(selected)}</strong>
-							<p class="muted">
-								{readableType({ key: selected.typeKey, version: selected.typeVersion })}
-								· committed artifact
-							</p>
-						</div>
-						<button class="quiet" onclick={() => act(() => inspect(selected!.artifactId))}>
-							Inspect ↗
-						</button>
-					</div>
-					<div class="opportunities">
-						{#each exploration?.opportunities ?? [] as opportunity, index}
-							<button class="opportunity" onclick={() => create(opportunity.definition)}>
-								<span class="opportunity-index">0{index + 1}</span>
-								<div>
-									<h3>{opportunity.label}</h3>
-									<div class="mini-route">
-										{#each opportunity.steps as step}
-											<span>{step.label}</span>
-										{/each}
-									</div>
-									<small class:conditional={opportunity.conditional}
-										>{opportunity.conditional ? '◐ Findings depend on the document' : '✓ Deterministic transformation'}</small
-									>
-								</div>
-								<span class="arrow" aria-hidden="true">↗</span>
-							</button>
-						{:else}
-							<div class="start-card compact">
-								<h3>No installed route yet.</h3>
-								<p class="muted">
-									This type is inspectable. More capabilities can extend what it can become.
-								</p>
-								<button class="secondary" onclick={() => act(() => inspect(selected!.artifactId))}>
-									Explore its provenance
-								</button>
-								{#if selected.typeKey === 'studio.skill'}
-									<button class="primary" onclick={() => act(async () => chooseSaved(selected!))}>
-										Open this Skill
-									</button><button
-										class="secondary"
-										onclick={() => act(async () => wrapSkill(selected!))}
-									>
-										Use as a child Skill
-									</button>
-								{/if}
-							</div>
-						{/each}
-					</div>
-					<p class="footnote">
-						Routes use the installed catalog. Previews never run steps or invent findings.
-					</p>
+				<div class="heading"><span>01 / Possibilities</span><h2>{selected ? 'What could this become?' : 'Start with something real.'}</h2><p>{selected ? studioName(selected) : 'Choose an artifact or try the sample.'}</p></div>
+				{#if !selected}<div class="hero"><div class="orbit"><span>✉</span><i>→</i><span>⌘</span><i>→</i><span>◇</span></div><h3>Small pieces. Useful programs.</h3><p>Explore an artifact, choose an outcome, and let the Studio wire the named ports.</p><button class="primary" onclick={() => void act(sample)}>Try a sample email ↗</button><small>No mailbox or model required.</small></div>
+				{:else}<div class="subject"><span>{selected.typeKey === 'studio.email' ? '✉' : '▤'}</span><div><b>{studioName(selected)}</b><small>{readableType(selected.typeKey)} · committed</small></div><button class="quiet" onclick={() => void act(() => inspect(selected!.artifactId))}>Trace ↗</button></div>
+					<div class="opportunities">{#each exploration?.opportunities ?? [] as opportunity, index}<button onclick={() => { fresh(opportunity.definition); const port = Object.keys(opportunity.definition.inputs)[0]; if (port) bindings[port] = selected!.artifactId }}><span>0{index + 1}</span><div><h3>{opportunity.label}</h3><p>{opportunity.steps.map((step) => step.label).join(' → ')}</p><small>✓ Installed and authorable</small></div><b>↗</b></button>{:else}<div class="hero compact"><h3>No direct route yet.</h3><p>A new installed Actor can extend this space without a Studio edit.</p>{#if selected.typeKey === 'studio.skill' && selected.typeVersion === 2}<button class="primary" onclick={() => void act(() => openSkill(selected!))}>Open Skill ↗</button>{/if}</div>{/each}</div>
 				{/if}
-			{:else if tab === 'build'}
-				{#if definition && draft}
-					<div class="compose-head">
-						<div>
-							<span class="eyebrow">02 / Compose</span>
-							<input
-								class="program-name"
-								aria-label="Program name"
-								bind:value={definition.name}
-								maxlength="160"
-							>
-							<p class="muted">
-								{published ? 'Published revision ' + draft.revision : 'Draft · changes are yours until saved'}
-							</p>
-						</div>
-						<button class="secondary" disabled={busy} onclick={() => act(save)}>Save draft</button>
-					</div>
-					{#if conflict}
-						<div class="message warning" role="alert">
-							Another client edited this draft. Your local edits are still here.<button
-								onclick={() => { const latest = snapshot?.drafts.find(d => d.id === draft!.id); if (latest) openDraft(latest) }}
-							>
-								Load latest
-							</button><button onclick={() => create($state.snapshot(definition!))}>
-								Keep as copy
-							</button>
-						</div>
-					{/if}
-					<div class="program-flow">
-						<div class="studio-flow-card">
-							<span class="node-icon">↓</span>
-							<div class="node-body">
-								<span class="eyebrow">Given</span>
-								{#each Object.entries(definition.inputs) as [name, type]}
-									<label class="binding"
-										><span>{name} <small>{readableType(type)}</small></span
-										><select aria-label={'Input ' + name} bind:value={bindings[name]}>
-											<option value="">Choose an artifact…</option>
-											{#each candidates(type) as a (a.artifactId)}
-												<option value={a.artifactId}>{studioName(a)}</option>
-											{/each}
-										</select></label
-									>
-								{/each}
-							</div>
-						</div>
-						{#each definition.steps as step, index (step.id)}
-							<div class="studio-flow-line" aria-hidden="true"></div>
-							<div class="studio-flow-card" class:open-goal={step.kind === 'goal'}>
-								<span class="node-icon"
-									>{step.kind === 'goal' ? '✳' : step.kind === 'skill' ? '⌘' : step.kind === 'review' ? '◐' : '◇'}</span
-								>
-								<div class="node-body">
-									<span class="eyebrow"
-										>{step.kind === 'goal' ? 'Solver fills this' : step.kind === 'skill' ? 'Reusable Skill · exact revision' : step.kind === 'review' ? 'Review · not executable yet' : 'Fixed step'}</span
-									><input
-										aria-label={'Step ' + (index + 1) + ' label'}
-										class="step-name"
-										bind:value={step.label}
-									>
-									<div class="mini-route">
-										{#each preview?.program?.steps[index]?.capabilities ?? [] as c}
-											<span>{c.label}</span>
-										{/each}
-									</div>
-									{#if step.ref === 'report.brief@1'}
-										<label class="binding"
-											>Brief title<input
-												aria-label="Brief title"
-												value={String(step.parameters.title ?? '')}
-												oninput={e => { const value = e.currentTarget.value; if (value.trim()) step.parameters.title = value; else delete step.parameters.title }}
-												placeholder="Document brief"
-											></label
-										>
-									{/if}
-									<details class="step-details">
-										<summary>Bindings & details</summary>
-										<p>
-											{Object.entries(step.inputs).map(([port, value]) => port + ' ← ' + value.kind + ':' + value.name).join(' · ')}
-										</p>
-										{#if step.kind === 'skill'}
-											<button class="quiet" onclick={() => act(() => inspect(step.ref!))}>
-												Inspect child Skill ↗
-											</button>
-										{/if}
-									</details>
-								</div>
-								{#if step.kind === 'goal'}
-									<button class="quiet" disabled={!preview?.ok} onclick={() => pin(index)}>
-										Lock route
-									</button>
-								{/if}
-								{#if index === definition.steps.length - 1 && Object.keys(step.inputs).length === 1}
-									<button
-										class="quiet"
-										aria-label={'Remove step ' + (index + 1)}
-										onclick={removeLastStep}
-									>
-										×
-									</button>
-								{/if}
-							</div>
-						{/each}
-						<div class="studio-flow-line" aria-hidden="true"></div>
-						<div class="studio-flow-card output-card">
-							<span class="node-icon">↗</span>
-							<div>
-								<span class="eyebrow">Then I have</span>
-								<h3>{readableType(definition.output.type)}</h3>
-								<p class="muted">
-									{preview?.program?.conditional ? 'A recorded result. Findings may still need review.' : 'A committed artifact, with its provenance.'}
-								</p>
-							</div>
-						</div>
-					</div>
-					<div class="extend">
-						<span class="muted">Continue with</span>
-						{#each STUDIO_CATALOG.filter(c => sameType(c.input, definition!.output.type)) as c}
-							<button class="chip" onclick={() => append(c.id, 'capability')}>＋ {c.label}</button>
-						{/each}
-						{#each reusableSkills as saved}
-							{@const child = saved.definition}
-							{#if Object.keys(child.inputs).length === 1 && sameType(Object.values(child.inputs)[0], definition.output.type)}
-								<button class="chip" onclick={() => append(saved.artifact.artifactId, 'skill')}>
-									⌘ {child.name}
-								</button>
-							{/if}
-						{/each}
-					</div>
-					<div class="policy-row">
-						<label class="toggle"
-							><input type="checkbox" bind:checked={definition.policy.allowModel}>Allow model
-							assistance</label
-						><span class="muted"
-							>{definition.policy.allowModel ? 'May use the configured model lane' : 'Deterministic inspection only'}</span
-						>
-					</div>
-					{#if preview?.ok}
-						<div class="plan-status" role="status">
-							<span>✓ Ready to publish</span
-							><small
-								>{preview.program?.invocations}
-								program calls · nesting ≤ {definition.policy.maxDepth}</small
-							>
-						</div>
-					{:else if preview}
-						<div class="message warning" role="status">
-							{preview.issues?.map(i => i.message).join(' ')}
-						</div>
-					{:else}
-						<p class="muted" role="status">Checking the plan…</p>
-					{/if}
-					<details class="what-if">
-						<summary><span>◌ What if…</span><small>Plan only · no execution</small></summary>
-						<div class="what-if-body">
-							<label
-								>Limit program calls to
-								<input type="number" min="1" max="64" bind:value={budget}></label
-							><button
-								class="secondary"
-								disabled={busy}
-								onclick={() => act(async () => { comparison = await studioRequest('compare', { baseline: $state.snapshot(definition), variants: [{ ...$state.snapshot(definition!), policy: { ...definition!.policy, maxInvocations: budget } }] }) })}
-							>
-								Compare
-							</button>
-						</div>
-						{#if comparison}
-							<div class="comparison">
-								<div>
-									<small>Current</small
-									><strong>{comparison.baseline.ok ? 'Feasible' : 'Needs changes'}</strong>
-								</div>
-								<span>→</span>
-								<div>
-									<small>{budget} calls</small
-									><strong>{comparison.variants[0]?.ok ? 'Feasible' : 'Over budget'}</strong>
-								</div>
-							</div>
-						{/if}
-					</details>
-					<details
-						class="advanced"
-						ontoggle={e => { if (e.currentTarget.open) raw = JSON.stringify($state.snapshot(definition), null, 2) }}
-					>
-						<summary>Full program · editable by you and the agent</summary>
-						<textarea aria-label="Full program JSON" bind:value={raw} spellcheck="false"></textarea
-						><button
-							class="secondary"
-							onclick={() => { try { definition = parseStudioDefinition(JSON.parse(raw)); error = '' } catch (e) { error = String(e) } }}
-						>
-							Apply to draft
-						</button>
-					</details>
-					<div class="compose-actions">
-						<button
-							class="secondary"
-							disabled={busy || !published}
-							onclick={() => { watchPort = portNames[0]; showConnection = !showConnection }}
-						>
-							Connect to arrivals
-						</button><span></span
-						><button
-							class="secondary"
-							disabled={busy || !preview?.ok || conflict}
-							onclick={() => act(publish)}
-						>
-							{published ? 'Publish new revision' : 'Publish Skill'}
-						</button><button
-							class="primary"
-							disabled={busy || !published || portNames.some(p => !bindings[p])}
-							onclick={() => act(run)}
-						>
-							Run Skill ↗
-						</button>
-					</div>
-					{#if !published}
-						<p class="footnote">Publish a revision to run it or connect it to arrivals.</p>
-					{/if}
-					{#if showConnection}
-						<div class="connection-editor">
-							<h3>When a new artifact arrives…</h3>
-							<label
-								>Feed input<select aria-label="Trigger input" bind:value={watchPort}>
-									{#each portNames as port}
-										<option value={port}>{port}</option>
-									{/each}
-								</select></label
-							><label
-								>From<select aria-label="Source filter" bind:value={sourceFilter}>
-									<option value="">Any committed artifact</option>
-									{#each snapshot?.sources ?? [] as s}
-										<option value={s.artifactId}>{studioName(s)}</option>
-									{/each}
-								</select></label
-							>
-							<p class="muted">
-								Starts with future arrivals. Other inputs stay fixed. Dispatch advances while Studio
-								is open or the agent syncs it.
-							</p>
-							<button
-								class="primary"
-								disabled={busy || portNames.some(p => p !== watchPort && !bindings[p])}
-								onclick={() => act(connect)}
-							>
-								Enable connection ↗
-							</button>
-						</div>
-					{/if}
-				{:else}
-					<div class="start-card">
-						<div class="empty-symbol" aria-hidden="true">⌘</div>
-						<h2>Small steps. Useful programs.</h2>
-						<p class="muted">
-							Start from an artifact and choose an outcome. The solver will find a route you can
-							shape.
-						</p>
-						<button class="primary" onclick={() => tab = 'explore'}>Explore possibilities ↗</button>
-					</div>
-				{/if}
+			{:else if tab === 'compose'}
+				{#if definition}
+					<div class="compose-head"><div><span>02 / Composition</span><input class="title-input" aria-label="Skill name" value={definition.name} onblur={(event) => rename(event.currentTarget.value)}></div><div class="status" class:ready={preview?.ok}>{preview?.ok ? '✓ Ready to publish' : preview ? '◌ Needs attention' : '◌ Checking'}</div></div>
+					<div class="flow"><div class="boundary"><span>Inputs</span>{#each Object.entries(definition.inputs) as [name, port]}<div><b>IN</b><strong>{name}</strong><small>{readableType(port.type.key)} · {port.cardinality}</small></div>{/each}</div><div class="line"></div><div class="steps">{#each definition.steps as step, index (step.id)}<article><span class="number">{String(index + 1).padStart(2, '0')}</span><span class="kind">{step.kind === 'invoke' ? '◇' : step.kind === 'skill' ? '⌘' : step.kind === 'review' ? '✓' : '◈'}</span><div><input aria-label="Step label" value={step.label} onblur={(event) => labelStep(step.id, event.currentTarget.value)}><small>{step.kind === 'invoke' ? step.capabilityId.split(':').at(-1) : step.kind === 'skill' ? 'Exact nested Skill' : step.kind}</small></div></article>{:else}<button class="drop" onclick={() => showOperations = true}><b>＋</b><span>Add an operation</span><small>Ports connect themselves</small></button>{/each}</div><div class="line"></div><div class="boundary outputs"><span>Outputs</span>{#each Object.entries(definition.outputs) as [name, port]}<div><b>OUT</b><strong>{name}</strong><small>{readableType(port.type.key)}</small></div>{/each}</div></div>
+					<div class="tool-row"><button onclick={() => showOperations = true}>＋ Operation</button><button title="Draft and inspect now; runtime support is not installed yet." onclick={addGoal}>◈ Open goal · draft</button><button title="Draft and inspect now; runtime support is not installed yet." onclick={addReview}>✓ Review · draft</button><span></span><button class:on={definition.policy.allowModel} onclick={() => definition!.policy.allowModel = !definition!.policy.allowModel}>✦ Model {definition.policy.allowModel ? 'allowed' : 'off'}</button></div>
+					{#if savedSkills.length}<section class="reuse"><header><div><b>Reusable Skills</b><p>Exact immutable children, available everywhere.</p></div></header><div>{#each savedSkills as saved}<button disabled={saved.artifact.artifactId === publishedArtifactId} onclick={() => addChild(saved.artifact, saved.definition)}><span>⌘</span><div><b>{saved.definition.name}</b><small>{saved.definition.steps.length} steps · v2</small></div><i>＋</i></button>{/each}</div></section>{/if}
+					<div class="run-form"><header><div><b>Run settings</b><p>Only choices required by this Skill appear here.</p></div><small>{publishedArtifactId ? 'Published revision' : 'Publish first'}</small></header><div class="fields">
+						{#each Object.entries(definition.inputs) as [name, port]}<label><span>{name}<small>{readableType(port.type.key)}</small></span><select aria-label={`Input ${name}`} value={bindings[name] ?? ''} onchange={(event) => bindings[name] = event.currentTarget.value}><option value="">Choose an artifact…</option>{#each candidates(port) as candidate}<option value={candidate.artifactId}>{studioName(candidate)}</option>{/each}</select></label>{/each}
+						{#each Object.entries(parameterSchemas) as [name, schema]}<label><span>{name}<small>{requiredParameters.includes(name) ? 'Required' : 'Optional'}</small></span>{#if Array.isArray(schema.enum)}<select aria-label={`Setting ${name}`} onchange={(event) => parameters[name] = event.currentTarget.value}><option value="">Choose…</option>{#each schema.enum as choice}<option value={String(choice)}>{String(choice)}</option>{/each}</select>{:else if schema.type === 'boolean'}<input type="checkbox" aria-label={`Setting ${name}`} onchange={(event) => parameters[name] = event.currentTarget.checked}>{:else}<input aria-label={`Setting ${name}`} type={schema.type === 'integer' || schema.type === 'number' ? 'number' : 'text'} maxlength={Number(schema.maxLength ?? 1024)} oninput={(event) => parameters[name] = schema.type === 'integer' || schema.type === 'number' ? Number(event.currentTarget.value) : event.currentTarget.value}>{/if}</label>{/each}
+					</div></div>
+					{#if preview && !preview.ok}<div class="issues" role="status">{#each preview.issues as issue}<p><b>◌</b><span>{issue.message}</span></p>{/each}</div>{/if}
+					<details class="advanced" ontoggle={(event) => { if (event.currentTarget.open) raw = JSON.stringify($state.snapshot(definition), null, 2) }}><summary>Inspect full definition <small>Agent-readable · closed v2 contract</small></summary><textarea bind:value={raw} aria-label="Skill definition JSON"></textarea><button onclick={() => { try { definition = parseStudioSkillV2(JSON.parse(raw)); error = '' } catch (cause) { error = String(cause) } }}>Apply inspected definition</button></details>
+					<div class="actions"><button class="quiet" disabled={!publishedArtifactId} onclick={() => { watchPort = inputNames[0] ?? ''; showConnection = !showConnection }}>Connect arrivals</button><span></span><button class="secondary" disabled={!preview?.ok || conflict} onclick={() => void act(async () => { await publishSkill() })}>{publishedArtifactId ? 'Publish new revision' : 'Publish Skill'}</button><button class="primary" disabled={!publishedArtifactId || inputNames.some((name) => !bindings[name]) || !parameterReady()} onclick={() => void act(run)}>Run Skill ↗</button></div>
+					{#if showConnection}<div class="connection-editor"><h3>When a matching artifact arrives…</h3><label>Feed into<select bind:value={watchPort}>{#each inputNames as name}<option value={name}>{name}</option>{/each}</select></label><label>From<select bind:value={sourceFilter}><option value="">Any source</option>{#each snapshot?.sources ?? [] as source}<option value={source.artifactId}>{studioName(source)}</option>{/each}</select></label><p>Future artifacts only. The exact Skill and causal source are retained.</p><button class="primary" onclick={() => void act(connect)}>Enable connection ↗</button></div>{/if}
+				{:else}<div class="hero"><div class="symbol">⌘</div><h3>Compose without a blank page.</h3><p>Pick an artifact or start with an operation.</p><button class="primary" onclick={createBlank}>New Skill ↗</button></div>{/if}
 			{:else}
-				<div class="canvas-heading">
-					<span class="eyebrow">03 / In motion</span>
-					<h2>Connected work.</h2>
-					<p class="muted">Durable rules. Visible results. Dispatch uses your active session.</p>
-				</div>
-				<div class="section-label">
-					Connections <span>{snapshot?.connections.length ?? 0}</span>
-				</div>
-				{#each snapshot?.connections ?? [] as c (c.id)}
-					<div class="connection">
-						<span class="connection-dot" class:paused={!c.enabled}></span>
-						<div>
-							<h3>{c.record.name}</h3>
-							<p class="muted">
-								{readableType(c.record.inputType)}
-								→ Skill · {c.enabled ? 'Watching in this session' : 'Paused · cursor retained'}
-							</p>
-							{#if c.last_error}
-								<p class="error-text">{c.last_error}</p>
-							{/if}
-						</div>
-						<button class="quiet" onclick={() => act(() => inspect(c.record.skillArtifactId))}>
-							Inspect
-						</button><button
-							class="secondary"
-							disabled={busy}
-							onclick={() => act(() => control(c))}
-						>
-							{c.enabled ? 'Pause' : 'Resume'}
-						</button>
-					</div>
-				{:else}
-					<div class="empty-row">
-						<span aria-hidden="true">⤳</span>
-						<p>Publish a Skill, then connect it to incoming artifacts.</p>
-						<button class="quiet" onclick={() => tab = 'build'}>Compose →</button>
-					</div>
-				{/each}
-				{#if snapshot?.deliveries.length}
-					<p class="message warning">
-						{snapshot.deliveries.length}
-						queued arrivals.{snapshot.deliveries.find(d => d.last_error)?.last_error ?? ' Dispatch resumes while your session is active.'}
-					</p>
-				{/if}
-				<div class="section-label activity-label">
-					Recent runs <span>{snapshot?.runs.length ?? 0}</span>
-				</div>
-				{#each snapshot?.runs ?? [] as r (r.runId)}
-					{@const output = runArtifact(r)}
-					<article class="run-card">
-						<div class="run-top">
-							<span class="run-state" class:failed={r.state === 'failed'}
-								>{r.state === 'succeeded' ? '✓' : r.state === 'failed' ? '!' : '◌'}
-								{r.state.replaceAll('_', ' ')}</span
-							><small>{new Date(r.createdAt).toLocaleString()}</small>
-						</div>
-						<h3>{output ? studioName(output) : 'Skill run'}</h3>
-						{#if output}
-							<p>{String(output.payload.summary ?? 'Result committed.')}</p>
-							<div class="result-actions">
-								<span class="result-status"
-									>{output.payload.status === 'partial' ? '◐ Review findings' : '◇ Provenance preserved'}</span
-								><button class="quiet" onclick={() => act(() => inspect(output.artifactId))}>
-									Trace result ↗
-								</button><button class="secondary" onclick={() => explore(output.artifactId)}>
-									Explore next →
-								</button>
-							</div>
-						{:else}
-							<p class="muted">
-								{r.state === 'failed' ? String(r.failure?.message ?? 'The run stopped. Inspect the details before retrying.') : 'The accepted run is processing on the server.'}
-							</p>
-						{/if}
-						{#if r.state === 'failed'}
-							<button
-								class="secondary"
-								disabled={busy}
-								onclick={() => act(() => controlRun(r, 'retry'))}
-							>
-								Retry same run ↻
-							</button>
-						{:else if ['accepted', 'planning', 'running', 'waiting_for_input'].includes(r.state)}
-							<button
-								class="quiet"
-								disabled={busy}
-								onclick={() => act(() => controlRun(r, 'cancel'))}
-							>
-								Stop run
-							</button>
-						{/if}
-						<details>
-							<summary>Run details</summary>
-							<pre>{JSON.stringify(r, null, 2)}</pre>
-						</details>
-					</article>
-				{:else}
-					<div class="empty-row">
-						<span aria-hidden="true">↗</span>
-						<p>Your first result starts with a published Skill.</p>
-					</div>
-				{/each}
+				<div class="heading"><span>03 / In motion</span><h2>Connected work.</h2><p>Durable rules, visible outputs, complete provenance.</p></div>
+				<section class="activity"><h3>Connections <small>{snapshot?.connections.length ?? 0}</small></h3>{#each snapshot?.connections ?? [] as connection (connection.id)}<article><i class:paused={!connection.enabled}></i><div><b>{connection.record.name}</b><p>{connection.enabled ? 'Watching' : 'Paused'} · exact Skill</p></div><button onclick={() => void act(() => control(connection))}>{connection.enabled ? 'Pause' : 'Resume'}</button></article>{:else}<p class="empty">Publish a Skill, then connect it to arrivals.</p>{/each}</section>
+				<section class="activity"><h3>Recent runs <small>{snapshot?.runs.length ?? 0}</small></h3>{#each snapshot?.runs ?? [] as run (run.runId)}{@const output = runArtifact(run)}<article><span class="run-state" class:failed={run.state === 'failed'}>{run.state === 'succeeded' ? '✓' : run.state === 'failed' ? '!' : '◌'}</span><div><b>{output ? studioName(output) : 'Skill run'}</b><p>{output ? String(output.payload.summary ?? 'Result committed.') : run.state.replaceAll('_', ' ')}</p></div>{#if output}<button onclick={() => void act(() => inspect(output.artifactId))}>Trace ↗</button>{/if}</article>{:else}<p class="empty">Your first productive run will appear here.</p>{/each}</section>
 			{/if}
 		</main>
 	</div>
-	{#if inspecting}
-		<dialog
-			class="inspector"
-			bind:this={inspectorDialog}
-			aria-label="Artifact inspector"
-			onclose={() => inspecting = null}
-		>
-			<header>
-				<div>
-					<span class="eyebrow">Evidence, not a black box</span>
-					<h2>Artifact & provenance</h2>
-				</div>
-				<button class="quiet" aria-label="Close inspector" onclick={() => inspecting = null}>
-					✕
-				</button>
-			</header>
-			<p class="muted">Immutable content and the exact inputs that produced it.</p>
-			{#if siblings.length > 1}
-				<div class="provenance-links" aria-label="Same publication">
-					{#each siblings as sibling}
-						<button class="chip" onclick={() => act(() => inspect(sibling.artifactId))}>
-							{sibling.localKey}
-							↗
-						</button>
-					{/each}
-				</div>
-			{/if}
-			{#if Array.isArray(inspecting.inputs)}
-				<div class="provenance-links">
-					{#each inspecting.inputs as input}
-						{#if typeof input.artifactId === 'string'}
-							<button class="chip" onclick={() => act(() => inspect(input.artifactId))}>
-								{input.role ?? 'Input'}
-								↗
-							</button>
-						{/if}
-					{/each}
-				</div>
-			{/if}
-			<pre>{JSON.stringify(inspecting, null, 2)}</pre>
-			<button
-				class="secondary"
-				onclick={() => { const a = inspecting?.artifact as StudioArtifact | undefined; if (a) { inspecting = null; void explore(a.artifactId) } }}
-			>
-				Explore this artifact →
-			</button>
-		</dialog>
-	{/if}
+
+	{#if inspector}<dialog bind:this={inspectorDialog} class="inspector" aria-label="Artifact provenance" onclose={() => inspector = null}><header><div><span>Evidence, not a black box</span><h2>Artifact & provenance</h2></div><button onclick={() => inspector = null}>✕</button></header><p>Immutable content and the exact inputs that produced it.</p>{#if Array.isArray(inspector.inputs)}<div class="links">{#each inspector.inputs as input}{#if typeof input.artifactId === 'string'}<button onclick={() => void act(() => inspect(input.artifactId))}>{input.role ?? 'Input'} ↗</button>{/if}{/each}</div>{/if}<pre>{JSON.stringify(inspector, null, 2)}</pre></dialog>{/if}
+	<StudioOperations bind:open={showOperations} contextKey={snapshot ? `${snapshot.scopeId}/${snapshot.subjectId}` : ''} onchoose={(entry) => void act(() => addOperation(entry))}/>
 </section>
 
 <style>
-.studio {
-	--ink: var(--color-foreground, #243b34);
-	--muted: color-mix(in srgb, var(--ink) 57%, transparent);
-	--line: color-mix(in srgb, var(--ink) 12%, transparent);
-	--paper: var(--color-surface-raised, #fffdf8);
-	--green: var(--color-primary, #326552);
-	display: flex;
-	flex: 1;
-	min-height: 0;
-	min-width: 0;
-	flex-direction: column;
-	color: var(--ink);
-	background: var(--paper);
-	border: 1px solid var(--line);
-	border-radius: 20px;
-	overflow: hidden;
-	font-size: 13px;
-}
-.studio :global(button),
-.studio input,
-.studio select,
-.studio textarea {
-	font: inherit;
-}
-.studio button {
-	cursor: pointer;
-	transition:
-		background 0.15s,
-		transform 0.15s;
-}
-.studio button:disabled {
-	opacity: 0.4;
-	cursor: not-allowed;
-}
-.studio button:focus-visible,
-.studio input:focus-visible,
-.studio select:focus-visible,
-.studio summary:focus-visible,
-.studio textarea:focus-visible {
-	outline: 2px solid var(--green);
-	outline-offset: 3px;
-}
-.studio h1,
-.studio h2,
-.studio h3,
-.studio p {
-	margin: 0;
-}
-.studio h1 {
-	font-size: 19px;
-	letter-spacing: -0.6px;
-	font-weight: 650;
-}
-.studio h2 {
-	font-size: 28px;
-	font-weight: 550;
-	letter-spacing: -1px;
-	line-height: 1.2;
-}
-.studio h3 {
-	font-size: 15px;
-	font-weight: 600;
-}
-.studio small {
-	font-size: 11px;
-}
-.muted {
-	color: var(--muted);
-	line-height: 1.6;
-}
-.studio-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 16px;
-	padding: 24px 28px 20px;
-}
-.brand {
-	display: flex;
-	align-items: center;
-	gap: 13px;
-}
-.brand p {
-	color: var(--muted);
-	font-size: 12px;
-	margin-top: 3px;
-}
-.brand-mark {
-	display: grid;
-	place-items: center;
-	width: 42px;
-	height: 42px;
-	border-radius: 13px;
-	background: var(--green);
-	color: var(--paper);
-	font-size: 30px;
-}
-.header-actions {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-}
-.session {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	color: var(--muted);
-	font-size: 11px;
-}
-.session i,
-.connection-dot {
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background: #5d8e75;
-}
-.tabs {
-	display: flex;
-	align-items: center;
-	gap: 5px;
-	padding: 0 28px 14px;
-	border-bottom: 1px solid var(--line);
-}
-.tabs button {
-	display: flex;
-	gap: 8px;
-	align-items: center;
-	padding: 8px 15px;
-	border: 0;
-	background: transparent;
-	border-radius: 9px;
-	color: var(--muted);
-}
-.tabs button.active {
-	color: var(--ink);
-	background: color-mix(in srgb, var(--green) 11%, transparent);
-}
-.tabs small {
-	padding: 0 5px;
-	background: var(--paper);
-	border-radius: 5px;
-}
-.tab-hint {
-	margin-left: auto;
-	font-size: 11px;
-	color: var(--muted);
-}
-.workspace {
-	display: flex;
-	flex: 1;
-	min-height: 0;
-}
-.shelf {
-	width: 242px;
-	flex-shrink: 0;
-	border-right: 1px solid var(--line);
-	padding: 22px 14px;
-	overflow-y: auto;
-	background: color-mix(in srgb, var(--green) 2%, var(--paper));
-}
-.section-label {
-	display: flex;
-	justify-content: space-between;
-	text-transform: uppercase;
-	letter-spacing: 1.4px;
-	font-size: 10px;
-	font-weight: 600;
-	color: var(--muted);
-	padding: 0 8px 13px;
-}
-.section-label span {
-	letter-spacing: 0;
-}
-.search {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	border: 1px solid var(--line);
-	border-radius: 9px;
-	padding: 8px 11px;
-	margin: 0 0 14px;
-}
-.search input {
-	min-width: 0;
-	width: 100%;
-	background: none;
-	border: 0;
-	outline: none;
-	color: var(--ink);
-	font-size: 12px;
-}
-.search span {
-	font-size: 20px;
-	color: var(--muted);
-}
-.material {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	text-align: left;
-	width: 100%;
-	padding: 11px 9px;
-	margin-bottom: 3px;
-	border: 1px solid transparent;
-	border-radius: 10px;
-	background: transparent;
-	color: var(--ink);
-}
-.material:hover,
-.draft-link:hover {
-	background: color-mix(in srgb, var(--green) 5%, transparent);
-}
-.material.chosen,
-.draft-link.chosen {
-	border-color: color-mix(in srgb, var(--green) 20%, transparent);
-	background: color-mix(in srgb, var(--green) 8%, transparent);
-}
-.material-icon {
-	font-size: 19px;
-	color: var(--muted);
-}
-.material > span:nth-child(2) {
-	min-width: 0;
-	flex: 1;
-}
-.material strong {
-	display: block;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-size: 12px;
-	font-weight: 550;
-}
-.material small {
-	display: block;
-	color: var(--muted);
-	margin-top: 3px;
-}
-.chevron {
-	color: var(--muted);
-}
-.shelf-empty {
-	padding: 10px;
-	font-size: 12px;
-}
-.library-label {
-	margin-top: 26px;
-}
-.draft-link {
-	display: flex;
-	align-items: center;
-	gap: 9px;
-	padding: 10px 9px;
-	border: 1px solid transparent;
-	background: transparent;
-	border-radius: 9px;
-	width: 100%;
-	text-align: left;
-	color: var(--ink);
-}
-.draft-link span:nth-child(2) {
-	flex: 1;
-	font-size: 12px;
-}
-.draft-link small {
-	font-size: 9px;
-	color: var(--muted);
-}
-.lookup {
-	margin: 15px 8px;
-	font-size: 11px;
-	color: var(--muted);
-}
-.lookup form {
-	display: flex;
-	gap: 4px;
-	margin-top: 10px;
-}
-.lookup input {
-	width: 120px;
-}
-.lookup p {
-	margin-top: 8px;
-}
-.canvas {
-	flex: 1;
-	min-width: 0;
-	overflow: auto;
-	padding: 30px clamp(20px, 4vw, 58px) 45px;
-}
-.canvas-heading {
-	margin-bottom: 30px;
-}
-.eyebrow {
-	display: block;
-	color: var(--muted);
-	font-size: 10px;
-	text-transform: uppercase;
-	letter-spacing: 1.6px;
-	margin-bottom: 8px;
-}
-.canvas-heading p {
-	margin-top: 8px;
-}
-.primary,
-.secondary,
-.quiet,
-.chip {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 9px;
-	padding: 9px 14px;
-	border-radius: 9px;
-	white-space: nowrap;
-	font-size: 12px !important;
-}
-.primary {
-	background: var(--green);
-	color: var(--color-primary-foreground, #fff);
-	border: 1px solid var(--green);
-}
-.primary:hover {
-	filter: brightness(1.08);
-}
-.secondary {
-	border: 1px solid var(--line);
-	background: var(--paper);
-	color: var(--ink);
-}
-.secondary:hover,
-.quiet:hover,
-.chip:hover {
-	background: color-mix(in srgb, var(--green) 7%, transparent);
-}
-.quiet {
-	border: 0;
-	color: var(--muted);
-	background: transparent;
-	padding: 7px 9px;
-}
-.chip {
-	border: 1px solid var(--line);
-	border-radius: 20px;
-	background: transparent;
-	color: var(--ink);
-	font-size: 11px !important;
-	padding: 6px 11px;
-}
-.start-card {
-	text-align: center;
-	border: 1px dashed color-mix(in srgb, var(--green) 25%, transparent);
-	border-radius: 18px;
-	background: color-mix(in srgb, var(--green) 3%, transparent);
-	padding: 50px 24px;
-	margin-top: 15px;
-}
-.start-card p {
-	max-width: 350px;
-	margin: 12px auto 23px;
-}
-.start-card > small {
-	display: block;
-	margin-top: 13px;
-	color: var(--muted);
-}
-.start-card.compact {
-	padding: 32px 24px;
-}
-.orbit {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 18px;
-	margin: 5px 0 28px;
-}
-.orbit span {
-	width: 62px;
-	height: 62px;
-	border: 1px solid var(--line);
-	background: var(--paper);
-	border-radius: 17px;
-	display: grid;
-	place-items: center;
-	font-size: 30px;
-	color: var(--green);
-	box-shadow: 0 6px 18px #233b3307;
-}
-.orbit b {
-	font-weight: 400;
-	color: var(--muted);
-}
-.subject-card {
-	display: flex;
-	align-items: center;
-	gap: 14px;
-	padding: 17px;
-	border: 1px solid var(--line);
-	border-radius: 12px;
-}
-.subject-card > div {
-	flex: 1;
-	min-width: 0;
-	overflow-wrap: anywhere;
-}
-.subject-icon {
-	font-size: 27px;
-	color: var(--green);
-}
-.subject-card p {
-	font-size: 11px;
-	margin-top: 4px;
-}
-.opportunities {
-	display: grid;
-	gap: 13px;
-	margin-top: 24px;
-}
-.opportunity {
-	display: flex;
-	text-align: left;
-	align-items: flex-start;
-	gap: 20px;
-	padding: 23px;
-	border: 1px solid var(--line);
-	border-radius: 13px;
-	background: var(--paper);
-	color: var(--ink);
-}
-.opportunity:hover {
-	border-color: color-mix(in srgb, var(--green) 45%, transparent);
-	transform: translateY(-1px);
-	box-shadow: 0 6px 22px #143d2907;
-}
-.opportunity-index {
-	color: var(--muted);
-	font-size: 11px;
-	margin-top: 3px;
-}
-.opportunity > div {
-	flex: 1;
-}
-.opportunity h3 {
-	font-size: 18px;
-	margin-bottom: 10px;
-}
-.mini-route {
-	display: flex;
-	gap: 6px;
-	flex-wrap: wrap;
-	margin: 6px 0 12px;
-}
-.mini-route span {
-	font-size: 10px;
-	border: 1px solid var(--line);
-	padding: 4px 8px;
-	border-radius: 5px;
-	color: var(--muted);
-}
-.mini-route span + span:before {
-	content: "→";
-	margin-right: 7px;
-}
-.opportunity small {
-	color: var(--green);
-}
-.opportunity small.conditional {
-	color: #977244;
-}
-.arrow {
-	font-size: 21px;
-	color: var(--green);
-}
-.footnote {
-	color: var(--muted);
-	font-size: 11px;
-	margin-top: 20px !important;
-	line-height: 1.6;
-}
-.compose-head {
-	display: flex;
-	align-items: center;
-	gap: 15px;
-	margin-bottom: 28px;
-}
-.compose-head > div {
-	flex: 1;
-	min-width: 0;
-}
-.program-name {
-	font-size: 26px !important;
-	letter-spacing: -0.8px;
-	background: none;
-	border: 0;
-	width: 100%;
-	padding: 0;
-	color: var(--ink);
-	margin-bottom: 5px;
-}
-.program-flow {
-	max-width: 740px;
-	margin: auto;
-}
-.studio-flow-card {
-	display: flex;
-	align-items: flex-start;
-	gap: 15px;
-	border: 1px solid var(--line);
-	background: var(--paper);
-	border-radius: 13px;
-	padding: 18px 20px;
-}
-.studio-flow-card.open-goal {
-	border: 1px dashed color-mix(in srgb, var(--green) 50%, transparent);
-	background: color-mix(in srgb, var(--green) 3%, transparent);
-}
-.node-icon {
-	display: grid;
-	place-items: center;
-	flex-shrink: 0;
-	width: 31px;
-	height: 31px;
-	background: color-mix(in srgb, var(--green) 8%, transparent);
-	color: var(--green);
-	border-radius: 9px;
-	font-size: 21px;
-	margin-top: 3px;
-}
-.node-body {
-	flex: 1;
-	min-width: 0;
-}
-.binding {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	margin-top: 7px;
-}
-.binding small {
-	margin-left: 6px;
-	color: var(--muted);
-}
-.studio select,
-.studio textarea,
-.binding input,
-.lookup input,
-.what-if input {
-	border: 1px solid var(--line);
-	background: var(--paper);
-	border-radius: 7px;
-	padding: 8px 10px;
-	color: var(--ink);
-	max-width: 100%;
-	min-width: 0;
-}
-.binding select {
-	width: 100%;
-}
-.step-name {
-	border: 0;
-	background: none;
-	font-weight: 600 !important;
-	font-size: 15px !important;
-	color: var(--ink);
-	padding: 0;
-	width: 100%;
-}
-.studio-flow-line {
-	height: 22px;
-	width: 1px;
-	background: var(--line);
-	margin-left: 35px;
-}
-.output-card {
-	background: color-mix(in srgb, var(--green) 7%, transparent);
-}
-.output-card p {
-	font-size: 11px;
-	margin-top: 5px;
-}
-.step-details {
-	color: var(--muted);
-	font-size: 11px;
-}
-.step-details p {
-	margin-top: 8px;
-	overflow-wrap: anywhere;
-}
-.extend {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	flex-wrap: wrap;
-	margin: 18px 0 24px;
-	font-size: 11px;
-}
-.policy-row {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	gap: 10px;
-	padding: 18px 0;
-	border-top: 1px solid var(--line);
-	font-size: 11px;
-}
-.toggle {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-.toggle input {
-	accent-color: var(--green);
-	width: 15px;
-	height: 15px;
-}
-.plan-status {
-	display: flex;
-	justify-content: space-between;
-	gap: 10px;
-	padding: 13px 15px;
-	border-radius: 9px;
-	background: color-mix(in srgb, var(--green) 7%, transparent);
-	color: var(--green);
-	font-size: 12px;
-}
-.plan-status small {
-	color: var(--muted);
-}
-.studio summary {
-	cursor: pointer;
-}
-.what-if {
-	margin-top: 17px;
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	padding: 14px;
-}
-.what-if > summary {
-	display: flex;
-	justify-content: space-between;
-}
-.what-if small {
-	color: var(--muted);
-}
-.what-if-body {
-	display: flex;
-	gap: 15px;
-	align-items: center;
-	margin-top: 17px;
-	flex-wrap: wrap;
-}
-.what-if input {
-	width: 60px;
-	margin-left: 8px;
-}
-.comparison {
-	display: flex;
-	align-items: center;
-	gap: 30px;
-	margin-top: 17px;
-	padding-top: 15px;
-	border-top: 1px solid var(--line);
-}
-.comparison strong,
-.comparison small {
-	display: block;
-}
-.comparison strong {
-	margin-top: 4px;
-}
-.advanced {
-	margin-top: 18px;
-	font-size: 11px;
-	color: var(--muted);
-}
-.advanced textarea {
-	font-family: monospace !important;
-	width: 100%;
-	min-height: 250px;
-	margin: 12px 0;
-	font-size: 11px !important;
-	resize: vertical;
-}
-.compose-actions {
-	position: sticky;
-	bottom: 0;
-	z-index: 2;
-	padding: 14px 0;
-	background: var(--paper);
-	border-top: 1px solid var(--line);
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	margin-top: 25px;
-	flex-wrap: wrap;
-}
-.compose-actions > span {
-	flex: 1;
-}
-.message {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 12px 20px;
-	font-size: 12px;
-	overflow-wrap: anywhere;
-}
-.message button {
-	background: transparent;
-	border: 1px solid currentColor;
-	border-radius: 6px;
-	padding: 4px 8px;
-	white-space: nowrap;
-	color: inherit;
-}
-.warning {
-	background: #bd8a1410;
-	color: #98712b;
-}
-.success {
-	background: #338a6410;
-	color: var(--green);
-}
-.canvas .message {
-	border-radius: 9px;
-	margin: 12px 0;
-}
-.connection-editor {
-	display: grid;
-	gap: 15px;
-	padding: 24px;
-	border: 1px solid var(--line);
-	border-radius: 13px;
-	margin-top: 18px;
-}
-.connection-editor label {
-	display: grid;
-	grid-template-columns: 90px 1fr;
-	align-items: center;
-	gap: 12px;
-}
-.connection-editor p {
-	font-size: 12px;
-}
-.connection-editor button {
-	justify-self: end;
-}
-.empty-symbol {
-	font-size: 50px;
-	color: var(--green);
-	margin-bottom: 20px;
-}
-.connection {
-	display: flex;
-	align-items: center;
-	gap: 13px;
-	padding: 20px 12px;
-	border-bottom: 1px solid var(--line);
-}
-.connection > div {
-	flex: 1;
-}
-.connection-dot {
-	width: 8px;
-	height: 8px;
-	flex-shrink: 0;
-}
-.connection-dot.paused {
-	background: var(--muted);
-}
-.connection p {
-	font-size: 11px;
-	margin-top: 5px;
-}
-.error-text {
-	color: #9c5f3a;
-}
-.empty-row {
-	display: flex;
-	align-items: center;
-	gap: 16px;
-	padding: 22px 10px;
-	color: var(--muted);
-	font-size: 12px;
-	border-top: 1px solid var(--line);
-}
-.empty-row > span {
-	font-size: 27px;
-}
-.empty-row p {
-	flex: 1;
-	line-height: 1.7;
-}
-.activity-label {
-	margin-top: 35px;
-}
-.run-card {
-	border: 1px solid var(--line);
-	padding: 20px;
-	border-radius: 13px;
-	margin-bottom: 14px;
-}
-.run-top {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 14px;
-}
-.run-top small {
-	color: var(--muted);
-}
-.run-state {
-	font-size: 11px;
-	color: var(--green);
-	text-transform: capitalize;
-}
-.run-state.failed {
-	color: #9c5f3a;
-}
-.run-card > p {
-	line-height: 1.7;
-	margin: 10px 0;
-	font-size: 12px;
-}
-.result-actions {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	flex-wrap: wrap;
-	margin-top: 15px;
-}
-.result-status {
-	flex: 1;
-	color: var(--muted);
-	font-size: 10px;
-}
-.run-card details {
-	font-size: 11px;
-	color: var(--muted);
-	margin-top: 13px;
-}
-.studio pre {
-	font: 11px / 1.6 monospace;
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-	max-height: 550px;
-	overflow: auto;
-	background: color-mix(in srgb, var(--green) 4%, transparent);
-	padding: 15px;
-	border-radius: 9px;
-	margin: 12px 0;
-}
-.inspector::backdrop {
-	background: #13281e35;
-	backdrop-filter: blur(3px);
-}
-.inspector {
-	margin: 0 0 0 auto;
-	height: 100dvh;
-	max-height: 100dvh;
-	max-width: 100vw;
-	border: 0;
-	color: var(--ink);
-	background: var(--paper);
-	width: min(620px, 100%);
-	padding: 30px;
-	overflow: auto;
-	box-shadow: -8px 0 40px #13281e12;
-}
-.inspector header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 15px;
-}
-.inspector h2 {
-	font-size: 22px;
-}
-.provenance-links {
-	display: flex;
-	gap: 8px;
-	flex-wrap: wrap;
-	margin-top: 15px;
-}
-@media (max-width: 1000px) {
-	.shelf {
-		width: 205px;
-	}
-	.studio-head {
-		padding: 20px;
-	}
-	.tabs {
-		padding-left: 20px;
-		padding-right: 20px;
-	}
-	.tab-hint,
-	.session {
-		display: none;
-	}
-	.canvas {
-		padding: 25px 22px;
-	}
-	.policy-row {
-		align-items: flex-start;
-		flex-direction: column;
-	}
-	.compose-actions {
-		gap: 8px;
-	}
-	.compose-actions > span {
-		display: none;
-	}
-}
-@media (max-width: 700px) {
-	.compose-actions {
-		bottom: 52px;
-	}
-	.studio-head {
-		align-items: flex-start;
-		gap: 8px;
-		padding: 17px;
-	}
-	.brand p {
-		display: none;
-	}
-	.brand-mark {
-		width: 34px;
-		height: 34px;
-		font-size: 25px;
-	}
-	.brand {
-		gap: 9px;
-	}
-	.studio h1 {
-		font-size: 16px;
-	}
-	.header-actions {
-		gap: 3px;
-	}
-	.header-actions .secondary {
-		padding: 7px;
-		font-size: 10px !important;
-	}
-	.workspace {
-		flex-direction: column;
-		overflow: auto;
-	}
-	.shelf {
-		width: auto;
-		max-height: 195px;
-		border-right: 0;
-		border-bottom: 1px solid var(--line);
-		padding: 13px;
-		flex-shrink: 0;
-	}
-	.shelf-items {
-		display: flex;
-		gap: 7px;
-		overflow-x: auto;
-	}
-	.material {
-		min-width: 170px;
-		max-width: 220px;
-	}
-	.shelf .section-label,
-	.lookup,
-	.library-label {
-		display: none;
-	}
-	.search {
-		margin-bottom: 8px;
-	}
-	.canvas {
-		overflow: visible;
-		padding: 24px 17px;
-	}
-	.studio h2 {
-		font-size: 24px;
-	}
-	.studio-flow-card {
-		padding: 15px 12px;
-		gap: 10px;
-	}
-	.studio-flow-card > .quiet {
-		font-size: 10px !important;
-		padding: 4px;
-	}
-	.opportunity {
-		padding: 20px 14px;
-		gap: 12px;
-	}
-	.compose-head {
-		align-items: flex-start;
-	}
-	.program-name {
-		font-size: 21px !important;
-	}
-	.compose-head > .secondary {
-		padding: 7px;
-		font-size: 10px !important;
-	}
-	.plan-status {
-		flex-direction: column;
-		gap: 5px;
-	}
-	.tabs {
-		padding: 0 15px 12px;
-	}
-	.tabs button {
-		padding: 8px 10px;
-	}
-	.what-if > summary small {
-		font-size: 9px;
-	}
-	.connection {
-		gap: 8px;
-		flex-wrap: wrap;
-	}
-	.connection .quiet {
-		display: none;
-	}
-	.orbit {
-		gap: 12px;
-	}
-	.orbit span {
-		width: 52px;
-		height: 52px;
-	}
-	.start-card {
-		padding: 35px 15px;
-	}
-	.inspector {
-		padding: 22px;
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.studio button {
-		transition: none;
-	}
-	.opportunity:hover {
-		transform: none;
-	}
-}
+:global(body){--ink:var(--color-foreground,#233b33);--green:var(--color-primary,#2f6652);--paper:var(--color-surface,#f5f2e9)}
+.studio{min-height:100%;background:var(--paper);color:var(--ink);font:13px/1.4 Inter,system-ui,sans-serif}button,input,select,textarea{font:inherit}button{color:inherit;cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,textarea:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.topbar{height:78px;padding:0 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #233b3316;background:#fffdf8cc;backdrop-filter:blur(18px)}.brand,.top-actions,.brand>div,.subject,.compose-head,.run-form header,.reuse header,.activity article,.inspector header{display:flex;align-items:center}.brand{gap:12px}.brand>span{width:42px;height:42px;display:grid;place-items:center;border-radius:14px;color:var(--green);background:#2f665214;font-size:23px}.brand h1{margin:0;font-size:18px}.brand p{margin:1px 0 0;color:#60746d;font-size:11px}.top-actions{gap:8px}.live{display:flex;align-items:center;gap:7px;margin-right:8px;color:#60746d;font-size:11px}.live i{width:7px;height:7px;border-radius:50%;background:#4fa576;box-shadow:0 0 0 4px #4fa57618}
+.secondary,.quiet,.icon,.tool-row button,.advanced button,.activity button{border:1px solid #233b3320;background:#fffdf8;border-radius:9px;padding:8px 12px}.icon{width:34px;padding:8px}.quiet{border-color:transparent;background:transparent}.primary{border:0;border-radius:10px;padding:10px 16px;background:var(--green);color:white;box-shadow:0 7px 18px #244f4026}.primary:disabled,button:disabled{cursor:default;opacity:.42}
+.tabs{height:50px;padding:0 28px;display:flex;align-items:stretch;gap:4px;background:#fffdf8;border-bottom:1px solid #233b3312}.tabs button{border:0;border-bottom:2px solid transparent;padding:0 16px;background:transparent;color:#64766f}.tabs button span{margin-right:7px}.tabs button.active{color:var(--green);border-bottom-color:var(--green)}.tabs>small{margin:auto 0 auto auto;color:#86958f}.banner{display:flex;justify-content:space-between;margin:12px 28px 0;padding:10px 14px;border-radius:9px}.banner.error{background:#b04b3d12;color:#863b31;border:1px solid #b04b3d25}.banner.success{background:#2f665210;color:#2f6652}.banner button{border:0;background:transparent}
+.workspace{display:grid;grid-template-columns:245px minmax(0,1fr);min-height:calc(100vh - 128px)}.rail{padding:22px 14px;border-right:1px solid #233b3315;background:#ebe8de66}.rail-title{display:flex;justify-content:space-between;padding:0 8px 10px;color:#526760;font-size:10px;letter-spacing:1.2px;text-transform:uppercase}.rail-title small{border-radius:20px;background:#233b330d;padding:1px 7px}.rail-title.programs{margin-top:24px}.search{height:35px;display:flex;align-items:center;gap:7px;padding:0 10px;border:1px solid #233b3318;border-radius:9px;background:#fffdf8}.search input{min-width:0;width:100%;border:0;outline:0;background:transparent}.artifact-list{max-height:350px;overflow:auto;margin-top:8px}.artifact-list button,.draft{width:100%;display:grid;grid-template-columns:25px minmax(0,1fr) auto;align-items:center;gap:7px;padding:9px 8px;border:0;border-radius:9px;background:transparent;text-align:left}.artifact-list button:hover,.artifact-list button.chosen,.draft:hover,.draft.chosen{background:#fffdf8;box-shadow:0 2px 8px #233b3308}.artifact-list strong,.draft b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.artifact-list small,.draft small{display:block;color:#82908b;font-size:10px}.artifact-list i{font-style:normal}.new-skill{width:100%;margin-bottom:7px;padding:9px;border:1px dashed #2f66524a;border-radius:9px;background:#2f665208;color:var(--green)}.empty{color:#81908a;padding:14px 8px}
+.canvas{padding:34px clamp(24px,5vw,74px) 70px;overflow:hidden}.heading>span,.compose-head>div>span,.inspector header span{color:var(--green);font-size:10px;letter-spacing:1.5px;text-transform:uppercase}.heading h2{margin:6px 0 2px;font:500 clamp(27px,3vw,39px)/1.1 Georgia,serif}.heading p{margin:0 0 30px;color:#71827c}.hero{max-width:540px;margin:70px auto;padding:44px;border:1px solid #233b3315;border-radius:22px;background:#fffdf8;box-shadow:0 22px 60px #2b453b0c;text-align:center}.hero.compact{margin:20px 0}.orbit{display:flex;justify-content:center;align-items:center;gap:14px;font-size:22px}.orbit span{width:48px;height:48px;display:grid;place-items:center;border-radius:16px;background:#2f665210}.orbit i{color:#9cab9f;font-style:normal}.hero h3{margin:20px 0 7px;font-size:20px}.hero p{color:#71827c}.hero small{display:block;margin-top:12px;color:#93a09b}.symbol{font-size:36px;color:var(--green)}
+.subject{gap:12px;padding:14px 16px;border-radius:13px;background:#fffdf8;border:1px solid #233b3315}.subject>span{font-size:23px}.subject div{flex:1}.subject b,.subject small{display:block}.subject small{color:#82908b}.opportunities{margin-top:18px;display:grid;gap:10px}.opportunities>button{display:grid;grid-template-columns:42px 1fr auto;gap:14px;align-items:center;padding:18px;border:1px solid #233b3314;border-radius:14px;background:#fffdf8;text-align:left}.opportunities h3,.opportunities p{margin:0}.opportunities p,.opportunities small{color:#71827c}
+.compose-head{justify-content:space-between;margin-bottom:26px}.title-input{display:block;width:min(560px,70vw);margin-top:5px;border:0;border-bottom:1px solid transparent;background:transparent;color:var(--ink);font:500 clamp(27px,3vw,38px)/1.2 Georgia,serif}.title-input:focus{border-bottom-color:#2f665244;outline:0}.status{padding:7px 11px;border-radius:20px;background:#b46b2b12;color:#96602f;font-size:11px}.status.ready{background:#2f665210;color:var(--green)}
+.flow{display:grid;grid-template-columns:minmax(130px,.7fr) 30px minmax(260px,1.8fr) 30px minmax(130px,.7fr);align-items:stretch}.boundary{padding:14px;border-radius:14px;background:#e8ece7}.boundary>span{display:block;margin-bottom:10px;color:#687973;font-size:10px;letter-spacing:1px;text-transform:uppercase}.boundary>div{padding:10px;margin-top:7px;border-radius:10px;background:#fffdf8}.boundary b{float:right;color:#8fa099;font-size:8px}.boundary strong,.boundary small{display:block}.boundary small{color:#82908b;font-size:9px}.outputs{background:#e7eee9}.line{align-self:center;height:1px;background:#82908b55}.steps{display:grid;gap:9px}.steps article{display:grid;grid-template-columns:25px 35px 1fr;align-items:center;padding:13px;border:1px solid #233b3316;border-radius:13px;background:#fffdf8}.steps .number{color:#92a19b;font-size:9px}.steps .kind{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:#2f665210;color:var(--green)}.steps input{width:100%;border:0;background:transparent;font-weight:600}.steps input:focus{outline:0}.steps small{color:#82908b;font-size:9px}.drop{min-height:72px;border:1px dashed #2f665244;border-radius:13px;background:#2f665206;color:var(--green)}.drop b,.drop span,.drop small{display:block;margin:auto}.drop b{font-size:20px}
+.tool-row{display:flex;gap:7px;margin:17px 0}.tool-row span{flex:1}.tool-row button.on{color:var(--green);border-color:#2f665244;background:#2f66520b}.reuse{margin:22px 0}.reuse p,.run-form p{margin:2px 0 0;color:#7b8c85;font-size:11px}.reuse>div{display:flex;gap:8px;overflow-x:auto;margin-top:10px}.reuse button{min-width:200px;display:grid;grid-template-columns:28px 1fr auto;gap:7px;align-items:center;padding:10px;border:1px solid #233b3315;border-radius:11px;background:#fffdf8;text-align:left}.reuse button b,.reuse button small{display:block}.reuse button small{color:#82908b;font-size:9px}
+.run-form{margin-top:22px;padding:17px;border:1px solid #233b3315;border-radius:15px;background:#fffdf8}.run-form header{justify-content:space-between}.run-form header>small{padding:4px 8px;border-radius:20px;background:#233b3308;color:#7c8d86}.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:14px}.fields label{display:grid;grid-template-columns:80px 1fr;align-items:center;gap:8px}.fields label>span{font-weight:600}.fields label small{display:block;color:#8a9893;font-size:9px}.fields select,.fields input:not([type=checkbox]),.connection-editor select{width:100%;border:1px solid #233b3320;border-radius:8px;background:#f8f6ef;padding:8px}.issues{margin:14px 0;padding:10px 14px;border-radius:10px;background:#b46b2b0d}.issues p{display:flex;gap:8px;margin:4px 0;color:#875a32}.advanced{margin:16px 0;border-block:1px solid #233b3315;padding:11px 0}.advanced summary{cursor:pointer}.advanced summary small{float:right;color:#8b9994}.advanced textarea{width:100%;min-height:260px;box-sizing:border-box;margin-top:10px;padding:12px;border:1px solid #233b3320;border-radius:9px;background:#202d28;color:#dbe8e0;font:11px/1.55 ui-monospace,monospace}.actions{display:flex;align-items:center;gap:8px;margin-top:18px}.actions span{flex:1}.connection-editor{margin-top:12px;padding:17px;border-radius:13px;background:#e8ede8}.connection-editor label{display:inline-block;min-width:220px;margin-right:10px}.connection-editor p{color:#687a73}
+.activity{margin-top:20px}.activity h3{border-bottom:1px solid #233b3315;padding-bottom:9px}.activity h3 small{margin-left:6px;color:#8b9994}.activity article{gap:12px;padding:14px 2px;border-bottom:1px solid #233b3310}.activity article>i{width:8px;height:8px;border-radius:50%;background:#45a46e}.activity article>i.paused{background:#a6aaa6}.activity article div{flex:1}.activity article p{margin:2px 0;color:#74857f}.run-state{width:27px;height:27px;display:grid;place-items:center;border-radius:50%;background:#2f665212;color:var(--green)}.run-state.failed{background:#ad4a3c12;color:#ad4a3c}
+.inspector{width:min(720px,90vw);max-height:85vh;padding:24px;border:0;border-radius:18px;color:var(--ink);background:#fffdf8;box-shadow:0 30px 90px #172b2360}.inspector::backdrop{background:#172b2350;backdrop-filter:blur(4px)}.inspector header{justify-content:space-between}.inspector h2{margin:3px 0}.inspector header button{border:0;background:transparent}.inspector>p{color:#71827c}.inspector pre{max-height:50vh;overflow:auto;padding:14px;border-radius:10px;background:#202d28;color:#dce9e1;font-size:10px}.links{display:flex;gap:7px}.links button{border:1px solid #233b3320;border-radius:20px;background:transparent;padding:6px 10px}
+@media(max-width:820px){.workspace{grid-template-columns:1fr}.rail{display:none}.top-actions .live,.top-actions .secondary:first-of-type{display:none}.canvas{padding:24px 16px 60px}.flow{grid-template-columns:1fr;gap:9px}.line{display:none}.tool-row{flex-wrap:wrap}.tabs>small{display:none}}
 </style>

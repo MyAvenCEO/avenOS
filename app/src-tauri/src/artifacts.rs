@@ -348,6 +348,29 @@ fn intent_json(
     customer_json(session, INTENT_COMPONENT, "intents", method, path, body)
 }
 
+fn studio_path(operation: &str) -> Option<&'static str> {
+    if matches!(
+        operation,
+        "catalog" | "present" | "state" | "inspect" | "explore" | "preview" | "compare"
+    ) {
+        return Some("/api/actor-runs/studio/query");
+    }
+    if matches!(
+        operation,
+        "draft"
+            | "publish"
+            | "start"
+            | "sample"
+            | "connect"
+            | "control"
+            | "sync"
+            | "run-control"
+    ) {
+        return Some("/api/actor-runs/studio/command");
+    }
+    None
+}
+
 #[tauri::command]
 pub async fn studio_request(
     command: serde_json::Value,
@@ -357,30 +380,7 @@ pub async fn studio_request(
         .get("operation")
         .and_then(|v| v.as_str())
         .ok_or("A Studio operation is required.")?;
-    let read_only = matches!(
-        operation,
-        "state" | "inspect" | "explore" | "preview" | "compare"
-    );
-    if !read_only
-        && !matches!(
-            operation,
-            "draft"
-                | "publish"
-                | "start"
-                | "sample"
-                | "connect"
-                | "control"
-                | "sync"
-                | "run-control"
-        )
-    {
-        return Err("Unknown Studio operation.".into());
-    }
-    let path = if read_only {
-        "/api/actor-runs/studio/query"
-    } else {
-        "/api/actor-runs/studio/command"
-    };
+    let path = studio_path(operation).ok_or("Unknown Studio operation.")?;
     let body = serde_json::to_string(&command).map_err(|e| e.to_string())?;
     if body.len() > 256 * 1024 {
         return Err("The Studio request is too large.".into());
@@ -1270,6 +1270,23 @@ mod tests {
         assert_eq!(encoded["dependsOn"][0], "inspect");
         assert_eq!(encoded["procedureKey"], "docs.decompose-pages");
         assert_eq!(encoded["attemptCount"], 2);
+    }
+
+    #[test]
+    fn studio_routes_catalog_and_presentation_through_the_read_boundary() {
+        for operation in [
+            "catalog", "present", "state", "inspect", "explore", "preview", "compare",
+        ] {
+            assert_eq!(
+                studio_path(operation),
+                Some("/api/actor-runs/studio/query")
+            );
+        }
+        assert_eq!(
+            studio_path("publish"),
+            Some("/api/actor-runs/studio/command")
+        );
+        assert_eq!(studio_path("caller-selected-path"), None);
     }
 }
 

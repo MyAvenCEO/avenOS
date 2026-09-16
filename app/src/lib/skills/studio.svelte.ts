@@ -1,11 +1,7 @@
 import type { PlanRunRecord } from '@avenos/actors'
-import type {
-	CompiledStudioProgram,
-	StudioCapability,
-	StudioDefinition,
-	StudioIssue
-} from '@avenos/actors/studio'
-import { invoke } from '@tauri-apps/api/core'
+import type { StudioSkillV2, StudioSkillV2Issue } from '@avenos/actors/studio/v2'
+import { resetCombinedStudioCatalog } from './studio-catalog'
+import { authorizedStudioRequest } from './studio-request'
 
 export interface StudioArtifact {
 	artifactId: string
@@ -16,10 +12,12 @@ export interface StudioArtifact {
 }
 export interface StudioDraft {
 	id: string
+	subjectId: string
 	revision: number
-	definition: StudioDefinition
-	published_artifact_id: string | null
-	published_revision: number | null
+	definition: StudioSkillV2
+	publishedArtifactId: string | null
+	publishedRevision: number | null
+	updatedAt: string
 }
 export interface StudioConnection {
 	id: string
@@ -44,19 +42,21 @@ export interface StudioSnapshot {
 	sources: StudioArtifact[]
 	artifacts: StudioArtifact[]
 	deliveries: Array<{ id: string; last_error: string | null; run_id: string | null }>
-	catalog: StudioCapability[]
 	dispatchMode: 'authorized-session'
 }
 export interface StudioPreview {
 	ok: boolean
-	program?: CompiledStudioProgram
-	issues?: StudioIssue[]
+	mode: 'authoring-contract'
+	publishes: false
+	definitionDigest?: string
+	transitiveChildArtifactIds: string[]
+	issues: StudioSkillV2Issue[]
 }
 export interface StudioOpportunity {
 	label: string
-	definition: StudioDefinition
+	definition: StudioSkillV2
 	conditional: boolean
-	steps: StudioCapability[]
+	steps: Array<{ id: string; label: string }>
 }
 export interface StudioExploration {
 	source: StudioArtifact
@@ -72,21 +72,33 @@ export const studioName = (a: StudioArtifact) =>
 export const studio = $state({
 	snapshot: null as StudioSnapshot | null,
 	requestedArtifactId: null as string | null,
+	requestedSkillId: null as string | null,
+	requestedSkillAction: 'open' as 'open' | 'use' | 'prepare',
 	refreshVersion: 0
 })
 export async function studioRequest<T = unknown>(
 	operation: string,
 	data: Record<string, unknown> = {}
 ): Promise<T> {
-	const result = await invoke<T>('studio_request', { command: { operation, data } })
-	if (!['state', 'inspect', 'explore', 'preview', 'compare'].includes(operation))
+	const result = await authorizedStudioRequest<T>(operation, data)
+	if (
+		!['state', 'inspect', 'explore', 'preview', 'compare', 'catalog', 'present'].includes(operation)
+	)
 		studio.refreshVersion++
 	return result
 }
 let refreshSequence = 0
+let catalogContextKey = ''
 export async function refreshStudio() {
 	const sequence = ++refreshSequence
 	const snapshot = await studioRequest<StudioSnapshot>('state')
-	if (sequence === refreshSequence) studio.snapshot = snapshot
+	if (sequence === refreshSequence) {
+		const nextContext = `${snapshot.scopeId}\0${snapshot.subjectId}`
+		if (nextContext !== catalogContextKey) {
+			catalogContextKey = nextContext
+			resetCombinedStudioCatalog()
+		}
+		studio.snapshot = snapshot
+	}
 	return snapshot
 }

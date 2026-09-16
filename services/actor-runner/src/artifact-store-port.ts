@@ -166,7 +166,7 @@ export class ArtifactStoreRuntimePort implements RuntimeArtifactResolver, Runtim
 		if (!Array.isArray(published) || published.length !== outputs.length) {
 			throw new Error('Artifact Store returned an invalid output mapping')
 		}
-		return outputs.map((output) => {
+		return Promise.all(outputs.map(async (output) => {
 			const mapped = record(
 				published.find(
 					(value) =>
@@ -176,19 +176,30 @@ export class ArtifactStoreRuntimePort implements RuntimeArtifactResolver, Runtim
 				),
 				`published output ${output.draft.slot}`
 			)
-			return {
-				artifactId: assertUuid(
+			const artifactId = assertUuid(
 					stringField(mapped, 'artifactId', 'published output'),
 					'published artifact ID'
-				),
-				predicate: output.draft.predicate,
+				)
+			const envelope = record(
+				await this.#client.artifact(this.#scopeId, artifactId),
+				'published artifact'
+			)
+			const payload = artifactJsonField(envelope, 'payload')
+			const predicate = output.binding
+				.project(payload, artifactId)
+				.find((candidate) => unifiable(candidate, output.draft.predicate))
+			if (!predicate)
+				throw new Error(`published ${output.draft.slot} does not prove its planned predicate`)
+			return {
+				artifactId,
+				predicate,
 				schema: output.binding.schema,
 				typeKey: output.binding.typeKey,
 				schemaVersion: output.binding.typeVersion,
-				contentDigest: payloadDigest(output.draft.value as ArtifactJson),
-				value: structuredClone(output.draft.value)
+				contentDigest: payloadDigest(payload),
+				value: structuredClone(payload)
 			}
-		})
+		}))
 	}
 }
 

@@ -1,12 +1,104 @@
-import { studioRequest } from '../skills/studio.svelte'
+import { composeAuthorizedStudioOperation } from '../skills/studio-compose'
+import { authorizedStudioRequest } from '../skills/studio-request'
+import { editStudioSkillV2, newStudioSkillV2 } from '@avenos/actors/studio/edit'
+import { composeSkillArtifact } from '@avenos/actors/studio/composer'
 import { Actor } from './actor'
 
 const string = { type: 'string' }
 const uuid = { type: 'string', format: 'uuid' }
-const definition = {
+const definitionV2 = {
 	type: 'object',
 	description:
-		'Studio v1 definition. Start with the definition returned by studio_explore, or inspect an existing Skill. Change its typed inputs, fixed capability / exact child Skill / open goal steps, output binding and policy. No arbitrary executable code.'
+		'Closed Skill v2 definition with named artifact ports, bounded public parameters, exact Actor capability IDs, exact child Skill artifacts and explicit policy.'
+}
+const portBinding = {
+	oneOf: [
+		{
+			type: 'object',
+			additionalProperties: false,
+			properties: { kind: { const: 'input' }, port: string },
+			required: ['kind', 'port']
+		},
+		{
+			type: 'object',
+			additionalProperties: false,
+			properties: { kind: { const: 'step' }, stepId: string, port: string },
+			required: ['kind', 'stepId', 'port']
+		},
+		{
+			type: 'object',
+			additionalProperties: false,
+			properties: { kind: { const: 'item' }, loopId: string },
+			required: ['kind', 'loopId']
+		},
+		{
+			type: 'object',
+			additionalProperties: false,
+			properties: { kind: { const: 'none' } },
+			required: ['kind']
+		}
+	]
+}
+const semanticEdit = {
+	oneOf: [
+		closedEdit('rename', { name: string }, ['name']),
+		closedEdit(
+			'set-policy',
+			{
+				field: {
+					type: 'string',
+					enum: [
+						'maxInvocations',
+						'maxDepth',
+						'maxMembers',
+						'maxConcurrentChildren',
+						'allowModel'
+					]
+				},
+				value: { type: ['integer', 'boolean'] }
+			},
+			['field', 'value']
+		),
+		closedEdit('set-step-label', { stepId: string, label: string }, ['stepId', 'label']),
+		closedEdit('remove-step', { stepId: string }, ['stepId']),
+		closedEdit(
+			'set-port-binding',
+			{ stepId: string, port: string, binding: portBinding },
+			['stepId', 'port', 'binding']
+		),
+		closedEdit(
+			'set-parameter-binding',
+			{
+				stepId: string,
+				parameter: string,
+				binding: {
+					oneOf: [
+						{
+							type: 'object',
+							additionalProperties: false,
+							properties: { kind: { const: 'literal' }, value: {} },
+							required: ['kind', 'value']
+						},
+						{
+							type: 'object',
+							additionalProperties: false,
+							properties: { kind: { const: 'parameter' }, name: string },
+							required: ['kind', 'name']
+						}
+					]
+				}
+			},
+			['stepId', 'parameter', 'binding']
+		),
+		closedEdit('set-output', { name: string, output: {} }, ['name', 'output']),
+		closedEdit('remove-output', { name: string }, ['name']),
+		closedEdit(
+			'set-public-parameter',
+			{ name: string, schema: {}, required: { type: 'boolean' } },
+			['name', 'schema', 'required']
+		),
+		closedEdit('remove-public-parameter', { name: string }, ['name'])
+	]
 }
 const inputs = {
 	type: 'object',
@@ -15,6 +107,53 @@ const inputs = {
 }
 const revision = { type: 'integer', minimum: 1 }
 const methods = [
+	{
+		operation: 'new-definition',
+		description:
+			'Create a safe blank Skill v2 definition. Use catalog plus compose-operation to add capabilities, then edit-definition for bounded semantic changes. Pure authoring; nothing is saved or run.',
+		properties: { name: string },
+		required: ['name']
+	},
+	{
+		operation: 'edit-definition',
+		description:
+			'Apply one typed semantic change to a Skill v2 definition. The complete result is reparsed and includes an inspectable before/after change. Invalid or dangling edits fail closed; nothing is saved or run.',
+		properties: { definition: definitionV2, edit: semanticEdit },
+		required: ['definition', 'edit']
+	},
+	{
+		operation: 'catalog',
+		description:
+			'Explore visible Actor and Skill capabilities under your current session. Page with the returned snapshot cursor; readiness and reasons are explicit. Read-only.',
+		properties: {
+			search: string,
+			cursor: string,
+			viewToken: uuid,
+			limit: { type: 'integer', minimum: 1, maximum: 100 }
+		},
+		required: []
+	},
+	{
+		operation: 'compose-operation',
+		description:
+			'Add one exact visible Actor operation to a Skill v2 definition. The shared composer connects compatible outputs, exposes missing artifacts and settings as named Skill inputs, and keeps protected inputs host-side. Returns visual cues plus the complete changed definition; no save, execution or publication.',
+		properties: { definition: definitionV2, capabilityId: string },
+		required: ['definition', 'capabilityId']
+	},
+	{
+		operation: 'compose-skill',
+		description:
+			'Nest one exact immutable Skill v2 artifact in a definition. The shared composer connects matching named ports and exposes missing inputs/settings. No save, execution or publication.',
+		properties: { definition: definitionV2, skillArtifactId: uuid },
+		required: ['definition', 'skillArtifactId']
+	},
+	{
+		operation: 'present',
+		description:
+			'Inspect a compact, visual-ready projection of an exact saved Skill artifact. Safe for malformed or unsupported definitions and does not execute.',
+		properties: { artifactId: uuid },
+		required: ['artifactId']
+	},
 	{
 		operation: 'state',
 		description:
@@ -39,8 +178,8 @@ const methods = [
 	{
 		operation: 'preview',
 		description:
-			'Validate and resolve a partially specified program with the solver. Checks exact child revisions, bindings, cycles, budgets and model policy. Planning only; no Actor calls or publications.',
-		properties: { definition },
+			'Validate a partially specified program against exact child revisions, installed Actor/Store contracts, bindings, cycles and runtime support. Authoring preview only; no Actor calls, solver execution or publications.',
+		properties: { definition: definitionV2 },
 		required: ['definition']
 	},
 	{
@@ -48,8 +187,8 @@ const methods = [
 		description:
 			'Simulate what-if changes to a program, e.g. a different goal, nesting or call budget. Returns baseline and up to four feasibility previews. Does not predict actual document findings or perform effects.',
 		properties: {
-			baseline: definition,
-			variants: { type: 'array', items: definition, maxItems: 4 }
+			baseline: definitionV2,
+			variants: { type: 'array', items: definitionV2, maxItems: 4 }
 		},
 		required: ['baseline', 'variants']
 	},
@@ -57,7 +196,7 @@ const methods = [
 		operation: 'draft',
 		description:
 			'Create or change a shared persistent draft. Use a new UUID and revision 0 to create; use the exact current revision to edit. Conflicts never overwrite the other client. This saves but does not publish or execute.',
-		properties: { id: uuid, revision: { type: 'integer', minimum: 0 }, definition },
+		properties: { id: uuid, revision: { type: 'integer', minimum: 0 }, definition: definitionV2 },
 		required: ['id', 'revision', 'definition']
 	},
 	{
@@ -71,7 +210,12 @@ const methods = [
 		operation: 'start',
 		description:
 			'Execute a published Skill with committed inputs under the current customer session. This writes real result artifacts and may call a model if the Skill permits. Only do this with user authorization. Reuse requestId on uncertain responses; a new requestId is a distinct activation.',
-		properties: { requestId: uuid, skillArtifactId: uuid, inputs },
+		properties: {
+			requestId: uuid,
+			skillArtifactId: uuid,
+			inputs,
+			parameters: { type: 'object', additionalProperties: true }
+		},
 		required: ['requestId', 'skillArtifactId', 'inputs']
 	},
 	{
@@ -96,6 +240,7 @@ const methods = [
 			},
 			inputPort: string,
 			fixedInputs: inputs,
+			parameters: { type: 'object', additionalProperties: true },
 			enabled: { type: 'boolean' }
 		},
 		required: [
@@ -105,6 +250,7 @@ const methods = [
 			'sourceArtifactId',
 			'inputPort',
 			'fixedInputs',
+			'parameters',
 			'enabled'
 		]
 	},
@@ -137,12 +283,15 @@ const methods = [
 
 /** Agent parity is a transport adapter, not a second authoring or execution engine. */
 export class StudioActor extends Actor {
-	constructor() {
+	constructor(
+		request: <Value>(operation: string, data: Record<string, unknown>) => Promise<Value> =
+			authorizedStudioRequest
+	) {
 		super({
 			id: 'studio',
 			authority: 'ceo.aven',
 			namespace: 'skills.studio',
-			version: '1',
+			version: '2',
 			name: 'Skill Studio',
 			description:
 				'Explore artifact opportunities, compose and nest typed Skills with the solver, compare what-if plans, inspect provenance and manage explicit automatic connections. Human and agent share revision-checked drafts.',
@@ -163,11 +312,58 @@ export class StudioActor extends Actor {
 				methods.map((m) => [
 					'studio_' + m.operation.replaceAll('-', '_'),
 					async (data: Record<string, unknown>) => {
-						const result = await studioRequest(m.operation, data)
+						const result =
+							m.operation === 'new-definition'
+								? newStudioSkillV2(String(data.name ?? ''))
+								: m.operation === 'edit-definition'
+									? editStudioSkillV2(data.definition, data.edit)
+									: m.operation === 'compose-operation'
+								? await composeAuthorizedStudioOperation(
+										data.definition,
+										String(data.capabilityId ?? ''),
+										request
+									)
+								: m.operation === 'compose-skill'
+									? await composeExactSkill(
+										data.definition,
+										String(data.skillArtifactId ?? ''),
+										request
+									)
+								: await request(m.operation, data)
 						return { record: JSON.stringify(result), wire: JSON.stringify(result) }
 					}
 				])
 			)
 		)
+	}
+}
+
+async function composeExactSkill(
+	definition: unknown,
+	artifactId: string,
+	request: <Value>(operation: string, data: Record<string, unknown>) => Promise<Value>
+) {
+	const inspected = await request<{ artifact?: Record<string, unknown> }>('inspect', { artifactId })
+	const artifact = inspected.artifact
+	if (
+		!artifact ||
+		artifact.artifactId !== artifactId ||
+		artifact.typeKey !== 'studio.skill' ||
+		artifact.typeVersion !== 2
+	)
+		throw new Error('STUDIO_CHILD_UNAVAILABLE')
+	return composeSkillArtifact(definition, artifactId, artifact.payload)
+}
+
+function closedEdit(
+	kind: string,
+	properties: Record<string, unknown>,
+	required: string[]
+): Record<string, unknown> {
+	return {
+		type: 'object',
+		additionalProperties: false,
+		properties: { kind: { const: kind }, ...properties },
+		required: ['kind', ...required]
 	}
 }

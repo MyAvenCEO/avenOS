@@ -40,7 +40,8 @@ const result = solve(
 
 `capabilitiesFromManifests` prefers a method's `requires` and `produces` declarations.
 For a single-operation actor it inherits missing sides from the actor-level contract.
-Methods with no guaranteed output are omitted from dataflow planning.
+Methods with no guaranteed output remain in the registry/Studio inventory but do
+not create a guaranteed dataflow fact or a fabricated solver goal.
 
 The planner produces a side-effect-free ad-hoc program. It does not execute envelopes
 or persist run state; those responsibilities belong to a durable runner.
@@ -50,9 +51,36 @@ authorized physical program, registry revision, security context, factory resolv
 and Artifact Store ports, it binds one schema-qualified artifact per declared slot,
 rechecks spawn and invocation authorization, dynamically creates factory targets,
 dispatches their envelopes, commits outputs before advancing, and releases each actor.
-It intentionally does not yet implement instance targets, wider slot cardinalities,
-leases, fencing, retries, continuations, or the persistent run state machine. Those
+An optional trusted live-instance resolver can dispatch a selected running target
+with a fresh invocation check. It intentionally does not yet implement wider slot
+cardinalities, named results, leases, fencing, retries, continuations, or the
+persistent run state machine. Those
 remain visible boundaries rather than behavior hidden in a document coordinator.
+
+The new Studio primitives in `src/studio` provide a closed `studio.skill@2` parser,
+static named-port contract checks, an authorized presentation catalog, and a pure
+saved-Skill projection. Catalog ports contain exact Store type bindings only when
+they come from the matching trusted installation; a manifest plus an arbitrary digest
+cannot make an operation authorable. The shared composer turns such an operation into
+a valid v2 step, connects exact ports, exposes unmatched artifact inputs and required
+public parameters, and leaves protected inputs to the host. A catalog entry is
+runnable only when the trusted host explicitly declares runtime support; manifests
+alone never imply that support.
+`TrustedActorInstallations` now retains immutable, content-addressed package
+descriptors that include Store type/projector and procedure/implementation identities;
+an installation with different content under the same Actor version is rejected.
+Executable functions and addresses are intentionally absent from those descriptors.
+These are foundations, not a general production Studio executor. See the
+[shared Studio specification](../../docs/skill-studio-shared-runtime.md) and its
+acceptance gates before enabling additional Actor families.
+
+`checkNamedPortResults()` and `buildPortResultRecords()` define the first v2
+named-result boundary. The Artifact Store registers neutral port-result and
+execution-receipt types, but the host still needs one fenced atomic publication
+adapter before any additional Actor can claim durable v2 execution.
+The Store also registers `studio.skill@2`; a tested Runner publisher can commit that
+version through host-supplied authority, but the current editor and execution runtime
+do not yet expose it.
 
 The generic `ActorRegistry` additionally distinguishes versioned definitions,
 spawnable factory offers, and live instances. `authorizeRegistryForPlanning()` creates

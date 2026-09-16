@@ -4,7 +4,7 @@ import type {
 	PlanRunRecord,
 	PlanRunSecurityContext
 } from '@avenos/actors/run'
-import { StudioValidationError } from '@avenos/actors/studio'
+import { StudioSkillV2Error } from '@avenos/actors'
 import type { TenantGrantClaims, TenantGrantKey } from '@avenos/aven-customer-contracts'
 import { admitCustomerRequest, CustomerAdmissionError } from '@avenos/aven-customer-runtime'
 import type { IdentityVerifier } from '@avenos/aven-identity'
@@ -225,7 +225,7 @@ export function createActorRunnerHandler(
 			}
 			return json(404, { code: 'ROUTE_NOT_FOUND' })
 		} catch (error) {
-			if (error instanceof StudioValidationError)
+			if (error instanceof StudioSkillV2Error)
 				return json(400, { code: 'STUDIO_INVALID', message: error.message, issues: error.issues })
 			if (error instanceof StudioConflict)
 				return json(409, { code: 'STUDIO_CONFLICT', message: error.message })

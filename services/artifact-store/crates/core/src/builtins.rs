@@ -73,11 +73,12 @@ const RECONCILIATION_DECISION_JSON: &[u8] =
 pub fn builtin_type_definitions() -> Result<Vec<TypeDefinition>, crate::CoreError> {
     [
         CORE_FILE_JSON,
-        include_bytes!("../../../conformance/fixtures/protocol/studio.skill.v1.json"),
-        include_bytes!("../../../conformance/fixtures/protocol/studio.activation.v1.json"),
-        include_bytes!("../../../conformance/fixtures/protocol/studio.invocation.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/actors.port-result.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/actors.execution-receipt.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.skill.v2.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.activation.v2.json"),
         include_bytes!("../../../conformance/fixtures/protocol/studio.source.v1.json"),
-        include_bytes!("../../../conformance/fixtures/protocol/studio.subscription.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.subscription.v2.json"),
         include_bytes!("../../../conformance/fixtures/protocol/studio.email.v1.json"),
         include_bytes!("../../../conformance/fixtures/protocol/studio.understanding.v1.json"),
         include_bytes!("../../../conformance/fixtures/protocol/studio.brief.v1.json"),
@@ -137,7 +138,116 @@ pub fn builtin_type_definitions() -> Result<Vec<TypeDefinition>, crate::CoreErro
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aven_artifact_store_contract::TypeKey;
+    use aven_artifact_store_contract::{Role, TypeKey};
+
+    #[test]
+    fn neutral_actor_result_types_validate_empty_and_exact_membership() {
+        let catalog = crate::TypeCatalog::from_definitions(builtin_type_definitions().unwrap())
+            .expect("built-ins should register");
+        let result_key = TypeKey::new("actors.port-result").unwrap();
+        let result = catalog
+            .get(&result_key, 1)
+            .expect("port result must be installed");
+        for bytes in [
+            br#"{"invocationId":"exact-call","port":"details","cardinality":"optional","members":[]}"#.as_slice(),
+            br#"{"invocationId":"exact-call","port":"members","cardinality":"many","members":[{"memberKey":"left","referenceOrdinal":0},{"memberKey":"right","referenceOrdinal":1}]}"#.as_slice(),
+        ] {
+            let payload = parse_canonical(bytes, true).unwrap();
+            catalog.validate_payload(result, &payload).expect("valid result payload");
+        }
+        for bytes in [
+            br#"{"invocationId":"exact-call","port":"members","cardinality":"many","members":[{"memberKey":"left","referenceOrdinal":256}]}"#.as_slice(),
+            br#"{"invocationId":"exact-call","port":"members","cardinality":"invented","members":[]}"#.as_slice(),
+        ] {
+            let payload = parse_canonical(bytes, true).unwrap();
+            assert!(catalog.validate_payload(result, &payload).is_err());
+        }
+        let receipt_key = TypeKey::new("actors.execution-receipt").unwrap();
+        let receipt = catalog
+            .get(&receipt_key, 1)
+            .expect("execution receipt must be installed");
+        let payload = parse_canonical(br#"{"invocationId":"exact-call","capabilityId":"os.aven:capability:fixture:inspect@1","implementationRef":"test-instance","outcome":"completed"}"#, true).unwrap();
+        catalog
+            .validate_payload(receipt, &payload)
+            .expect("valid execution receipt");
+        let input_role = Role::new("input").unwrap();
+        let exact_input = parse_canonical(br#"{"slot":"source","role":"input"}"#, true).unwrap();
+        catalog
+            .validate_attributes(receipt, &input_role, &exact_input)
+            .expect("receipt input retains named provenance");
+        let missing_role = parse_canonical(br#"{"slot":"source"}"#, true).unwrap();
+        assert!(catalog
+            .validate_attributes(receipt, &input_role, &missing_role)
+            .is_err());
+        let member_role = Role::new("member").unwrap();
+        let empty_attributes = parse_canonical(br#"{}"#, true).unwrap();
+        catalog
+            .validate_attributes(result, &member_role, &empty_attributes)
+            .expect("port member reference has no private attributes");
+    }
+
+    #[test]
+    fn v2_skill_store_type_accepts_closed_named_ports_not_executable_fields() {
+        let catalog = crate::TypeCatalog::from_definitions(builtin_type_definitions().unwrap())
+            .expect("built-ins should register");
+        let key = TypeKey::new("studio.skill").unwrap();
+        let registered = catalog
+            .get(&key, 2)
+            .expect("v2 Skill type must be installed");
+        assert_eq!(
+            registered.type_definition_sha256,
+            "19eceedc0b9ed8e5694d39c14d559340ad835ec42dc35d6cd426d54dc5568512",
+            "the Studio publisher must pin the exact source-controlled v2 type"
+        );
+        let sample = br#"{"version":2,"name":"Inspect record","inputs":{"source":{"schema":"fixture:input@1","type":{"key":"fixture.input","version":1},"predicate":"fixture.input(X)","role":"source","cardinality":"one"}},"parametersSchema":{"type":"object","properties":{},"required":[],"additionalProperties":false},"steps":[{"id":"inspect","label":"Inspect","kind":"invoke","capabilityId":"ceo.aven:capability:fixture:inspect@1","inputs":{"source":{"kind":"input","port":"source"}},"parameters":{},"outputs":{"summary":{"schema":"fixture:summary@1","type":{"key":"fixture.summary","version":1},"predicate":"fixture.summary(X)","role":"summary","cardinality":"one"}}}],"outputs":{"summary":{"schema":"fixture:summary@1","type":{"key":"fixture.summary","version":1},"predicate":"fixture.summary(X)","role":"summary","cardinality":"one","from":{"kind":"step","stepId":"inspect","port":"summary"}}},"policy":{"maxInvocations":16,"maxDepth":4,"maxMembers":32,"maxConcurrentChildren":2,"allowModel":false}}"#;
+        let payload = parse_canonical(sample, true).unwrap();
+        catalog
+            .validate_payload(registered, &payload)
+            .expect("closed v2 sample");
+        let mut value: serde_json::Value = serde_json::from_slice(sample).unwrap();
+        value["steps"][0]["script"] = "eval(secret)".into();
+        let forged = parse_canonical(&serde_json::to_vec(&value).unwrap(), true).unwrap();
+        assert!(catalog.validate_payload(registered, &forged).is_err());
+    }
+
+    #[test]
+    fn studio_v2_activation_and_subscription_accept_settings_and_exact_skill_reference() {
+        let catalog = crate::TypeCatalog::from_definitions(builtin_type_definitions().unwrap())
+            .expect("built-ins should register");
+        let activation = catalog
+            .get(&TypeKey::new("studio.activation").unwrap(), 2)
+            .expect("v2 activation must be installed");
+        let activation_payload = parse_canonical(
+            br#"{"contractVersion":2,"activationId":"11111111-1111-4111-8111-111111111111","skillArtifactId":"22222222-2222-4222-8222-222222222222","inputs":{"email":"33333333-3333-4333-8333-333333333333"},"parameters":{"tone":"brief"},"initiator":"user-1","origin":"manual","subscriptionArtifactId":null}"#,
+            true,
+        )
+        .unwrap();
+        catalog
+            .validate_payload(activation, &activation_payload)
+            .expect("v2 activation retains validated public settings");
+
+        let subscription = catalog
+            .get(&TypeKey::new("studio.subscription").unwrap(), 2)
+            .expect("v2 subscription must be installed");
+        let subscription_payload = parse_canonical(
+            br#"{"contractVersion":2,"subscriptionId":"44444444-4444-4444-8444-444444444444","name":"Email brief","skillArtifactId":"22222222-2222-4222-8222-222222222222","sourceArtifactId":null,"inputType":{"key":"studio.email","version":1},"inputPort":"email","fixedInputs":{},"parameters":{"tone":"brief"},"generation":"55555555-5555-4555-8555-555555555555"}"#,
+            true,
+        )
+        .unwrap();
+        catalog
+            .validate_payload(subscription, &subscription_payload)
+            .expect("v2 subscription retains validated public settings");
+        let rule = subscription
+            .definition
+            .reference_rules
+            .iter()
+            .find(|rule| rule.role.as_str() == "skill")
+            .expect("subscription requires an exact skill reference");
+        assert_eq!(rule.minimum, 1);
+        let allowed = serde_json::to_string(&rule.allowed_target_types).unwrap();
+        assert!(allowed.contains("studio.skill"));
+        assert!(allowed.contains('2'));
+    }
 
     #[test]
     fn reconciliation_payloads_validate_against_registered_builtins() {
