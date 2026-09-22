@@ -53,8 +53,9 @@ export function localLlmCatalog(environment: LocalLlmEnvironment): unknown[] {
 		profile,
 		authMode: 'none'
 	}
-	const chatCapabilities = ['text-generation', 'streaming', 'tool-calling']
-	if (vision) chatCapabilities.push('vision', 'structured-output')
+	// Evidence review needs JSON even when the model has no image input.
+	const chatCapabilities = ['text-generation', 'streaming', 'tool-calling', 'structured-output']
+	if (vision) chatCapabilities.push('vision')
 
 	return [
 		{
@@ -72,4 +73,14 @@ export function localLlmCatalog(environment: LocalLlmEnvironment): unknown[] {
 	]
 }
 
-if (import.meta.main) console.log(JSON.stringify(localLlmCatalog(process.env)))
+if (import.meta.main)
+	console.log(
+		JSON.stringify(
+			localLlmCatalog({
+				LOCAL_LLM_MODEL: process.env.LOCAL_LLM_MODEL,
+				LOCAL_LLM_LABEL: process.env.LOCAL_LLM_LABEL,
+				LOCAL_LLM_BASE_URL: process.env.LOCAL_LLM_BASE_URL,
+				LOCAL_LLM_VISION: process.env.LOCAL_LLM_VISION
+			})
+		)
+	)

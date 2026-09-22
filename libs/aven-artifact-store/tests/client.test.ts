@@ -2,6 +2,24 @@ import { expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { ArtifactStoreClient } from '../src/client'
 
+test('reads committed references through their scoped resource, not the envelope', async () => {
+	const client = new ArtifactStoreClient({
+		baseUrl: 'https://store.example',
+		bearerToken: () => 'test',
+		fetch: async (input, init) => {
+			expect(String(input)).toBe(
+				'https://store.example/v1/scopes/scope/artifacts/artifact/references'
+			)
+			expect(new Headers(init?.headers).get('authorization')).toBe('Bearer test')
+			return Response.json({ artifactId: 'artifact', references: [] })
+		}
+	})
+	expect(await client.references('scope', 'artifact')).toEqual({
+		artifactId: 'artifact',
+		references: []
+	})
+})
+
 test('publication lookup treats only a scoped missing resource as absence', async () => {
 	for (const [status, code] of [
 		[404, 'RESOURCE_UNAVAILABLE'],

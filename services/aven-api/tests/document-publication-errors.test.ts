@@ -22,7 +22,7 @@ function body(): PublishClientRunInput {
 			{
 				localKey: 'text',
 				typeKey: 'docs.extracted-text',
-				typeVersion: 1,
+				typeVersion: 2,
 				payload: {
 					method: 'native',
 					language: 'und',
@@ -36,7 +36,7 @@ function body(): PublishClientRunInput {
 			{
 				localKey: 'layout',
 				typeKey: 'docs.text-layout',
-				typeVersion: 1,
+				typeVersion: 2,
 				payload: { coordinateSpace: 'normalized-millionths', spans: [], complete: true },
 				output: { role: 'layout', ordinal: 0 }
 			}
@@ -75,19 +75,18 @@ function invoiceValidation(current: boolean): PublishClientRunInput {
 	}
 }
 
-for (const current of [false, true])
-	test(`invoice validation ${current ? 'v2 with details' : 'legacy v1'} reaches the store`, async () => {
-		let requests = 0
-		const service = ArtifactFileService.fromConfig(config, async () => {
-			requests++
-			return Response.json({ code: 'STORE_PROBE', detail: 'contract accepted' }, { status: 422 })
-		})!
-		await expect(service.publishClientRun(invoiceValidation(current))).rejects.toMatchObject({
-			status: 422,
-			code: 'STORE_PROBE'
-		})
-		expect(requests).toBe(1)
+test('current invoice validation with details reaches the store', async () => {
+	let requests = 0
+	const service = ArtifactFileService.fromConfig(config, async () => {
+		requests++
+		return Response.json({ code: 'STORE_PROBE', detail: 'contract accepted' }, { status: 422 })
+	})!
+	await expect(service.publishClientRun(invoiceValidation(true))).rejects.toMatchObject({
+		status: 422,
+		code: 'STORE_PROBE'
 	})
+	expect(requests).toBe(1)
+})
 
 test('invoice validation cannot claim v2 without its details and matching ruleset parameters', async () => {
 	let requests = 0
@@ -98,6 +97,7 @@ test('invoice validation cannot claim v2 without its details and matching rulese
 	const current = invoiceValidation(true)
 	const legacy = invoiceValidation(false)
 	const invalidInputs: PublishClientRunInput[] = [
+		legacy,
 		{ ...current, inputs: legacy.inputs },
 		{ ...current, parameters: {} },
 		{ ...current, parameters: { rulesetVersion: 'invoice-core-v3' } },
@@ -135,7 +135,8 @@ test('missing arrays, malformed drafts and fractional artifact JSON fail before 
 })
 for (const [status, code] of [
 	[422, 'INVALID_EVIDENCE'],
-	[429, 'UPLOAD_ADMISSION_LIMIT']
+	[429, 'STAGING_QUOTA_EXCEEDED'],
+	[503, 'STORE_RECONCILIATION_REQUIRED']
 ] as const)
 	test(`preserves store ${status} ${code}`, async () => {
 		const service = ArtifactFileService.fromConfig(config, async () =>
@@ -147,3 +148,69 @@ for (const [status, code] of [
 			message: 'fixture rejection'
 		})
 	})
+
+function preservedText(): PublishClientRunInput {
+	const input = body()
+	input.procedureKey = 'client.preserve-text-page'
+	input.inputs.push(
+		{ role: 'text', ordinal: 0, artifactId: id },
+		{ role: 'layout', ordinal: 0, artifactId: id }
+	)
+	input.artifacts.push({
+		localKey: 'classification',
+		typeKey: 'core.content-classification',
+		typeVersion: 1,
+		payload: {
+			subjectLevel: 'page',
+			primaryKind: 'text',
+			facets: ['native-text'],
+			confidenceBps: 10000,
+			reason: 'Native text',
+			resolutionMode: 'rule',
+			complete: true
+		},
+		output: { role: 'classification', ordinal: 0 }
+	})
+	return input
+}
+
+test('preserved native text reaches storage without a model receipt', async () => {
+	let requests = 0
+	const service = ArtifactFileService.fromConfig(config, async () => {
+		requests++
+		return Response.json({ code: 'STORE_PROBE', detail: 'contract accepted' }, { status: 422 })
+	})!
+	await expect(service.publishClientRun(preservedText())).rejects.toMatchObject({
+		status: 422,
+		code: 'STORE_PROBE'
+	})
+	expect(requests).toBe(1)
+})
+
+test('text preservation cannot claim OCR, model authority, or omit native provenance', async () => {
+	let requests = 0
+	const service = ArtifactFileService.fromConfig(config, async () => {
+		requests++
+		throw new Error('must not contact store')
+	})!
+	const ocr = preservedText()
+	ocr.artifacts[0]!.payload = { ...(ocr.artifacts[0]!.payload as object), method: 'ocr' }
+	const model = preservedText()
+	model.artifacts[2]!.payload = {
+		...(model.artifacts[2]!.payload as object),
+		resolutionMode: 'model'
+	}
+	const missing = preservedText()
+	missing.inputs = missing.inputs.filter((input) => input.role !== 'text')
+	for (const input of [
+		ocr,
+		model,
+		missing,
+		{ ...preservedText(), parameters: { page: 1, modelReceipt: {} } }
+	])
+		await expect(service.publishClientRun(input)).rejects.toMatchObject({
+			status: 400,
+			code: 'CLIENT_PROCEDURE_CONTRACT_INVALID'
+		})
+	expect(requests).toBe(0)
+})

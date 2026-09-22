@@ -1,4 +1,4 @@
-% chat-machine.pl — the conversation brain, as a state machine.
+% chat-machine.pl — one conversation runner's lifecycle and mesh contracts.
 %
 % The `.pl` is the SSOT inside AND outside: state/transition define the
 % turn lifecycle, requires/produces define the actor's contracts — every
@@ -12,14 +12,17 @@ initial(idle).
 
 % One turn: an utterance starts the thinking, the first delta opens the
 % reply, done closes it. A tool round unsays the streamed placeholder and
-% thinks again (discard). Barge-in interrupts from ANY busy state.
+% thinks again (discard). ChatThreads owns an independent runner per Intent.
+% Follow-up utterances queue on that runner. Barge-in silences narration only;
+% explicit per-Intent stop cancels the response.
 transition(utterance, idle,     thinking).
 transition(delta,     thinking, replying).
 transition(tool_round, replying, thinking).
 transition(done,      replying, idle).
-transition(interrupt, thinking, idle).
-transition(interrupt, replying, idle).
-% A follow-up utterance while busy is a barge-in too — same edges.
+transition(interrupt, thinking, thinking).
+transition(interrupt, replying, replying).
+transition(stop,      thinking, idle).
+transition(stop,      replying, idle).
 
 % ---- contracts: what flows in and out ---------------------------------
 requires(utterance(T)).

@@ -57,7 +57,8 @@ The database image uses PostgreSQL 18. Mount persistent storage at
 mount. Database, movement, backup, and restore clients use the same pinned major
 version. A directory containing an older cluster is rejected by the image before
 initialization. This release provides no in-place major-version upgrade path; use
-a fresh installation or the verified logical-backup recovery procedure.
+a fresh installation or the verified
+[major-version logical-backup recovery procedure](backup-and-recovery.md#update-postgresql-across-a-major-version).
 
 ## Installation channels
 

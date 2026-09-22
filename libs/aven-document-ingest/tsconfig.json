@@ -4,6 +4,7 @@
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
 		"lib": ["ESNext", "DOM"],
+		"types": ["node"],
 		"resolveJsonModule": true,
 		"strict": true,
 		"noUncheckedIndexedAccess": true,

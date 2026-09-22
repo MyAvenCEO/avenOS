@@ -53,9 +53,7 @@ path = "src/main.rs"
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
-# The shell hosts avenCITY, which is entirely webview-side (three.js). Nothing
-# here needs crypto, storage, sync or on-device AI, so the feature matrix that
-# used to gate them went with the worlds that used it (card 0121).
+# Native authentication, private draft storage and voice share this shell.
 [dependencies]
 aven-voice-core = { path = "../../libs/aven-voice-core" }
 aven-voice-protocol = { path = "../../libs/aven-voice-protocol" }
@@ -71,6 +69,7 @@ tauri-plugin-opener = "2"
 env_logger = "0.11.10"
 base64 = "0.22"
 sha2 = "0.10"
+ring = "0.17.14"
 mime_guess = "2"
 
 # On-device German TTS — Supertonic-3 through ONNX Runtime (src/tts).

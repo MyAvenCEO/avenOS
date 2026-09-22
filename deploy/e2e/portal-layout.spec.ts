@@ -11,7 +11,7 @@ test('portal and identity keep the shared flow-card layout on mobile and desktop
 			[process.env.E2E_CHECKOUT_BROWSER_ORIGIN, '/secure?name=layout-proof'],
 			[process.env.E2E_CHECKOUT_BROWSER_ORIGIN, '/purchase/success?name=layout-proof'],
 			[process.env.E2E_IDENTITY_BROWSER_ORIGIN, '/login']
-		]) {
+		] as const) {
 			if (!origin) throw new Error('Run through the local platform E2E harness.')
 			await page.goto(`${origin}${path}`)
 			const card = page.locator('.flow-card')

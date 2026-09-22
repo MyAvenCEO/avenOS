@@ -6,6 +6,8 @@ import {
 	requireIdentity
 } from '@avenos/aven-identity'
 import { BodyLimitError, readBoundedBytes, readBoundedJson } from '@avenos/http-boundary'
+import { inputAdmissionSchema } from '@avenos/intents/admission'
+import { ZodError } from 'zod'
 import { ArtifactHandler } from './artifacts/handler.js'
 import type { FacadeConfig } from './config.js'
 import type { CustomerHandler } from './customers/handler.js'
@@ -69,6 +71,8 @@ export function forwardedHeaders(
 				'x-aven-role',
 				'x-aven-session',
 				'x-aven-tenant-grant',
+				'x-aven-intent-grant',
+				'x-aven-work-grant',
 				'x-aven-environment',
 				'x-aven-database',
 				'x-aven-routing-generation',
@@ -93,7 +97,8 @@ export function createFacadeHandler(
 	hosting?: HostingHandler,
 	customers?: CustomerHandler,
 	artifacts?: ArtifactHandler,
-	llmGateway?: LlmGatewayService | null
+	llmGateway?: LlmGatewayService | null,
+	workControl?: (request: Request) => Promise<Response>
 ) {
 	const requestMemory = new RequestMemoryBudget()
 	const runtimeDirectory = new RuntimeDirectory(config)
@@ -102,11 +107,59 @@ export function createFacadeHandler(
 			.map((value) => value.trim())
 			.filter(Boolean)
 	)
-	return async (request: Request): Promise<Response> => {
+	return async (request: Request, onModelRequest?: () => void): Promise<Response> => {
 		const url = new URL(request.url)
 		if (url.pathname === '/health/live') return json(200, { status: 'ok', service: 'aven-api' })
+		if (
+			[
+				'/internal/v1/work/exchange',
+				'/internal/v1/work/placements',
+				'/internal/v1/work/dispatch'
+			].includes(url.pathname)
+		)
+			return workControl ? workControl(request) : json(404, { code: 'ROUTE_NOT_FOUND' })
 		if (url.pathname.startsWith('/internal/v1/static-sites/'))
 			return hosting ? hosting.internal(request) : json(404, { code: 'ROUTE_NOT_FOUND' })
+		if (url.pathname === '/internal/v1/llm/v1/chat/completions') {
+			if (request.method !== 'POST' || url.search) return json(404, { code: 'ROUTE_NOT_FOUND' })
+			if (
+				!hasBearer(request, config.LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN) ||
+				[
+					'origin',
+					'cookie',
+					'x-aven-identity-token',
+					'x-aven-tenant-grant',
+					'x-aven-work-grant'
+				].some((name) => request.headers.has(name))
+			)
+				return json(401, { code: 'AUTHENTICATION_REQUIRED' })
+			if (!llmGateway)
+				return json(503, {
+					code: 'LLM_GATEWAY_UNAVAILABLE',
+					message: 'The LLM gateway is not configured.'
+				})
+			try {
+				const body = await readBoundedJson(request, 2 * 1024 * 1024)
+				onModelRequest?.()
+				return await llmGateway.openAiChatCompletion(body, request.signal, {
+					owner: 'actor-runner',
+					traceparent: request.headers.get('traceparent')
+				})
+			} catch (error) {
+				if (error instanceof BodyLimitError) return bodyLimitResponse(error)
+				if (error instanceof AppError)
+					return json(error.status, { code: error.code, message: error.message })
+				if (error instanceof SyntaxError || error instanceof ZodError)
+					return json(400, {
+						code: 'LLM_REQUEST_INVALID',
+						message: 'The chat request does not match its contract.'
+					})
+				return json(503, {
+					code: 'LLM_GATEWAY_UNAVAILABLE',
+					message: 'The LLM gateway is temporarily unavailable.'
+				})
+			}
+		}
 		if (url.pathname === '/internal/v1/customer-entitlement-events')
 			return customers ? customers.internal(request) : json(404, { code: 'ROUTE_NOT_FOUND' })
 		if (url.pathname === '/internal/v1/llm/models' && request.method === 'GET') {
@@ -128,9 +181,15 @@ export function createFacadeHandler(
 					message: 'The LLM gateway is not configured.'
 				})
 			try {
-				return await requestMemory.json(request, MAX_STRUCTURED_COMPLETION_BYTES, async (body) =>
-					json(200, await llmGateway.complete(body, request.signal))
-				)
+				return await requestMemory.json(request, MAX_STRUCTURED_COMPLETION_BYTES, async (body) => {
+					onModelRequest?.()
+					return json(
+						200,
+						await llmGateway.complete(body, request.signal, {
+							traceparent: request.headers.get('traceparent')
+						})
+					)
+				})
 			} catch (error) {
 				if (error instanceof BodyLimitError) return bodyLimitResponse(error)
 				if (error instanceof AppError)
@@ -154,6 +213,21 @@ export function createFacadeHandler(
 		}
 		try {
 			const claims = await requireIdentity(request, verifier)
+			if (url.pathname === '/api/llm/input-decision' && request.method === 'POST') {
+				if (!llmGateway)
+					throw new AppError(503, 'LLM_GATEWAY_UNAVAILABLE', 'The LLM gateway is not configured.')
+				const body = await readBoundedJson(request, 48 * 1024)
+				onModelRequest?.()
+				return json(
+					200,
+					await llmGateway.inputDecision(
+						body,
+						claims.sub,
+						request.signal,
+						request.headers.get('traceparent')
+					)
+				)
+			}
 			if (url.pathname === '/api/llm/models' && request.method === 'GET') {
 				if (!llmGateway)
 					throw new AppError(503, 'LLM_GATEWAY_UNAVAILABLE', 'The LLM gateway is not configured.')
@@ -164,17 +238,26 @@ export function createFacadeHandler(
 			if (url.pathname === '/api/llm/completions' && request.method === 'POST') {
 				if (!llmGateway)
 					throw new AppError(503, 'LLM_GATEWAY_UNAVAILABLE', 'The LLM gateway is not configured.')
-				return await requestMemory.json(request, MAX_STRUCTURED_COMPLETION_BYTES, async (body) =>
-					json(200, await llmGateway.complete(body, request.signal))
-				)
+				return await requestMemory.json(request, MAX_STRUCTURED_COMPLETION_BYTES, async (body) => {
+					onModelRequest?.()
+					return json(
+						200,
+						await llmGateway.complete(body, request.signal, {
+							owner: claims.sub,
+							traceparent: request.headers.get('traceparent')
+						})
+					)
+				})
 			}
 			if (url.pathname === '/api/llm/v1/chat/completions' && request.method === 'POST') {
 				if (!llmGateway)
 					throw new AppError(503, 'LLM_GATEWAY_UNAVAILABLE', 'The LLM gateway is not configured.')
-				return llmGateway.openAiChatCompletion(
-					await readBoundedJson(request, 2 * 1024 * 1024),
-					request.signal
-				)
+				const body = await readBoundedJson(request, 2 * 1024 * 1024)
+				onModelRequest?.()
+				return await llmGateway.openAiChatCompletion(body, request.signal, {
+					owner: claims.sub,
+					traceparent: request.headers.get('traceparent')
+				})
 			}
 			if (url.pathname === '/api/environments' && request.method === 'GET')
 				return customers
@@ -188,6 +271,24 @@ export function createFacadeHandler(
 				/^\/api\/environments\/([0-9a-f-]{36})\/([a-z][a-z0-9-]{1,40})(\/.*)?$/
 			)
 			if (customerMatch) {
+				// These interactive boundaries accept only authenticated facade traffic.
+				// Validate the client's origin here, then remove browser transport headers
+				// before entering the private service (including native POST requests).
+				const privateInteractive =
+					customerMatch[2] === 'credentials' ||
+					(customerMatch[2] === 'actor-runs' &&
+						/^\/[^/]+\/reviews\/[^/]+$/.test(customerMatch[3] ?? ''))
+				if (privateInteractive) {
+					const origin = request.headers.get('origin')
+					if (
+						(origin &&
+							origin !== new URL(config.API_PUBLIC_BASE_URL).origin &&
+							!allowedOrigins.has(origin)) ||
+						request.headers.has('cookie') ||
+						request.headers.has('x-aven-work-grant')
+					)
+						return json(403, { code: 'INTERACTIVE_ACCESS_DENIED' })
+				}
 				const targetConfig = config.CUSTOMER_DOWNSTREAMS_JSON.find(
 					(target) => target.segment === customerMatch[2]
 				)
@@ -269,16 +370,69 @@ export function createFacadeHandler(
 							request,
 							customerMatch[2] === 'intents' ? 256 * 1024 : 1024 * 1024
 						)
+				const serviceHeaders = forwardedHeaders(
+					request,
+					claims,
+					destination.bearerToken,
+					identityToken,
+					grant.token
+				)
+				if (privateInteractive) serviceHeaders.delete('origin')
+				if (
+					customerMatch[2] === 'intents' &&
+					suffix.replace(/\/+$/, '') === '/input' &&
+					request.method === 'POST'
+				) {
+					let raw: unknown
+					try {
+						raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body))
+					} catch {
+						throw new AppError(
+							400,
+							'INTENT_INPUT_INVALID',
+							'The message could not be read. It was not sent.'
+						)
+					}
+					const admission = inputAdmissionSchema.safeParse(raw)
+					if (!admission.success)
+						throw new AppError(
+							400,
+							'INTENT_INPUT_INVALID',
+							'The message or destination is invalid. It was not sent.'
+						)
+					serviceHeaders.set(
+						'x-aven-work-grant',
+						await customers.work({
+							claims,
+							environmentId: customerMatch[1],
+							admission: admission.data,
+							expectedGeneration: grant.claims.routingGeneration,
+							expectedRuntime: grant.runtimeId
+						})
+					)
+				}
+				if (customerMatch[2] === 'productivity' && request.method === 'POST') {
+					const intentGrant = await customers.grant({
+						claims,
+						environmentId: customerMatch[1],
+						componentRef: 'ceo.aven:component:data:intents@1',
+						actions: ['intents:read']
+					})
+					if (
+						intentGrant.claims.routingGeneration !== grant.claims.routingGeneration ||
+						intentGrant.runtimeId !== grant.runtimeId
+					)
+						throw new AppError(
+							409,
+							'WORKSPACE_CHANGED',
+							'The workspace changed; retry the same operation.'
+						)
+					serviceHeaders.set('x-aven-intent-grant', intentGrant.token)
+				}
 				const response = await fetcher(
 					new Request(target, {
 						method: request.method,
-						headers: forwardedHeaders(
-							request,
-							claims,
-							destination.bearerToken,
-							identityToken,
-							grant.token
-						),
+						headers: serviceHeaders,
 						body,
 						redirect: 'manual'
 					})

@@ -97,6 +97,10 @@ export const facadeConfigSchema = z.object({
 	LLM_GATEWAY_MAX_PARALLELISM: z.coerce.number().int().min(1).max(32).default(5),
 	LLM_GATEWAY_ALLOW_INSECURE_HTTP: z.stringbool().default(false),
 	LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN: z.string().min(32).optional(),
+	WORK_GRANT_EXCHANGE_BEARER_TOKEN: z
+		.string()
+		.regex(/^[A-Za-z0-9_-]{32,128}$/)
+		.optional(),
 	DOWNSTREAMS_JSON: z
 		.string()
 		.default('[]')

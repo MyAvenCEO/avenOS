@@ -1,6 +1,7 @@
 import type { SourceEntry, SourceText } from './source-retrieval'
 export interface IndexedSource extends SourceEntry {
 	complete: boolean
+	generated?: boolean
 	textArtifactId?: string
 	scopeTokens: string[]
 	tokens: string[]
@@ -43,6 +44,20 @@ export class DiskSourceIndex implements SourceIndex {
 	) {
 		this.#db = new Promise((resolve, reject) => {
 			const open = indexedDB.open(name, 1)
+			let expired = false
+			const timeout = setTimeout(() => {
+				expired = true
+				reject(
+					Error(
+						'The local search index did not open. Source records remain available through their exact IDs.'
+					)
+				)
+			}, 10_000)
+			open.onblocked = () => {
+				expired = true
+				clearTimeout(timeout)
+				reject(Error('Another window is blocking the local search index. Close it and retry.'))
+			}
 			open.onupgradeneeded = () => {
 				open.result.createObjectStore('texts')
 				open.result.createObjectStore('headers', { keyPath: 'artifactId' })
@@ -52,17 +67,28 @@ export class DiskSourceIndex implements SourceIndex {
 				s.createIndex('intent', 'intentId')
 			}
 			open.onsuccess = () => {
+				clearTimeout(timeout)
+				if (expired || this.#closed) {
+					open.result.close()
+					return
+				}
 				open.result.onversionchange = () => open.result.close()
 				resolve(open.result)
 			}
-			open.onerror = () => reject(open.error)
+			open.onerror = () => {
+				clearTimeout(timeout)
+				reject(open.error)
+			}
 		})
+		// Opening starts before the first query. Observe rejection now; queries still receive it.
+		void this.#db.catch(() => {})
 	}
 	#write(t: IDBTransaction, entry: SourceEntry, text: SourceText, version?: string) {
 		const tokens = sourceTokens(`${entry.title} ${entry.summary ?? ''} ${text.content}`)
 		t.objectStore('sources').put({
 			...entry,
 			complete: text.complete,
+			generated: text.generated,
 			textArtifactId: text.textArtifactId,
 			version,
 			tokens,
@@ -72,6 +98,7 @@ export class DiskSourceIndex implements SourceIndex {
 		t.objectStore('headers').put({
 			...entry,
 			complete: text.complete,
+			generated: text.generated,
 			textArtifactId: text.textArtifactId,
 			version
 		})
@@ -149,20 +176,11 @@ export class DiskSourceIndex implements SourceIndex {
 			.sort((a, b) => b.length - a.length)
 			.slice(0, 12)
 		const binding = JSON.stringify([query, intent, before, this.#epoch, this.#generation])
-		let seed = 0,
-			after = ''
+		let after = ''
 		if (args.cursor) {
 			try {
 				const c = JSON.parse(String(args.cursor))
-				if (
-					c.binding !== binding ||
-					!Number.isSafeInteger(c.seed) ||
-					c.seed < 0 ||
-					c.seed >= Math.max(1, words.length) ||
-					typeof c.after !== 'string'
-				)
-					throw Error()
-				seed = c.seed
+				if (c.binding !== binding || typeof c.after !== 'string') throw Error()
 				after = c.after
 			} catch {
 				return { ok: false, error: 'Index changed or cursor invalid; restart search.' }
@@ -176,11 +194,7 @@ export class DiskSourceIndex implements SourceIndex {
 			last = after,
 			exhausted = true
 		await new Promise<void>((resolve, reject) => {
-			const key = words.length
-				? intent
-					? JSON.stringify([intent, words[seed]])
-					: words[seed]
-				: intent
+			const key = words.length ? (intent ? JSON.stringify([intent, words[0]]) : words[0]) : intent
 			const indexed = words.length > 0 || Boolean(intent)
 			const cursor = indexed
 				? store
@@ -200,17 +214,20 @@ export class DiskSourceIndex implements SourceIndex {
 				}
 				last = String(c.primaryKey)
 				examined++
-				const header = transaction.objectStore('headers').get(c.primaryKey)
+				const header = store.get(c.primaryKey)
 				header.onerror = () => reject(header.error)
 				header.onsuccess = () => {
-					const row = header.result as Omit<IndexedSource, 'tokens' | 'scopeTokens'> | undefined
+					const row = header.result as IndexedSource | undefined
 					if (
 						row &&
 						this.visible(row.artifactId) &&
+						words.every((word) => row.tokens.includes(word)) &&
 						(!intent || row.intentId === intent) &&
 						(!before || !row.createdAt || row.createdAt.slice(0, 10) <= before)
-					)
-						rows.push(row)
+					) {
+						const { tokens: _tokens, scopeTokens: _scopeTokens, ...metadata } = row
+						rows.push(metadata)
+					}
 					if (rows.length >= 20 || examined >= 200) {
 						exhausted = false
 						resolve()
@@ -220,10 +237,8 @@ export class DiskSourceIndex implements SourceIndex {
 				}
 			}
 		})
-		const hasMore = !exhausted || seed + 1 < words.length
-		const next = hasMore
-			? JSON.stringify({ binding, seed: exhausted ? seed + 1 : seed, after: exhausted ? '' : last })
-			: null
+		const hasMore = !exhausted
+		const next = hasMore ? JSON.stringify({ binding, after: last }) : null
 		// Load bodies only for the <=20 returned candidates, never the 200 examined rows.
 		const files = await Promise.all(
 			rows.map(async ({ version: _version, ...entry }) => {
@@ -246,9 +261,9 @@ export class DiskSourceIndex implements SourceIndex {
 			files: files.sort((a, b) => b.matchCount - a.matchCount),
 			nextCursor: next,
 			hasMore,
-			matchMode: 'token-candidates',
+			matchMode: 'all-tokens',
 			notice:
-				'Read candidate sources. Follow nextCursor to search remaining tokens/pages; duplicates across tokens are possible. Unknown dates remain candidates; check source dates. Absence applies only to indexed text.'
+				'All query tokens match file metadata or indexed text. Follow nextCursor for remaining results. Read sources for content claims; titles are metadata. Unknown dates remain candidates; check source dates. Absence applies only to indexed text.'
 		}
 	}
 }

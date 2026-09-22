@@ -57,36 +57,23 @@ export class LlmActor extends Actor {
 	#log: Exchange[] = []
 
 	constructor(transport: LlmTransport) {
+		// This is the private host transport, not the artifact-producing LLM
+		// capability installed by the runtime. Do not advertise that capability
+		// with a different payload or offer a redundant tool to the chat model.
 		super({
-			id: 'llm',
+			id: 'llm-lane',
 			authority: 'ceo.aven',
 			namespace: 'ai.gateway',
 			version: '1',
-			name: 'LLM',
+			name: 'Model transport',
 			description:
-				'The model lane as an actor: relays one completion per message to the ' +
-				'inference proxy. Internal service — conversation already has its own brain.',
+				'Internal model transport for native Actors. Use the installed LLM operation in Skills.',
 			tags: ['application', 'llm'],
-			methods: [
-				{
-					name: 'llm_complete',
-					description:
-						'Internal relay: one whole completion from the model lane. Never needed ' +
-						'in conversation — you are already talking to the model.',
-					parameters: {
-						type: 'object',
-						properties: {
-							system: { type: 'string' },
-							question: { type: 'string' }
-						},
-						required: ['question']
-					}
-				}
-			]
+			methods: []
 		})
 		this.#transport = transport
 		this.bind({
-			llm_complete: async (p) => {
+			complete: async (p) => {
 				const settings =
 					p.settings && typeof p.settings === 'object'
 						? (p.settings as LlmSettings & LaneExtras)

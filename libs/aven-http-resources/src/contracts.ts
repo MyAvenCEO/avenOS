@@ -2,25 +2,9 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 
 const HTTP_TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
-const FORBIDDEN_REQUEST_HEADERS = new Set([
-	'authorization',
-	'connection',
-	'content-length',
-	'cookie',
-	'forwarded',
-	'host',
-	'if-modified-since',
-	'if-none-match',
-	'keep-alive',
-	'proxy-authorization',
-	'te',
-	'trailer',
-	'transfer-encoding',
-	'upgrade',
-	'x-forwarded-for',
-	'x-forwarded-host',
-	'x-forwarded-proto'
-])
+const PUBLIC_REQUEST_HEADERS = new Set(['accept', 'accept-language', 'range'])
+const SECRET_QUERY_NAMES =
+	/^(?:access[_-]?token|api[_-]?key|authorization|auth|bearer|client[_-]?secret|credential|key|password|secret|session(?:id)?|signature|sig|token|x-amz-.+|x-goog-.+)$/i
 
 function containsControlCharacter(value: string): boolean {
 	for (const character of value) {
@@ -60,7 +44,7 @@ const authenticationSchema = z
 		}
 	})
 
-const requestSchema = z
+export const httpRequestSchema = z
 	.object({
 		method: z.enum(['GET', 'HEAD']),
 		url: z.string().min(1).max(8_192),
@@ -111,7 +95,7 @@ export function parseHttpRequestArtifact(
 	input: unknown,
 	policy: HttpRequestPolicy = {}
 ): HttpRequestArtifact {
-	const parsed = requestSchema.parse(input)
+	const parsed = httpRequestSchema.parse(input)
 	let url: URL
 	try {
 		url = new URL(parsed.url)
@@ -128,11 +112,14 @@ export function parseHttpRequestArtifact(
 		throw new HttpRequestContractError('HTTP_REQUEST_INSECURE_ORIGIN_FORBIDDEN')
 	}
 	url.hostname = url.hostname.toLowerCase()
+	for (const key of url.searchParams.keys())
+		if (SECRET_QUERY_NAMES.test(key))
+			throw new HttpRequestContractError('HTTP_REQUEST_SECRET_QUERY_FORBIDDEN')
 
 	const names = new Set<string>()
 	const headers = parsed.headers.map((header) => {
 		const name = header.name.toLowerCase()
-		if (!HTTP_TOKEN.test(name) || FORBIDDEN_REQUEST_HEADERS.has(name)) {
+		if (!HTTP_TOKEN.test(name) || !PUBLIC_REQUEST_HEADERS.has(name)) {
 			throw new HttpRequestContractError('HTTP_REQUEST_HEADER_FORBIDDEN')
 		}
 		if (containsControlCharacter(header.value)) {
@@ -198,6 +185,8 @@ export interface HttpResponseArtifact {
 	lastModified: string | null
 	headers: RetainedHttpResponseHeader[]
 	redirectCount: number
+	/** Why a redirect response was retained instead of following it. No Location URL is exposed. */
+	redirectStoppedReason?: 'manual' | 'missing-location' | 'cross-origin-authentication'
 	storedBodyLength: number
 	capturedAt: string
 }

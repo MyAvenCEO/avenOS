@@ -183,6 +183,18 @@ function slot(predicate: string, method: string, direction: 'input' | 'output'):
 				? 'document-classification'
 				: declared.role
 	const cardinality =
+		(method.startsWith('document_merge_') &&
+			direction === 'input' &&
+			predicateFunctor !== 'ceo.aven.docs.file') ||
+		(method === 'document_assemble' && predicateFunctor !== 'ceo.aven.docs.file') ||
+		(['document_classify_kind', 'document_extract_invoice', 'document_extract_statement'].includes(
+			method
+		) &&
+			direction === 'input' &&
+			/\.(page|extracted_text|text_layout)$/.test(predicateFunctor)) ||
+		(method === 'document_aggregate_content' &&
+			direction === 'input' &&
+			predicateFunctor.endsWith('.document_text')) ||
 		(method === 'document_decompose' &&
 			direction === 'output' &&
 			predicateFunctor.endsWith('.page')) ||
@@ -359,7 +371,7 @@ export function artifact(
 	}
 }
 
-function documentTypeVersion(typeKey: string): number {
+export function documentTypeVersion(typeKey: string): number {
 	return Math.max(
 		...Object.values(DOCUMENT_SCHEMA_BINDINGS)
 			.filter((binding) => binding.typeKey === typeKey)
@@ -390,7 +402,8 @@ export function manifest(
 	description: string,
 	method: string,
 	requires: string[],
-	produces: string[]
+	produces: string[],
+	inputMediaTypes?: string[]
 ): Manifest {
 	return {
 		id,
@@ -399,15 +412,37 @@ export function manifest(
 		version: '1',
 		name,
 		description,
-		tags: ['docs', 'client-processing'],
+		tags: ['docs', 'document-processing'],
 		methods: [
 			{
 				name: method,
 				description,
-				parameters: { type: 'object', additionalProperties: true },
+				parameters: {
+					type: 'object',
+					properties:
+						method === 'document_fanout_statement_transactions'
+							? { offset: { type: 'integer', minimum: 0, maximum: 9999 } }
+							: {},
+					required: method === 'document_fanout_statement_transactions' ? ['offset'] : [],
+					additionalProperties: false,
+					maxProperties: method === 'document_fanout_statement_transactions' ? 1 : 0
+				},
+				mode: 'transform',
+				idempotency: [
+					'document_analyze_page',
+					'document_classify_kind',
+					'document_extract_invoice',
+					'document_extract_statement'
+				].includes(method)
+					? 'none'
+					: 'pure',
 				requires,
 				produces,
-				inputSlots: requires.map((predicate) => slot(predicate, method, 'input')),
+				inputSlots: requires.map((predicate) => ({
+					...slot(predicate, method, 'input'),
+					...(inputMediaTypes &&
+						predicate === 'ceo.aven.docs.file(F)' && { mediaTypes: inputMediaTypes })
+				})),
 				outputSlots: produces.map((predicate) => slot(predicate, method, 'output'))
 			}
 		]

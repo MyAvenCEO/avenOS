@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -15,6 +15,15 @@ describe('production-bundled PDF decoder', () => {
 		outputDirectory = await mkdtemp(join(tmpdir(), 'avenos-pdf-bundle-'))
 		const entry = new URL('./support/bundled-server-decoder-entry.ts', import.meta.url).pathname
 		await execute('bun', ['build', entry, '--target=bun', `--outdir=${outputDirectory}`])
+		const dependency = join(outputDirectory, 'node_modules/pdfjs-dist')
+		await mkdir(dependency, { recursive: true })
+		for (const asset of ['package.json', 'standard_fonts']) {
+			await cp(
+				new URL(`../node_modules/pdfjs-dist/${asset}`, import.meta.url),
+				join(dependency, asset),
+				{ recursive: true }
+			)
+		}
 		executable = join(outputDirectory, 'bundled-server-decoder-entry.js')
 		expect(await readFile(executable)).not.toHaveLength(0)
 	})
@@ -55,6 +64,15 @@ describe('production-bundled PDF decoder', () => {
 		})
 	}
 
+	test('renders unembedded font glyphs without any system fonts', async () => {
+		const path = new URL('../../../deploy/e2e/fixtures/e2e-invoice.pdf', import.meta.url).pathname
+		const { stdout, stderr } = await execute('bun', [executable, path])
+		expect(stderr).not.toContain('standardFontDataUrl')
+		const decoded = JSON.parse(stdout)
+		expect(decoded).toMatchObject({ outcome: 'ok', pages: 1, systemFonts: 0 })
+		// Text extraction alone passes even when every printed glyph disappears.
+		expect(decoded.textPixels[0]).toBeGreaterThan(1_000)
+	})
 	test('the production artifact contains the pdf.js worker implementation', async () => {
 		const bytes = await readFile(executable)
 		expect(bytes.includes(Buffer.from('WorkerMessageHandler'))).toBe(true)

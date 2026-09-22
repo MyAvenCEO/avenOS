@@ -15,6 +15,7 @@ WORKDIR /app
 COPY --from=build /repo/services/intent-service/build ./build
 COPY --from=build /repo/node_modules /repo/node_modules
 ENV NODE_ENV=production
+ENV BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS=5
 USER bun
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=20 \
   CMD bun -e "fetch('http://127.0.0.1:3010/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

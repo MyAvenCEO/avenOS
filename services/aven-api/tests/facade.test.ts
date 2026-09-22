@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import { facadeConfigSchema } from '../src/config.js'
 import { createFacadeHandler } from '../src/facade.js'
+import { AppError } from '../src/lib/server/errors.js'
 import type { LlmGatewayService } from '../src/lib/server/llm-gateway.js'
 
 const customerSecrets = {
@@ -30,6 +31,33 @@ const claims = {
 }
 
 describe('api facade', () => {
+	test('asynchronous LLM rejection preserves the structured upstream error instead of escaping as plain HTTP 500', async () => {
+		const handler = createFacadeHandler(
+			config,
+			{ verify: async () => claims },
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				openAiChatCompletion: async () => {
+					throw new AppError(502, 'LLM_UPSTREAM_ERROR', 'The selected model returned HTTP 400.')
+				}
+			} as unknown as LlmGatewayService
+		)
+		const response = await handler(
+			new Request('http://facade.test/api/llm/v1/chat/completions', {
+				method: 'POST',
+				body: '{}',
+				headers: { authorization: 'Bearer test' }
+			})
+		)
+		expect(response.status).toBe(502)
+		expect(await response.json()).toEqual({
+			code: 'LLM_UPSTREAM_ERROR',
+			message: 'The selected model returned HTTP 400.'
+		})
+	})
 	test('public and internal model calls share admission until completion and overload remains retryable', async () => {
 		const entered = Promise.withResolvers<void>(),
 			release = Promise.withResolvers<void>()
@@ -135,7 +163,9 @@ describe('api facade', () => {
 			})
 		)
 		expect(completed.status).toBe(200)
-		expect(complete).toHaveBeenCalledWith({ modelId: 'vision' }, expect.any(AbortSignal))
+		expect(complete).toHaveBeenCalledWith({ modelId: 'vision' }, expect.any(AbortSignal), {
+			traceparent: null
+		})
 		expect(verify).not.toHaveBeenCalled()
 	})
 	test('fails closed before contacting a downstream', async () => {

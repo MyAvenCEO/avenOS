@@ -1,4 +1,6 @@
 <script lang="ts">
+import { claimsUnexecutedAction } from '@avenos/chat-engine/action-claim'
+import { ResearchRecord } from '@avenos/chat-engine/research'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { onMount, untrack } from 'svelte'
@@ -10,8 +12,7 @@ import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
-import { anonymousSpeakerPayload } from '$lib/chat/anonymous-speaker'
-import { ResearchRecord } from '$lib/chat/research'
+import { routeInput } from '$lib/chat/input-routing'
 import { voiceController } from '$lib/voice/controller.svelte'
 import '$lib/actors/windows'
 import ArtifactWorkspacePage from '$lib/artifacts/ArtifactWorkspacePage.svelte'
@@ -19,23 +20,26 @@ import {
 	documentExecutionPreference,
 	ingestDroppedFiles,
 	ingestFile,
+	installConversationPersistence,
 	loadPersistentIntents,
-	refreshIntent
+	persistentIntentPages
 } from '$lib/artifacts/ingest.svelte'
+import { screenContext } from '$lib/chat/screen-context.svelte'
+import WorkspaceChat from '$lib/chat/WorkspaceChat.svelte'
 import { composer } from '$lib/intents/composer.svelte'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
 import { intents } from '$lib/intents/intents.svelte'
 import { readStoredSource } from '$lib/intents/stored-source'
 import { shell } from '$lib/intents/talk.svelte'
+import { intentWorkSession } from '$lib/intents/work-client'
+import { query } from '$lib/query/query.svelte'
 import SkillsPlatform from '$lib/skills/SkillsPlatform.svelte'
+import { studioCaseRequest } from '$lib/skills/studio-case-context'
+import { authorizedStudioRequest } from '$lib/skills/studio-request'
 
 /**
- * Dashboard — a chat against RedPill's confidential Gemma
- * (`phala/gemma-4-31b-it`), streamed token by token, spoken aloud in German by
- * Supertonic as it arrives, and listened to with Nemotron + Silero VAD.
- *
- * The split is deliberate: the brain is remote and attested, the voice is
- * entirely on-device.
+ * Dashboard conversation uses the configured workspace model and the shared
+ * on-device voice pipeline. Its context follows the selected Intent and screen.
  */
 
 /**
@@ -47,6 +51,28 @@ const speaker = speakerActor.core
 const chat = chatActor.core
 const listener = listenerActor.core
 
+$effect(() => {
+	query.intent = intents.selectedId
+	chat.use(intents.selectedId)
+})
+
+$effect(() => {
+	screenContext.surface = shell.tab
+	if (shell.tab === 'intents') {
+		screenContext.title = shell.inboxOpen
+			? 'Upload inbox'
+			: (intents.items.find((i) => i.id === intents.selectedId)?.title ?? 'Current Intent')
+		screenContext.selection = shell.inboxOpen
+			? { intake: 'quarantined', contentAvailable: false }
+			: { intentId: intents.selectedId }
+	}
+})
+
+// A case proposed from ordinary chat has a visible review destination too.
+$effect(() => {
+	if ($studioCaseRequest) shell.tab = 'skills'
+})
+
 interface ArtifactUploadProgress {
 	uploadId: string
 	phase: 'preparing' | 'uploading' | 'finalizing'
@@ -55,6 +81,12 @@ interface ArtifactUploadProgress {
 }
 
 let fileHovering = $state(false)
+let fileDropIntent = $state<string | undefined>()
+function dropIntentAt(point: { x: number; y: number }): string | undefined {
+	return document
+		.elementFromPoint(point.x / window.devicePixelRatio, point.y / window.devicePixelRatio)
+		?.closest<HTMLElement>('[data-upload-intent-id]')?.dataset.uploadIntentId
+}
 
 /**
  * Which surface fills the middle of the screen — driven by the left rail
@@ -111,7 +143,11 @@ async function checkE2eSource() {
 			?.artifacts.find((a) => a.typeKey === 'core.file')
 		if (!source?.artifactId) throw Error('No imported source selected')
 		const scope = await invoke<string>('artifact_search_scope')
-		const text = await readStoredSource(source.artifactId, (command, args) => invoke(command, args))
+		const text = await readStoredSource(
+			source.artifactId,
+			(command, args) => invoke(command, args),
+			chat.artifactInfo(source.artifactId)?.processing
+		)
 		let bounded = false
 		try {
 			await invoke('artifact_content_get', { artifactId: source.artifactId, maxBytes: 1 })
@@ -221,7 +257,9 @@ async function injectE2eSecondSpeaker() {
  * to the logo — one tap to come back. Writing still works while ended; the
  * reply is then read, not heard.
  */
-let conversing = $state(isTauri() && import.meta.env.VITE_AVEN_E2E !== 'true')
+// The shared button is always available; opening a workspace does not consent
+// to microphone capture or downloading/loading speech models.
+let conversing = $state(false)
 
 // The mock enters the conversation without opening anything.
 $effect.pre(() => {
@@ -241,51 +279,101 @@ onMount(() => {
 	return () => listener.stop()
 })
 
+// Compiled only into the disposable E2E build. Starts AFTER speech recognition;
+// the same listener envelope, agent, tools and persistence run normally.
+onMount(() => {
+	if (import.meta.env.VITE_AVEN_E2E !== 'true' || !e2eFixture) return
+	// Test observation and the production file-drop boundary work in a compiled
+	// bundle too; native tests must not depend on Vite's source-module loader.
+	Reflect.set(window, '__avenWorkday', {
+		intentWorkSession,
+		classifyInput: routeInput,
+		pendingInputs: () => JSON.parse(JSON.stringify(chat.input.items)),
+		assessActionClaim: claimsUnexecutedAction,
+		thread: (id: string) =>
+			JSON.parse(
+				JSON.stringify({
+					status: chat.status(id),
+					turns: chat.thread(id).turns,
+					failure: chat.thread(id).failure,
+					request: chat.thread(id).lastRequest,
+					diagnostics: chat.thread(id).diagnostics
+				})
+			),
+		interruptNarration: () => bus.emit('interrupted()', {}, 'listener'),
+		request: () => JSON.parse(JSON.stringify(chat.lastRequest)),
+		catalog: (data: Record<string, unknown> = {}) => authorizedStudioRequest('catalog', data),
+		intents: () =>
+			JSON.parse(
+				JSON.stringify({
+					selectedId: intents.selectedId,
+					session: chat.session,
+					loading: persistentIntentPages.loading,
+					items: intents.items
+				})
+			),
+		state: () =>
+			JSON.parse(
+				JSON.stringify({
+					streaming: chat.streaming,
+					routing: chat.routing,
+					failure: chat.failure,
+					turns: chat.turns,
+					calls: chat.activeToolCalls,
+					diagnostics: chat.diagnostics,
+					actors: bus.actors().map((a) => ({
+						name: a.manifest.id,
+						pending: a.pending,
+						failures: a.failures,
+						error: a.lastError
+					}))
+				})
+			),
+		processing: (artifactId: string) =>
+			JSON.parse(JSON.stringify(chat.artifactInfo(artifactId)?.processing ?? null)),
+		ingest: ingestFile,
+		drop: ingestDroppedFiles,
+		openStudio: () => {
+			shell.tab = 'skills'
+		}
+	})
+	const accepted = (event: Event) => {
+		const text = (event as CustomEvent<{ text: string }>).detail?.text
+		if (typeof text !== 'string' || !text.trim() || text.length > 4000) return
+		composer.reveal()
+		void bus.emit('utterance(T)', { text }, 'listener')
+	}
+	window.addEventListener('aven-e2e-accepted-transcript', accepted)
+	return () => {
+		window.removeEventListener('aven-e2e-accepted-transcript', accepted)
+		Reflect.deleteProperty(window, '__avenWorkday')
+	}
+})
+
 onMount(() => {
 	if (!isTauri()) return
 	let disposed = false
 	let stopDrop: (() => void) | undefined
 	let stopProgress: (() => void) | undefined
-	let contributionPersistence = Promise.resolve()
 	const webview = getCurrentWebview()
-	void loadPersistentIntents().catch((error) => {
+	const ready = loadPersistentIntents()
+	void ready.catch((error) => {
 		if (!disposed) chat.failure = `Could not load persistent intents: ${String(error)}`
 	})
-	chat.onExchange = (session, user, assistant) => {
-		if (!intents.items.find((intent) => intent.id === session)?.persistent) return
-		// Exchange callbacks can overlap when a barge-in aborts one response and
-		// immediately submits the final utterance. Preserve the chat's settled
-		// order at the Intent boundary instead of racing two append pairs.
-		contributionPersistence = contributionPersistence
-			.then(async () => {
-				for (const turn of [user, assistant]) {
-					if (turn.content === '') continue
-					await invoke('intent_append_contribution', {
-						intentId: session,
-						contribution: {
-							id: turn.id,
-							contributorKind: turn.role === 'user' ? 'human' : 'agent',
-							kind: 'message',
-							text: turn.content,
-							payload: anonymousSpeakerPayload(turn.anonymousSpeaker)
-						}
-					})
-				}
-				await refreshIntent(session)
-			})
-			.catch((error) => {
-				chat.failure = `Could not persist the conversation: ${String(error)}`
-			})
-	}
+	installConversationPersistence(ready)
 
 	void webview
 		.onDragDropEvent(({ payload }) => {
 			if (payload.type === 'enter' || payload.type === 'over') {
 				fileHovering = true
+				fileDropIntent = dropIntentAt(payload.position)
 				return
 			}
 			fileHovering = false
-			if (payload.type === 'drop') void ingestDroppedFiles(payload.paths)
+			if (payload.type === 'drop') {
+				void ingestDroppedFiles(payload.paths, dropIntentAt(payload.position))
+			}
+			fileDropIntent = undefined
 		})
 		.then((unlisten) => {
 			if (disposed) unlisten()
@@ -311,19 +399,16 @@ onMount(() => {
 		disposed = true
 		stopDrop?.()
 		stopProgress?.()
-		chat.onExchange = null
 	}
 })
 
 /**
- * Leaving the conversation stops everything that could still make noise or
- * listen: the reply stream, the work lane, the voice, the ears. Coming back
- * reopens the ears — and only then, so the mic is never live while the
- * conversation is off.
+ * Closing voice stops listening and narration, not work in any Intent.
+ * Opening it again resumes listening; responses remain in their histories.
  */
 function endConversation() {
 	conversing = false
-	chat.stop()
+	chat.silence()
 	speaker.silence()
 	// Ended is silent: a reply to something typed while off is read, not heard.
 	speaker.muted = true
@@ -343,35 +428,12 @@ function dismissError() {
 	listener.failure = null
 }
 
-// A NEW turn — typed or spoken — brings the intent's stream into view,
-// where the reply and anything it renders appear. Only a new one, and only
-// the turn count is tracked.
-//
-// Seeded from the CURRENT count, not from zero. `chat` is a singleton that
-// outlives this page, but this counter is component-local: a trip to settings
-// unmounts the page and reset it, so coming back looked like every existing
-// turn had just arrived and the effect yanked the rail to intents — stealing
-// whichever surface had just been picked. Starting level with the singleton
-// means only turns that arrive WHILE the page is mounted count as new.
-let turnsSeen = chat.turns.length
-$effect(() => {
-	const n = chat.turns.length
-	if (n > turnsSeen) {
-		turnsSeen = n
-		untrack(() => {
-			shell.tab = 'intents'
-			shell.detail = true
-		})
-	}
-})
+// Only explicit input reveals history. Background replies never open a popup.
+chat.onSilence = () => speaker.silence()
 
 /**
- * One state for the whole conversation, instead of one per component.
- *
- * The pieces each know their own status, but what you actually want to see is
- * whose turn it is — and the order matters: speaking wins over thinking because
- * the reply is still streaming while the first sentence is already being read
- * out, and hearing wins over everything because interrupting is allowed.
+ * The orb represents listening and narration only. Each Intent owns its work
+ * status, so an active agent never prevents entering another message.
  */
 const phase = $derived.by(() => {
 	if (mockPhase !== null && conversing) return { key: mockPhase, label: MOCK_PHASES[mockPhase] }
@@ -397,7 +459,6 @@ const phase = $derived.by(() => {
 	// tap, and one tap fixes it for the rest of the session.
 	if (speaker.output === 'suspended') return { key: 'blocked', label: 'Enable audio' }
 	if (speaker.speaking) return { key: 'speaking', label: 'Speaking' }
-	if (chat.streaming) return { key: 'thinking', label: 'Thinking' }
 	if (listener.status === 'listening') return { key: 'idle', label: 'Ready' }
 	return { key: 'text', label: 'Text only' }
 })
@@ -480,9 +541,7 @@ const TOLD = new Set(['loading', 'starting', 'blocked', 'denied', 'error'])
 
 /** The orb acts only where the phase offers an action: interrupting, or
  * waking the audio device. Everywhere else it is a status, not a button. */
-const orbActs = $derived(
-	mockPhase !== null || phase.key === 'blocked' || chat.streaming || speaker.speaking
-)
+const orbActs = $derived(mockPhase !== null || phase.key === 'blocked' || speaker.speaking)
 
 function onOrb() {
 	// Dev mock: every tap walks to the next phase, so all the orb's faces can
@@ -499,8 +558,7 @@ function onOrb() {
 	}
 	// Stops the reply stream and the voice; the ears stay open, because
 	// interrupting is allowed — that is what the orb is for while it talks.
-	chat.stop()
-	speaker.silence()
+	chat.silence()
 }
 
 /**
@@ -515,10 +573,7 @@ let spoken = ''
 $effect(() => {
 	const p = listener.partial
 	untrack(() => {
-		if (p !== '') {
-			shell.tab = 'intents'
-			shell.detail = true
-		}
+		if (p !== '') composer.reveal()
 		const d = composer.draft
 		const base = spoken !== '' && d.endsWith(spoken) ? d.slice(0, -spoken.length) : d
 		composer.draft = p === '' ? base : base + p
@@ -541,8 +596,6 @@ const DOCK_INSET = 8
 
 /** Bring the composer up, seeded with the keystroke that asked for it. */
 function focusComposer(seed = '') {
-	shell.tab = 'intents'
-	shell.detail = true
 	composer.focus(seed)
 }
 
@@ -551,13 +604,16 @@ function focusComposer(seed = '') {
  * conversation with the composer focused, seeded with that very character.
  */
 function onGlobalKeydown(event: KeyboardEvent) {
-	if (event.metaKey || event.ctrlKey || event.altKey) return
+	if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey)
+		return
 	if (event.key.length !== 1) return
 	const el = document.activeElement
 	if (
 		el instanceof HTMLInputElement ||
 		el instanceof HTMLTextAreaElement ||
-		(el instanceof HTMLElement && el.isContentEditable)
+		(el instanceof HTMLElement &&
+			(el.isContentEditable ||
+				el.closest('button, a, select, summary, [role="button"], [role="combobox"], dialog[open]')))
 	)
 		return
 	event.preventDefault()
@@ -566,6 +622,10 @@ function onGlobalKeydown(event: KeyboardEvent) {
 </script>
 
 <svelte:window onkeydown={onGlobalKeydown} />
+<WorkspaceChat
+	voiceActive={conversing}
+	onvoice={() => conversing ? endConversation() : beginConversation()}
+/>
 
 {#if e2eFixture}
 	<div class="fixed right-2 bottom-2 z-[200] flex gap-2">
@@ -635,12 +695,19 @@ function onGlobalKeydown(event: KeyboardEvent) {
 >
 	{#if fileHovering}
 		<div
-			class="pointer-events-none fixed inset-2 z-[80] flex items-center justify-center rounded-3xl border-2 border-primary border-dashed bg-surface-raised/25 text-primary shadow-xl backdrop-blur-sm"
+			class="pointer-events-none fixed inset-2 z-[80] flex items-end justify-center rounded-3xl border-2 border-primary border-dashed p-8 text-foreground"
 		>
-			<div class="flex flex-col items-center gap-3">
-				<span class="text-4xl" aria-hidden="true">⇩</span>
-				<p class="font-medium text-lg">Drop one file to upload it</p>
-				<p class="text-sm opacity-60">Any format · up to 128 MiB</p>
+			<div
+				class="max-w-lg rounded-2xl border border-primary/25 bg-surface-raised p-5 text-center shadow-xl"
+			>
+				<p class="font-medium text-lg">
+					⇩
+					{fileDropIntent ? `Zu „${intents.items.find(i=>i.id===fileDropIntent)?.title ?? 'Intent'}“` : 'Im Posteingang sammeln'}
+				</p>
+				<p class="mt-2 text-sm text-foreground/65">
+					{fileDropIntent ? 'Wird diesem Intent zugeordnet und verarbeitet.' : 'Bleibt ungeprüft, bis du die Dateien zuordnest.'}
+				</p>
+				<p class="mt-2 text-xs text-foreground/50">Bis zu 50 Dateien · je bis zu 128 MiB</p>
 			</div>
 		</div>
 	{/if}
@@ -673,7 +740,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 	     so it renders inline in the modal's chat band. -->
 	<div
 		bind:clientHeight={dockH}
-		class="pointer-events-none absolute right-2 bottom-2 left-2 z-50 flex flex-col gap-1.5 pb-[env(safe-area-inset-bottom)]"
+		class="pointer-events-none absolute right-2 bottom-2 left-2 z-50 flex flex-col gap-1.5 pt-10 pb-[env(safe-area-inset-bottom)] lg:pt-0"
 	>
 		<!-- Errors surface HERE, above the voice area — the same universal band as
 	     the human gate, so a failed reply (a dead lane, an unset key) is visible
@@ -685,7 +752,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 			>
 				<span class="shrink-0 pt-0.5 font-mono text-sm">✗</span>
 				<p class="min-w-0 flex-1 text-sm leading-snug">
-					{chat.failure ?? speaker.failure ?? listener.failure}
+					{chat.failure ?? (speaker.failure ? `Voice playback: ${speaker.failure}. You can still write.` : `Microphone: ${listener.failure}. You can still write.`)}
 				</p>
 				<button
 					type="button"
@@ -783,10 +850,10 @@ function onGlobalKeydown(event: KeyboardEvent) {
 					{#if phase.key !== 'off'}
 						<button
 							type="button"
-							disabled
-							title="Hochladen — bald"
-							aria-label="Hochladen"
-							class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 opacity-60 transition-colors"
+							onclick={() => focusComposer()}
+							title="Open conversation"
+							aria-label="Open conversation"
+							class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 transition-colors"
 						>
 							<!-- lucide:upload -->
 							<svg
@@ -798,9 +865,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 								stroke-linecap="round"
 								stroke-linejoin="round"
 							>
-								<path d="M12 3v12" />
-								<path d="m17 8-5-5-5 5" />
-								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+								<path d="M21 11a8 8 0 0 1-8 8H7l-4 3V11a9 9 0 0 1 18 0Z" />
 							</svg>
 						</button>
 					{/if}
@@ -810,7 +875,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 				     else is offered here, because nothing else applies. -->
 						<button
 							type="button"
-							onclick={beginConversation}
+							onclick={() => focusComposer()}
 							title="Start conversation"
 							aria-label="Start conversation"
 							class="group relative block size-14 overflow-visible rounded-full"

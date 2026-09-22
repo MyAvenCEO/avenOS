@@ -30,6 +30,16 @@ const evidence: ArtifactEvidence[] = [
 describe('artifact viewer helpers', () => {
 	test('formats stored minor currency units', () => {
 		expect(formatMoney(12345, 'EUR')).toMatch(/123,45/)
+		// Invented amount above the safe-integer boundary; never a customer amount.
+		expect(formatMoney('13092687039092598', 'EUR')).toContain('130.926.870.390.925,98')
+		expect(formatMoney('-1', 'EUR')).toContain('-0,01')
+		expect(formatMoney('12345', 'JPY')).toContain('12.345')
+		expect(formatMoney('12345', 'JPY')).not.toContain(',')
+		expect(formatMoney('12345', 'KWD')).toContain('12,345')
+		expect(formatMoney('12345', null)).toBe('12345 minor units · currency unknown')
+		expect(formatMoney('12345', 'ZZZ')).toBe('12345 minor units · currency ZZZ not recognized')
+		expect(formatMoney(null, 'EUR')).toBe('—')
+		expect(formatMoney(Number.MAX_SAFE_INTEGER + 1, 'EUR')).toBe('—')
 	})
 
 	test('chooses the most specific evidence pointer and supports row evidence', () => {

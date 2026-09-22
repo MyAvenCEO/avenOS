@@ -17,6 +17,8 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { bus } from '$lib/actors/bus'
 import { singleton } from '$lib/actors/singleton'
+import { customerWork } from './customer-work.svelte'
+import { shouldSuggestReconciliation } from './reconciliation-review'
 
 function gateway(publications: ClientArtifactGateway): ReconciliationGateway {
 	return {
@@ -70,7 +72,6 @@ class ClientReconciliation {
 	#reviews = new Map<string, ReconciliationReview>()
 	#result?: ReconciliationResult
 	#environmentEpoch = 0
-	#active = 0
 	#environmentTransition = false
 	readonly actor: Actor
 
@@ -114,7 +115,7 @@ class ClientReconciliation {
 					if (!this.#execute) throw new Error('Import a document to initialize reconciliation.')
 					if (this.#environmentTransition) throw new Error('The customer environment is changing.')
 					const epoch = this.#environmentEpoch
-					this.#active++
+					customerWork.reconciliations++
 					let result: ReconciliationResult
 					try {
 						result = await this.#execute(
@@ -123,7 +124,7 @@ class ClientReconciliation {
 								: undefined
 						)
 					} finally {
-						this.#active--
+						customerWork.reconciliations--
 					}
 					if (epoch !== this.#environmentEpoch)
 						throw new Error('The customer environment changed during reconciliation.')
@@ -158,7 +159,7 @@ class ClientReconciliation {
 	}
 
 	suspendForEnvironmentSwitch(): boolean {
-		if (this.#active > 0) return false
+		if (customerWork.reconciliations > 0) return false
 		this.#environmentTransition = true
 		return true
 	}
@@ -196,7 +197,7 @@ class ClientReconciliation {
 			.catch(() => undefined)
 			.then(() => execute())
 		this.#running = pending
-		this.#active++
+		customerWork.reconciliations++
 		try {
 			const result = await pending
 			if (epoch !== this.#environmentEpoch)
@@ -204,13 +205,17 @@ class ClientReconciliation {
 			this.#remember(result)
 			const shown = new Set<string>()
 			for (const review of result.reviews)
-				if (bus.onHold && !shown.has(review.openItemArtifactId)) {
+				if (
+					bus.onHold &&
+					shouldSuggestReconciliation(review.candidate) &&
+					!shown.has(review.openItemArtifactId)
+				) {
 					shown.add(review.openItemArtifactId)
 					this.#hold(review)
 				}
 			return result
 		} finally {
-			this.#active--
+			customerWork.reconciliations--
 			if (this.#running === pending) this.#running = undefined
 		}
 	}
@@ -229,6 +234,7 @@ class ClientReconciliation {
 				id: `reconciliation:${review.openItemArtifactId}:${review.transactionArtifactId}`,
 				actor: 'reconciliation',
 				method: 'reconciliation_review',
+				scope: 'workspace',
 				label: 'Confirm invoice-to-booking relationship',
 				detail: JSON.stringify({
 					candidateArtifactId: review.candidateArtifactId,
@@ -252,7 +258,8 @@ class ClientReconciliation {
 					const next = this.#result?.reviews.find(
 						(item) =>
 							item.openItemArtifactId === review.openItemArtifactId &&
-							item.candidate.rank > review.candidate.rank
+							item.candidate.rank > review.candidate.rank &&
+							shouldSuggestReconciliation(item.candidate)
 					)
 					if (next) this.#hold(next)
 				}

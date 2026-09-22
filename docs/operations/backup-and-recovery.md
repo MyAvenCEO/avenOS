@@ -86,6 +86,53 @@ and reconciles database roles before admitting application traffic. Actor execut
 paused where external effects need reconciliation. The separate maintenance runbooks own
 provider setup, workflow dispatch and live infrastructure drills.
 
+## Update PostgreSQL across a major version
+
+A PostgreSQL major-version change is a restore operation, not an image restart. The
+database image deliberately refuses a data directory created by another major version.
+Never point PostgreSQL 18 at a PostgreSQL 17 cluster and never remove that guard to make
+the container start. PostgreSQL does not support that storage layout as an in-place
+upgrade.
+
+Use the normal encrypted logical-backup and recovery path for a hosted installation. A
+local developer stack without a current encrypted snapshot may use the same sequence
+with private local dumps, but that is an operator procedure rather than an automatic
+`local:up` migration:
+
+1. Stop every application process that can write to either database cluster. Record the
+   old image digest, major version, volume names and current database inventory.
+2. Start the old major-version image against the old volumes. Create a verified logical
+   dump of every database, roles, owners and ACLs. Store it in an owner-only location and
+   make an immutable copy of the old volumes before changing active volume names.
+3. Initialize fresh empty volumes with the new major-version image. Do not reuse or
+   rewrite the old cluster directory.
+4. Restore roles and databases with errors treated as fatal. A cluster-wide dump can
+   contain commands for PostgreSQL's built-in `postgres` role; the restore procedure
+   must handle that role explicitly instead of dropping the role that owns the new
+   cluster. Do not broadly ignore restore errors.
+5. Run the current role initialization and migrations. Reset only databases that are
+   explicitly documented as disposable test fixtures, such as the isolated Artifact
+   Store conformance database. A type-catalog mismatch in a customer database is not
+   permission to delete it.
+6. Verify the new server major version, identity account and passkey counts, platform
+   environment inventory, every customer database, component readiness and application
+   health. Inspect known recent Intent titles, contribution counts and timestamps without
+   copying their contents into test evidence. Then run the customer-runtime and deployment
+   proofs against the restored composition.
+7. Open traffic only after those checks pass. Keep the old read-only volumes and logical
+   dumps until the operator accepts the restored application. Remove them deliberately;
+   they contain the same sensitive data as the live databases.
+
+Stop at the first failed dump, restore, migration or inventory comparison. Preserve both
+copies and investigate the exact database. Starting only the services that happened to
+migrate successfully is not an accepted upgrade.
+
+The PostgreSQL 17-to-18 local recovery exercise validated the refusal guard and this
+sequence with restored identity, platform and customer data. It also exposed that a
+disposable conformance database can carry an intentionally obsolete type catalog while
+customer databases remain valid. That distinction must be proven from the database's
+declared purpose before any reset.
+
 ## Continuous proof
 
 Every successful target deployment also restores its latest real encrypted snapshot
@@ -215,7 +262,10 @@ bun run customer:move -- /private/movement.json status OPERATION_UUID
 `begin` immediately pauses that customer's admission. `resume` verifies source ownership,
 waits up to 60 seconds for running Actors, blocks on uncertain executions, closes source
 logins, restores an empty destination, and applies the destination checkout's component
-catalog. Restored Actors remain paused until placement is published; a retry finishes
+implementations for the exact ready component set recorded on that customer. Merely
+advertising an optional component in the destination catalog does not install it or grant
+its database roles during movement; an installed optional component is preserved and must
+be present in the destination catalog. Restored Actors remain paused until placement is published; a retry finishes
 that activation step before observing the new runtime. Repeating the same operation resumes its durable phase. A failure preserves the
 hold and files. An existing destination without the exact operation/dump marker is
 refused; do not delete it to silence the error. Database creation first uses a closed, operation-specific staging database. A retry
@@ -337,6 +387,33 @@ the operator must reconcile those effects before resuming execution. Successful 
 and image restoration alone does not establish that reconciliation or a fresh-cloud-host
 recovery drill has passed.
 
+## Connection credentials and operator keys
+
+The optional credential component stores encrypted envelopes, binding metadata,
+versions and use claims in the customer database. A database dump does **not** contain
+the private wrapping keys. Restoring the database without the matching private
+unsealing ring cannot recover the stored passwords or tokens. Retain the original
+private local composition separately in encrypted operator-controlled storage; never
+commit it, include it in diagnostics, or regenerate it during recovery.
+
+The opt-in local generator's bind-mounted key files are not automatically collected
+by the hosted release archive. Hosted key escrow and release packaging for this
+optional composition remain a deployment gate. Do not infer coverage from a successful
+customer database backup. Preserve old decrypt-only keys until every retained envelope
+and backup that needs them has an explicit retention decision.
+
+The isolated credential backup proof creates a real PostgreSQL dump, checks that it
+contains ciphertext but no supplied secret or private key, restores a separate database,
+and proves missing-key rejection and recovery with a separately retained key file.
+It also checks customer-context binding and keeps restored execution paused. This is
+not a real off-host escrow or disaster-recovery drill. See the
+[test commands](build-and-test.md#isolated-native-connection-qualification).
+
+After recovery, keep external execution fenced until active/uncertain uses have been
+reconciled. Database restoration, a service restart or expiration of an authorization
+does not prove that a previous network operation stopped. There is no automatic
+retry of an uncertain protected request.
+
 ## Interrupted document execution
 
 Document runs commit a running lease before execution and release pooled database
@@ -344,6 +421,17 @@ connections while processing. Movement pauses admission, crosses the claim barri
 and waits within its existing 60-second budget for live execution markers to clear.
 A missing or expired lease with an unsettled marker stops movement for reconciliation;
 lease expiry alone does not establish that external work stopped.
+
+The optional credentials component also records a distinct execution marker per
+protected use. It remains through socket shutdown and result publication. The private
+host settles only a use whose first claim it won; duplicate requests cannot release
+another handler's marker. Connection markers currently stop movement for reconciliation
+instead of entering the Actor-only drain loop. Retry movement after a live host has
+settled its use. If that host crashed, establish that its process and sockets are gone
+and inspect retained claims and publications before operator reconciliation. Do not
+clear markers merely because a token expired. There is not yet a supported automated
+connection-reconciliation command; leave the environment fenced when shutdown cannot
+be proved. This path is not enabled in the customer stack yet.
 
 The runner's first authorized request after restart starts that customer's background
 recovery loop. Accepted work is queued; expired running work becomes

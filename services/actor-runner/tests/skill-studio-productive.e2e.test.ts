@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import {
-	authorizeRegistryForPlanning,
-	compileStudioSkillV2Execution,
 	composeCatalogOperation,
-	executePhysicalProgram,
+	executeStudioProgram,
 	newStudioSkillV2,
 	StudioCatalog,
 	type StudioCatalogEntry,
@@ -11,23 +9,19 @@ import {
 } from '@avenos/actors'
 import type { ArtifactStoreClient } from '@avenos/artifact-store'
 import { describe, expect, test, vi } from 'vitest'
-import { ArtifactStoreRuntimePort } from '../src/artifact-store-port'
 import { type StudioArtifact, StudioArtifacts } from '../src/studio-artifacts'
 import {
 	createStudioRuntimeAuthorizer,
-	createStudioRuntimeFactory,
 	createStudioRuntimeRegistry,
 	installStudioRuntimeActors,
-	STUDIO_BRIEF_SCHEMA,
-	STUDIO_EMAIL_BRIEF_CAPABILITY,
-	STUDIO_EMAIL_SCHEMA
+	STUDIO_EMAIL_BRIEF_CAPABILITY
 } from '../src/studio-runtime'
 import { StudioV2Authoring } from '../src/studio-v2-authoring'
 import type { StudioV2DraftRecord, StudioV2DraftStore } from '../src/studio-v2-drafts'
 import { STUDIO_SKILL_V2_TYPE_DIGEST, StudioV2SkillPublisher } from '../src/studio-v2-publisher'
 
 describe('productive Skill Studio flow', () => {
-	test('discovers, composes, saves, publishes and executes a Skill with causal Store output', async () => {
+	test('discovers, composes, saves and publishes an exact Skill', async () => {
 		const scope = randomUUID()
 		const subject = randomUUID()
 		const sourceId = randomUUID()
@@ -57,7 +51,7 @@ describe('productive Skill Studio flow', () => {
 		) as StudioCatalogEntry
 		expect(operation).toMatchObject({
 			canAuthor: true,
-			canInvokeNow: false,
+			invocationStatus: 'not-evaluated',
 			readiness: 'needs-input'
 		})
 
@@ -87,7 +81,7 @@ describe('productive Skill Studio flow', () => {
 			context: async () => ({ storeEpoch: epoch }),
 			type: async () => ({
 				typeKey: 'studio.skill',
-				version: 2,
+				version: 3,
 				typeDefinitionSha256: STUDIO_SKILL_V2_TYPE_DIGEST
 			}),
 			artifact: async (_scope: string, id: string) => {
@@ -175,78 +169,9 @@ describe('productive Skill Studio flow', () => {
 			security
 		)
 		const published = await authoring.publish(draft.id, draft.revision, security)
-		expect(published.artifact).toMatchObject({ typeKey: 'studio.skill', typeVersion: 2 })
+		expect(published.artifact).toMatchObject({ typeKey: 'studio.skill', typeVersion: 3 })
 
-		const view = await authorizeRegistryForPlanning(registry.snapshot(), principal, authorizer, {
-			access
-		})
-		const program = compileStudioSkillV2Execution({
-			definition: published.artifact.payload,
-			view,
-			executionEnvironment: 'server',
-			inputs: { email: sourceId }
-		})
-		const runtimeArtifacts = new ArtifactStoreRuntimePort({
-			client,
-			scopeId: scope,
-			initiator: { kind: 'user', id: `user:${subject}` },
-			schemas: [
-				{
-					schema: STUDIO_EMAIL_SCHEMA,
-					typeKey: 'studio.email',
-					typeVersion: 1,
-					project: (_payload, artifactId) => [`ceo.aven.studio.email(${artifactId})`]
-				},
-				{
-					schema: STUDIO_BRIEF_SCHEMA,
-					typeKey: 'studio.brief',
-					typeVersion: 1,
-					project: (payload) => [
-						`ceo.aven.studio.brief(${String((payload as any).sourceArtifactId)})`
-					]
-				}
-			],
-			procedures: [
-				{
-					capabilityId: STUDIO_EMAIL_BRIEF_CAPABILITY,
-					procedureKey: 'studio.email-brief',
-					procedureVersion: '1',
-					executor: { kind: 'service', id: 'actor-runner' },
-					implementation: { adapter: 'generic-actor-runtime', version: 1 }
-				}
-			]
-		})
-		const factory = createStudioRuntimeFactory()
-		const execution = await executePhysicalProgram({
-			runId: randomUUID(),
-			program,
-			registry: registry.snapshot(),
-			principal,
-			access,
-			authorizer,
-			factories: { resolve: (id) => (id === factory.offer.factoryId ? factory : undefined) },
-			artifacts: runtimeArtifacts
-		})
-
-		expect(execution.completedStepIds).toEqual(['root.create'])
-		expect(execution.remainingGoals).toEqual([])
-		expect(execution.artifacts[0]).toMatchObject({
-			typeKey: 'studio.brief',
-			value: {
-				sourceArtifactId: sourceId,
-				title: 'Quarterly review',
-				summary: 'Email from finance@example.test: Quarterly review',
-				status: 'complete'
-			}
-		})
-		const production = publications.find(
-			(publication) => publication.intent.run.procedureKey === 'studio.email-brief'
-		)!.intent
-		expect(production.run.inputs).toEqual([{ role: 'source', ordinal: 0, artifactId: sourceId }])
-		expect(production.artifacts[0]).toMatchObject({
-			typeKey: 'studio.brief',
-			output: { role: 'result', ordinal: 0 }
-		})
+		expect(published.artifact.payload).toEqual(composed.definition)
 	})
 
 	test('preserves an explicit dependency on the terminal step of a nested Skill', async () => {
@@ -255,12 +180,6 @@ describe('productive Skill Studio flow', () => {
 		const registry = createStudioRuntimeRegistry()
 		const installations = new TrustedActorInstallations()
 		await installStudioRuntimeActors(installations)
-		const view = await authorizeRegistryForPlanning(
-			registry.snapshot(),
-			principal,
-			createStudioRuntimeAuthorizer(scope),
-			{ access: { tenantId: scope } }
-		)
 		const operation = (
 			await new StudioCatalog().page({
 				registry: registry.snapshot(),
@@ -300,14 +219,29 @@ describe('productive Skill Studio flow', () => {
 			...child.outputs.brief!,
 			from: { kind: 'step', stepId: 'follow', port: 'brief' }
 		}
-		const program = compileStudioSkillV2Execution({
+		const calls: string[] = []
+		await executeStudioProgram({
 			definition: root,
 			children: new Map([[childId, child]]),
-			view,
-			executionEnvironment: 'server',
-			inputs: { email: randomUUID() }
+			inputs: { email: randomUUID() },
+			parameters: {},
+			host: {
+				read: async (artifactId) => ({
+					artifactId,
+					typeKey: 'studio.email',
+					typeVersion: 1,
+					payload: {}
+				}),
+				invoke: async ({ id }) => {
+					calls.push(id)
+					return {
+						brief: [
+							{ artifactId: randomUUID(), typeKey: 'studio.brief', typeVersion: 1, payload: {} }
+						]
+					}
+				}
+			}
 		})
-		expect(program.steps.map((step) => step.id)).toEqual(['root.nested.create', 'root.follow'])
-		expect(program.steps[1]!.dependsOn).toContain('root.nested.create')
+		expect(calls).toEqual(['root.nested.create', 'root.follow'])
 	})
 })

@@ -33,7 +33,9 @@ def fixture(root):
             {'segment': 'artifacts', 'baseUrl': 'http://artifact-store:8087',
              'bearerToken': values['ARTIFACT_STORE_SERVICE_TOKEN'], 'targetPrefix': '/v1'},
             {'segment': 'intents', 'baseUrl': 'http://intent-service:3010',
-             'bearerToken': values['INTENT_SERVICE_TOKEN'], 'targetPrefix': '/api/intents'}
+             'bearerToken': values['INTENT_SERVICE_TOKEN'], 'targetPrefix': '/api/intents'},
+            {'segment': 'productivity', 'baseUrl': 'http://intent-service:3010',
+             'bearerToken': values['INTENT_SERVICE_TOKEN'], 'targetPrefix': '/api/productivity'}
         ])
     })
     (bundle / '.env').write_text('\n'.join(f"{key}='{value}'" for key, value in values.items()))
@@ -89,6 +91,8 @@ def main():
         assert artifact_url.hostname == 'green-database'
         assert artifact_url.password == services['green-database']['environment']['ARTIFACT_STORE_PROVISIONER_DB_PASSWORD']
         assert services['green-intent-service']['environment']['INTENT_DATABASE_CREDENTIAL_ROOT'] == provisioner['INTENTS_API_DB_CREDENTIAL_ROOT']
+        assert services['green-intent-service']['environment']['PRODUCTIVITY_DATABASE_CREDENTIAL_ROOT'] == provisioner['PRODUCTIVITY_API_DB_CREDENTIAL_ROOT']
+        assert provisioner['PRODUCTIVITY_API_DB_CREDENTIAL_ROOT'] != original['PRODUCTIVITY_DATABASE_CREDENTIAL_ROOT']
         assert services['green-actor-runner']['environment']['ARTIFACT_STORE_BASE_URL'] == 'http://green-artifact-store:8087'
         gateway = urlsplit(services['green-actor-runner']['environment']['LLM_GATEWAY_BASE_URL'])
         assert gateway == ('http', 'api:3000', '/internal/v1/llm', '', '')
@@ -103,12 +107,14 @@ def main():
             assert not services[name].get('environment')
             assert services[name]['user'] == '65532:65532'
         assert services['green-backup']['environment']['RESTIC_PASSWORD'] == original['BACKUP_RESTIC_PASSWORD']
-        assert len({provisioner[key] for key in ('INTENTS_API_DB_CREDENTIAL_ROOT', 'ACTOR_API_DB_CREDENTIAL_ROOT',
-                                                'ACTOR_WORKER_DB_CREDENTIAL_ROOT', 'ARTIFACT_API_DB_CREDENTIAL_ROOT')}) == 4
+        assert len({provisioner[key] for key in ('INTENTS_API_DB_CREDENTIAL_ROOT', 'PRODUCTIVITY_API_DB_CREDENTIAL_ROOT', 'ACTOR_API_DB_CREDENTIAL_ROOT',
+                                                'ACTOR_WORKER_DB_CREDENTIAL_ROOT', 'ARTIFACT_API_DB_CREDENTIAL_ROOT')}) == 5
         assert services['green-database']['volumes'][0]['source'] == str(root / 'data/green/postgres')
         assert services['green-database']['volumes'][0]['target'] == '/var/lib/postgresql'
         route = json.loads(outputs['route.json'])
         assert route['targets'][1]['baseUrl'] == 'http://green-intent-service:3010'
+        assert route['targets'][2]['baseUrl'] == 'http://green-intent-service:3010'
+        assert route['targets'][2]['bearerToken'] == services['green-intent-service']['environment']['INTENT_SERVICE_BEARER_TOKEN']
         assert route['artifactStoreBearerToken'] == services['green-artifact-store']['environment']['ARTIFACT_STORE_BEARER_TOKEN']
         movement = json.loads(outputs['movement-runtime.json'])
         assert '@127.0.0.1:15432/' in movement['recoveryDatabaseUrl']

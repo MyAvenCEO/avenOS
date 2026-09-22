@@ -15,6 +15,46 @@ const observedAt = '2026-08-24T12:00:00.000Z'
 const sha256 = '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'
 
 describe('artifact file coordinator', () => {
+	test.each([1, 2])(
+		'rejects obsolete inspection output version %s before contacting the Store',
+		async (typeVersion) => {
+			let requests = 0
+			const service = ArtifactFileService.fromConfig(
+				{
+					ARTIFACT_STORE_BASE_URL: 'http://artifact-store.test',
+					ARTIFACT_STORE_BEARER_TOKEN: 'service-token'
+				},
+				async () => {
+					requests++
+					throw Error('must not contact the Store')
+				}
+			)!
+			await expect(
+				service.publishClientRun({
+					userId: 'user-7',
+					databaseName: 'cust_acme',
+					scopeId,
+					publicationId,
+					procedureKey: 'client.inspect-file',
+					procedureVersion: 'client-v1',
+					inputs: [{ role: 'source', ordinal: 0, artifactId }],
+					parameters: {},
+					artifacts: [
+						{
+							localKey: 'inspection',
+							typeKey: 'core.file-inspection',
+							typeVersion,
+							payload: {},
+							output: { role: 'inspection', ordinal: 0 },
+							blob: { mediaType: 'application/json', base64: 'e30=' }
+						}
+					],
+					evidence: []
+				})
+			).rejects.toMatchObject({ status: 400, code: 'CLIENT_PROCEDURE_CONTRACT_INVALID' })
+			expect(requests).toBe(0)
+		}
+	)
 	test('streams bytes and publishes an authenticated core.file root', async () => {
 		let uploaded = ''
 		let published: Record<string, unknown> | undefined
@@ -164,7 +204,7 @@ describe('artifact file coordinator', () => {
 				{
 					localKey: 'text',
 					typeKey: 'docs.extracted-text',
-					typeVersion: 1,
+					typeVersion: 2,
 					payload: {
 						method: 'native',
 						language: 'und',
@@ -178,7 +218,7 @@ describe('artifact file coordinator', () => {
 				{
 					localKey: 'layout',
 					typeKey: 'docs.text-layout',
-					typeVersion: 1,
+					typeVersion: 2,
 					payload: {
 						coordinateSpace: 'normalized-millionths',
 						spans: [],
@@ -371,7 +411,7 @@ describe('artifact file coordinator', () => {
 				{
 					localKey: 'normalized-statement',
 					typeKey: 'banking.statement',
-					typeVersion: 1,
+					typeVersion: 2,
 					payload: { accountRef: 'iban:DE89' },
 					output: { role: 'statement', ordinal: 0 }
 				}
@@ -395,7 +435,7 @@ describe('artifact file coordinator', () => {
 				{
 					localKey: 'transaction-065',
 					typeKey: 'banking.transaction',
-					typeVersion: 1,
+					typeVersion: 2,
 					payload: { dedupKey: 'provider:tx-65', sourceOrdinal: 64 },
 					output: { role: 'transaction', ordinal: 0 }
 				}

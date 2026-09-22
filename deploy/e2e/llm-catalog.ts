@@ -1,4 +1,12 @@
 export function e2eModelCatalog(env: Record<string, string | undefined>) {
+	const liveChat = env.E2E_LIVE_CHAT === 'true'
+	if (
+		liveChat &&
+		(!env.TEST_DOCUMENT_PROVIDER_BASE_URL || !/qwen/i.test(env.TEST_DOCUMENT_PROVIDER_MODEL ?? ''))
+	)
+		throw Error(
+			'The live native journey requires an explicit real Qwen endpoint and model. No fixture fallback is permitted.'
+		)
 	const baseUrl = env.TEST_DOCUMENT_PROVIDER_BASE_URL
 	const model = env.TEST_DOCUMENT_PROVIDER_MODEL
 	if (Boolean(baseUrl) !== Boolean(model))
@@ -22,10 +30,10 @@ export function e2eModelCatalog(env: Record<string, string | undefined>) {
 		{
 			id: 'deepseek/deepseek-v4-flash-0731',
 			label: 'E2E Chat',
-			capabilities: ['text-generation', 'streaming', 'tool-calling'],
-			baseUrl: 'http://llm-mock:8090/v1',
-			upstreamModel: 'e2e-chat',
-			profile: 'generic-json',
+			capabilities: ['text-generation', 'streaming', 'tool-calling', 'structured-output'],
+			baseUrl: liveChat ? baseUrl : 'http://llm-mock:8090/v1',
+			upstreamModel: liveChat ? model : 'e2e-chat',
+			profile: liveChat ? profile : 'generic-json',
 			authMode: 'none'
 		},
 		{

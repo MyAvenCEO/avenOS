@@ -1,0 +1,22 @@
+{
+	"name": "@avenos/chat-engine",
+	"private": true,
+	"version": "26.8.28-next.9",
+	"type": "module",
+	"description": "One transport-neutral conversation engine for native and durable Actor execution.",
+	"exports": {
+		"./*": "./src/*.ts"
+	},
+	"dependencies": {
+		"@avenos/artifact-store": "workspace:*",
+		"@avenos/intents": "workspace:*",
+		"@avenos/llm-client": "workspace:*",
+		"@avenos/productivity": "workspace:*"
+	},
+	"scripts": {
+		"check": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"typescript": "^6.0.2"
+	}
+}

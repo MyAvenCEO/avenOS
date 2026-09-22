@@ -1,4 +1,5 @@
-export const DOCUMENT_PROCEDURES: Record<string, { actor: string; deterministic: boolean }> = {
+const procedures = {
+	'client.map-csv-statement': { actor: 'csv-statement-mapper', deterministic: true },
 	'client.merge-document-kinds': { actor: 'document-kind-classifier', deterministic: true },
 	'client.merge-invoice-chunks': { actor: 'invoice-extractor', deterministic: true },
 	'client.merge-statement-chunks': { actor: 'statement-extractor', deterministic: true },
@@ -42,6 +43,7 @@ export const DOCUMENT_PROCEDURES: Record<string, { actor: string; deterministic:
 		actor: 'content-aggregator',
 		deterministic: true
 	},
+	'client.preserve-text-page': { actor: 'visual-page-analyzer', deterministic: true },
 	'client.analyze-page-model': {
 		actor: 'visual-page-analyzer',
 		deterministic: false
@@ -83,3 +85,8 @@ export const DOCUMENT_PROCEDURES: Record<string, { actor: string; deterministic:
 		deterministic: true
 	}
 }
+
+export type DocumentProcedureKey = keyof typeof procedures
+export const DOCUMENT_PROCEDURES: Readonly<
+	Record<string, { actor: string; deterministic: boolean }>
+> = procedures

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { TrustedActorInstallations } from '@avenos/actors'
 import { describe, expect, test } from 'vitest'
+import { installReportRuntimeActor, REPORT_MANIFEST } from '../src/report-runtime'
 import type { StudioArtifact } from '../src/studio-artifacts'
 import {
 	installStudioRuntimeActors,
@@ -58,7 +59,7 @@ function artifact(scope: string, id: string, payload: Record<string, unknown>): 
 		scopeId: scope,
 		artifactSha256: 'a'.repeat(64),
 		typeKey: 'studio.skill',
-		typeVersion: 2,
+		typeVersion: 3,
 		payload,
 		scopeSequence: 1,
 		publicationId: randomUUID(),
@@ -67,6 +68,65 @@ function artifact(scope: string, id: string, payload: Record<string, unknown>): 
 }
 
 describe('shared v2 preview/publication validation', () => {
+	test('rejects disabled model policies before publication, including nested policy intersection', async () => {
+		const scope = randomUUID(),
+			childId = randomUUID()
+		const installations = new TrustedActorInstallations()
+		await installReportRuntimeActor(installations)
+		const child: any = leaf()
+		const method = REPORT_MANIFEST.methods[0]!
+		const source = { ...method.inputSlots![0]!, type: { key: 'docs.extracted-text', version: 2 } }
+		const report = { ...method.outputSlots![0]!, type: { key: 'core.file', version: 1 } }
+		delete (source as any).name
+		delete (report as any).name
+		delete (report as any).mediaTypes
+		child.inputs = { source }
+		child.outputs = { source: { ...source, from: { kind: 'input', port: 'source' } } }
+		child.steps = [
+			{
+				id: 'report',
+				kind: 'invoke',
+				label: 'Report',
+				capabilityId: installations.inventory()[0]!.capabilityId,
+				inputs: { sources: { kind: 'input', port: 'source' } },
+				parameters: {
+					title: { kind: 'literal', value: 'Report' },
+					focus: { kind: 'literal', value: 'Summarize' }
+				},
+				outputs: { report }
+			}
+		]
+		const values = new Map<string, StudioArtifact>([[childId, artifact(scope, childId, child)]])
+		const authority = {
+			principal: { subjectId: randomUUID(), kind: 'user' as const, assurance: [] },
+			access: { tenantId: scope },
+			actorAuthorizer: { decide: () => ({ allow: true as const, decisionId: 'yes' }) },
+			resolveReadableSkill: async (id: string) => values.get(id)!
+		}
+		const validator = new StudioV2SkillValidator(scope, installations)
+		const root: any = parent(childId)
+		root.inputs.source = source
+		root.steps[0].outputs.source = source
+		root.outputs.source = { ...source, from: { kind: 'step', stepId: 'child', port: 'source' } }
+		const policies = async () =>
+			(await validator.validate(root, authority)).issues.map((issue) => {
+				expect(issue.code).toBe('MODEL_POLICY_REQUIRED')
+				return issue.path
+			})
+		expect(await policies()).toEqual([
+			'definition.policy.allowModel',
+			`children.${childId}.policy.allowModel`
+		])
+		root.policy.allowModel = true
+		expect(await policies()).toEqual([`children.${childId}.policy.allowModel`])
+		child.policy.allowModel = true
+		expect(await policies()).toEqual([])
+		root.policy.allowModel = false
+		expect(await policies()).toEqual(['definition.policy.allowModel'])
+		// A deterministic child does not need model permission.
+		child.steps = []
+		expect(await policies()).toEqual([])
+	})
 	test('finds an invalid nested-child binding that the root interface alone cannot reveal', async () => {
 		const scope = randomUUID()
 		const grandchildId = randomUUID()
@@ -121,7 +181,7 @@ describe('shared v2 preview/publication validation', () => {
 		expect(reads).toBe(0)
 	})
 
-	test('does not claim runtime readiness for authorable future control steps', async () => {
+	test('admits review barriers but not fabricated decision artifact outputs', async () => {
 		const scope = randomUUID()
 		const definition: any = leaf()
 		definition.steps = [
@@ -146,8 +206,13 @@ describe('shared v2 preview/publication validation', () => {
 		const preview = await new StudioV2Previewer(
 			new StudioV2SkillValidator(scope, new TrustedActorInstallations())
 		).preview(definition, authority)
-		expect(preview.ok).toBe(false)
-		expect(preview.issues).toContainEqual(
+		expect(preview.ok).toBe(true)
+		definition.steps[0].outputs = { decision: port }
+		const invalid = await new StudioV2Previewer(
+			new StudioV2SkillValidator(scope, new TrustedActorInstallations())
+		).preview(definition, authority)
+		expect(invalid.ok).toBe(false)
+		expect(invalid.issues).toContainEqual(
 			expect.objectContaining({ code: 'RUNTIME_FEATURE_UNAVAILABLE', path: 'definition.steps.0' })
 		)
 	})

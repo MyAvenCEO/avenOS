@@ -3,7 +3,11 @@ import type { PlanRunSecurityContext } from '@avenos/actors'
 import { describe, expect, test, vi } from 'vitest'
 import type { StudioArtifact } from '../src/studio-artifacts'
 import { StudioV2Authoring, StudioV2PublicationRace } from '../src/studio-v2-authoring'
-import type { StudioV2DraftRecord, StudioV2DraftStore } from '../src/studio-v2-drafts'
+import {
+	StudioV2DraftConflict,
+	type StudioV2DraftRecord,
+	type StudioV2DraftStore
+} from '../src/studio-v2-drafts'
 import type { StudioV2SkillPublisher } from '../src/studio-v2-publisher'
 
 function fixture() {
@@ -23,7 +27,7 @@ function fixture() {
 		scopeId: scope,
 		artifactSha256: '0'.repeat(64),
 		typeKey: 'studio.skill',
-		typeVersion: 2,
+		typeVersion: 3,
 		payload: {},
 		scopeSequence: 1,
 		publicationId: randomUUID(),
@@ -56,7 +60,8 @@ function fixture() {
 	const publisher = {
 		artifacts: { scope },
 		validator: { validate },
-		publish
+		publish,
+		recover: vi.fn(async (): Promise<StudioArtifact | null> => artifact())
 	} as unknown as StudioV2SkillPublisher
 	const assertCanPublish = vi.fn(async () => {})
 	const authority = {
@@ -81,6 +86,7 @@ function fixture() {
 		draft,
 		store,
 		publish,
+		publisher,
 		validate,
 		authority,
 		authorityFor,
@@ -90,6 +96,50 @@ function fixture() {
 }
 
 describe('v2 Studio authoring orchestration', () => {
+	test('repairs the original publication head from the committed receipt, without republishing', async () => {
+		const f = fixture()
+		const recovered = await f.authoring.recoverPublication(f.draft.id, 2, f.security)
+		expect(recovered).toMatchObject({
+			headUpdated: true,
+			draft: { revision: 2, publishedRevision: 2 }
+		})
+		expect(f.publish).not.toHaveBeenCalled()
+		expect(f.store.markPublished).toHaveBeenCalledWith(
+			f.draft.id,
+			f.subject,
+			2,
+			recovered!.artifact.artifactId
+		)
+	})
+
+	test('absence remains uncertain and never marks or republishes', async () => {
+		const f = fixture()
+		vi.mocked(f.publisher.recover).mockResolvedValueOnce(null)
+		expect(await f.authoring.recoverPublication(f.draft.id, 2, f.security)).toBeNull()
+		expect(f.store.markPublished).not.toHaveBeenCalled()
+		expect(f.publish).not.toHaveBeenCalled()
+	})
+
+	test('does not overwrite a newer draft, including an edit racing the head update', async () => {
+		const f = fixture()
+		f.draft.revision = 3
+		expect(await f.authoring.recoverPublication(f.draft.id, 2, f.security)).toMatchObject({
+			headUpdated: false,
+			draft: { revision: 3 }
+		})
+		expect(f.store.markPublished).not.toHaveBeenCalled()
+		f.draft.revision = 2
+		vi.mocked(f.store.markPublished).mockImplementationOnce(async () => {
+			f.draft.revision = 3
+			throw new StudioV2DraftConflict('DRAFT_CHANGED_AFTER_PUBLICATION')
+		})
+		expect(await f.authoring.recoverPublication(f.draft.id, 2, f.security)).toMatchObject({
+			headUpdated: false,
+			draft: { revision: 3 }
+		})
+		expect(f.publish).not.toHaveBeenCalled()
+	})
+
 	test('lists, reads and previews only through the authenticated subject boundary', async () => {
 		const f = fixture()
 		expect(await f.authoring.list(f.security)).toEqual([f.draft])

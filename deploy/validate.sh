@@ -28,11 +28,12 @@ python3 "$root/deploy/runtime/identity-compose-test.py"
 python3 "$root/deploy/runtime/recover-test.py"
 python3 "$root/deploy/e2e/test-runtime-install.py"
 grep -Fq 'test:runtime-install' "$root/deploy/e2e/run.sh"
-bun test "$root/deploy/local/llm-catalog.test.ts" "$root/deploy/e2e/llm-catalog.test.ts"
+bun test "$root/deploy/local/llm-catalog.test.ts" "$root/deploy/local/connections.test.ts" "$root/deploy/e2e/llm-catalog.test.ts" "$root/deploy/e2e/studio-agent-fixture.test.ts" "$root/deploy/e2e/background-composition.test.ts"
 
 bun "$root/app/node_modules/typescript/bin/tsc" --noEmit --skipLibCheck --module esnext --moduleResolution bundler --target es2023 --typeRoots "$root/app/node_modules/@types" --types bun "$root/deploy/e2e/customer-runtime-journey.ts" "$root/scripts/lib/platform-verification.test.ts"
 bun test "$root/scripts/lib/platform-verification.test.ts" "$root/scripts/lib/platform-release.test.ts" "$root/deploy/e2e/mail-topology.test.ts"
 bun test "$root/scripts/lib/client-release.test.ts"
+bun test "$root/scripts/lib/desktop-rendering.test.ts"
 bun "$root/app/node_modules/typescript/bin/tsc" --noEmit --skipLibCheck --module esnext --moduleResolution bundler --target es2023 --typeRoots "$root/app/node_modules/@types" --types bun "$root/scripts/build-client-release.ts" "$root/scripts/client-release-manifest.ts" "$root/scripts/lib/client-release.ts" "$root/scripts/lib/client-release.test.ts" "$root/scripts/smoke-client-linux.ts"
 for workflow in platform-verification.yml; do
   grep -Fq 'uses: ./.github/actions/setup-platform-test-host' "$root/.github/workflows/$workflow" || {
@@ -135,6 +136,7 @@ env \
   CUSTOMER_PROVISIONER_PASSWORD=test \
   ARTIFACT_STORE_PROVISIONER_DB_PASSWORD=test \
   INTENT_DATABASE_CREDENTIAL_ROOT=01234567890123456789012345678901234567890123 \
+  PRODUCTIVITY_DATABASE_CREDENTIAL_ROOT=productivity-root-00000000000000000000000001 \
   ARTIFACT_API_DATABASE_CREDENTIAL_ROOT=BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ \
   ACTOR_API_DATABASE_CREDENTIAL_ROOT=01234567890123456789012345678901234567890123 \
   ACTOR_WORKER_DATABASE_CREDENTIAL_ROOT=01234567890123456789012345678901234567890123 \

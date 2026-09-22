@@ -2,7 +2,9 @@ import {
 	customerComponentCatalog,
 	databaseRoleName,
 	deriveDatabasePassword,
-	type TenantGrantClaims
+	type TenantGrantClaims,
+	type WorkerPlacement,
+	workerPlacementSchema
 } from '@avenos/aven-customer-contracts'
 import pg from 'pg'
 
@@ -42,6 +44,44 @@ export class TenantPoolProvider {
 	}
 
 	async forGrant(grant: TenantGrantClaims): Promise<pg.Pool> {
+		return this.forDestination(grant)
+	}
+
+	/** Call only after verifying the placement signature and runtime audience.
+	 * No user/session is fabricated for background queue discovery. Physical
+	 * placement is checked on every sweep, including with a cached connection.
+	 */
+	async forPlacement(placement: WorkerPlacement): Promise<pg.Pool> {
+		workerPlacementSchema.parse(placement)
+		const roles: Record<WorkerPlacement['componentRef'], string[]> = {
+			'ceo.aven:component:data:intents@1': ['ceo.aven:db-role:intents:api@1'],
+			'os.aven:component:actors:run-repository@1': [
+				'os.aven:db-role:actors:api@1',
+				'os.aven:db-role:actors:worker@1'
+			]
+		}
+		if (
+			placement.exp <= Date.now() / 1000 ||
+			placement.iat > Date.now() / 1000 ||
+			!roles[placement.componentRef].includes(this.config.roleKind)
+		)
+			throw Error('Worker placement has ended or does not authorize this role.')
+		const pool = await this.forDestination(placement)
+		const active = await pool.query(
+			`SELECT 1 FROM aven_platform.environment_identity
+			WHERE singleton AND environment_id=$1 AND routing_generation=$2 AND execution_enabled`,
+			[placement.environmentId, placement.routingGeneration]
+		)
+		if (!active.rowCount) throw Error('Worker placement is no longer active.')
+		return pool
+	}
+
+	private async forDestination(
+		grant: Pick<
+			TenantGrantClaims,
+			'componentRef' | 'environmentId' | 'databaseName' | 'routingGeneration'
+		>
+	): Promise<pg.Pool> {
 		if (grant.componentRef !== this.config.componentRef)
 			throw new Error('tenant pool component mismatch')
 		const component = customerComponentCatalog.find(

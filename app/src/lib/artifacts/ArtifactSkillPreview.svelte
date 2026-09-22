@@ -75,7 +75,7 @@ async function expand(artifactId: string): Promise<void> {
 				>
 				<div class="min-w-0">
 					<p class="text-foreground/45 text-[length:var(--fs-micro)] uppercase tracking-wide">
-						Saved Skill · version {presentation.version ?? '?'}
+						Saved Skill · {presentation.artifactId.slice(0, 8)}
 					</p>
 					<h2 class="mt-0.5 font-semibold text-xl">{presentation.name}</h2>
 				</div>
@@ -90,11 +90,6 @@ async function expand(artifactId: string): Promise<void> {
 				<p role="status" class="mt-4 rounded-xl bg-warning-surface p-3 text-warning-ink text-sm">
 					{presentation.issues[0]?.message ?? 'Preview unavailable.'}
 					The artifact and its history remain inspectable.
-				</p>
-			{:else if presentation.version === 2}
-				<p role="status" class="mt-4 rounded-xl bg-info-surface p-3 text-info-ink text-sm">
-					This saved definition is previewable. Opening or running it awaits the shared v2 Studio
-					runtime.
 				</p>
 			{/if}
 		</header>
@@ -182,7 +177,7 @@ async function expand(artifactId: string): Promise<void> {
 									{/if}
 									<p class="font-medium text-sm">{step.label}</p>
 									<p class="text-foreground/40 text-xs">
-										{step.kind === 'achieve' || step.kind === 'goal' ? 'Open goal · planned when prepared' : step.kind === 'review' ? 'Human review' : step.kind === 'skill' ? 'Reusable child Skill' : step.kind === 'forEach' ? 'For each member' : step.kind}
+										{step.kind === 'achieve' ? 'Open goal · planned when prepared' : step.kind === 'review' ? 'Human review' : step.kind === 'skill' ? 'Reusable child Skill' : step.kind === 'forEach' ? 'For each member' : step.kind}
 									</p>
 								</div>
 								{#if step.childArtifactId}
@@ -253,7 +248,7 @@ async function expand(artifactId: string): Promise<void> {
 		{/if}
 
 		<footer class="flex flex-wrap gap-2 p-5 sm:p-7">
-			{#if presentation.status === 'valid' && presentation.version === 1}
+			{#if presentation.status === 'valid' && presentation.version === 2}
 				<button
 					type="button"
 					onclick={onOpenStudio}

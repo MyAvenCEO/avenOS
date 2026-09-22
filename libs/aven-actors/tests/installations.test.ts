@@ -102,6 +102,11 @@ describe('trusted Actor installation descriptors', () => {
 		const foreign = descriptor()
 		foreign.procedures[0]!.capabilityId = 'ceo.aven:capability:studio:foreign@1'
 		await expect(installs.install(foreign)).rejects.toThrow('ACTOR_INSTALLATION_PROCEDURE_INVALID')
+		const invalidProcedure = descriptor()
+		invalidProcedure.procedures[0]!.procedureKey = 'mail.query_request'
+		await expect(installs.install(invalidProcedure)).rejects.toThrow(
+			'ACTOR_INSTALLATION_PROCEDURE_INVALID'
+		)
 		const badProjector = descriptor()
 		badProjector.schemas[0]!.projectorDigest = 'not-a-digest'
 		await expect(installs.install(badProjector)).rejects.toThrow(

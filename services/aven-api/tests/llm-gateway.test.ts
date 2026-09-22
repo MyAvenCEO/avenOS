@@ -107,7 +107,9 @@ describe('generic authenticated LLM gateway', () => {
 				peak = Math.max(peak, active)
 				await new Promise((resolve) => setTimeout(resolve, 12))
 				active--
-				return new Response(JSON.stringify({ choices: [{ message: { content: 'Ready.' } }] }))
+				return new Response(
+					JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: 'Ready.' } }] })
+				)
 			}
 		)
 		if (!gateway) throw new Error('Expected an enabled gateway')
@@ -120,7 +122,7 @@ describe('generic authenticated LLM gateway', () => {
 				messages: [{ role: 'user', content: 'Ready?' }]
 			})
 		])
-		expect(peak).toBe(2)
+		expect(peak).toBe(1) // The second slot is reserved for bounded input decisions.
 		expect(active).toBe(0)
 		expect(results).toHaveLength(4)
 		expect(gateway.models()[0]?.maxParallelism).toBe(2)
@@ -135,7 +137,11 @@ describe('generic authenticated LLM gateway', () => {
 				const body = JSON.parse(String(init?.body)) as { stream?: boolean }
 				return body.stream
 					? new Response(new ReadableStream<Uint8Array>({ start() {} }))
-					: new Response(JSON.stringify({ choices: [{ message: { content: 'Ready.' } }] }))
+					: new Response(
+							JSON.stringify({
+								choices: [{ finish_reason: 'stop', message: { content: 'Ready.' } }]
+							})
+						)
 			}
 		)
 		if (!gateway) throw new Error('Expected an enabled gateway')
@@ -197,7 +203,7 @@ describe('generic authenticated LLM gateway', () => {
 			calls += 1
 			return new Response(
 				JSON.stringify({
-					choices: [{ message: { content: '{"answer":42}' } }]
+					choices: [{ finish_reason: 'stop', message: { content: '{"answer":42}' } }]
 				})
 			)
 		})

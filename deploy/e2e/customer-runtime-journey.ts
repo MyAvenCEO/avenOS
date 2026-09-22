@@ -41,6 +41,7 @@ import {
 	type MovementDriver,
 	resumeMovement
 } from '../../services/platform-provisioner/src/movement.js'
+import { movementComponents } from '../../services/platform-provisioner/src/movement-components.js'
 import { PostgresMovementDriver } from '../../services/platform-provisioner/src/movement-postgres.js'
 import {
 	CustomerDatabaseProvisioner,
@@ -206,6 +207,7 @@ try {
 			CONTROL_DATABASE_URL: url,
 			CUSTOMER_RUNTIME_ID: id,
 			INTENTS_API_DB_CREDENTIAL_ROOT: credentialRoot,
+			PRODUCTIVITY_API_DB_CREDENTIAL_ROOT: 'productivity-root-00000000000000000000000001',
 			ACTOR_API_DB_CREDENTIAL_ROOT: credentialRoot,
 			ACTOR_WORKER_DB_CREDENTIAL_ROOT: credentialRoot,
 			ARTIFACT_API_DB_CREDENTIAL_ROOT: credentialRoot,
@@ -251,7 +253,10 @@ try {
 	const movementStore = new CustomerMovementStore(control)
 	for (const [id, runtime] of Object.entries(runtimes))
 		await movementStore.registerRuntime(id, runtime.releaseSha)
-	const customers = new CustomerStore(control)
+	const customers = new CustomerStore(
+		control,
+		process.env.API_PUBLIC_BASE_URL ?? 'https://api.aven.ceo'
+	)
 	const customerHandler = new CustomerHandler(
 		customers,
 		customers,
@@ -311,7 +316,8 @@ try {
 	const catalogTargets = [...catalog.values()].map((e) => ({
 		componentRef: e.manifest.componentRef,
 		targetSchemaVersion: e.manifest.targetSchemaVersion,
-		migrationSetDigest: e.manifest.migrationSetDigest
+		migrationSetDigest: e.manifest.migrationSetDigest,
+		requiredByDefault: e.manifest.requiredByDefault
 	}))
 	async function install(id: string) {
 		const work = new ControlStore(control, `journey-${id}`, 60, id)
@@ -398,6 +404,7 @@ try {
 		platformId: 'runtime-journey',
 		archiveDirectory: scratch,
 		async prepareDestination(m, signal) {
+			const entries = await movementComponents(control, m.environment_id, catalog)
 			const admin = pool(runtimes[m.destination_runtime_id].url)
 			const unknownRole = databaseRoleName(m.environment_id, 'unknown_fixture')
 			await admin.query(
@@ -407,7 +414,7 @@ try {
 				runtimes[m.destination_runtime_id].url,
 				'aven_customer_provisioner',
 				m.environment_id,
-				catalog.values()
+				entries
 			)
 			assert.equal(
 				(
@@ -419,20 +426,20 @@ try {
 				false
 			)
 			await admin.end()
-			for (const ref of catalog.keys()) {
+			for (const entry of entries) {
 				signal.throwIfAborted()
 				await runtimes[m.destination_runtime_id].provisioner.reconcile(
-					operation(m, ref),
-					getEntry(ref)
+					operation(m, entry.manifest.componentRef),
+					entry
 				)
 			}
 		},
 		async verifyApplication(m, signal) {
-			for (const ref of catalog.keys()) {
+			for (const entry of await movementComponents(control, m.environment_id, catalog)) {
 				signal.throwIfAborted()
 				await runtimes[m.destination_runtime_id].provisioner.verify(
-					operation(m, ref),
-					getEntry(ref)
+					operation(m, entry.manifest.componentRef),
+					entry
 				)
 			}
 			const grant = await signTenantGrant(
@@ -779,6 +786,7 @@ try {
 		),
 		0
 	)
+	const installedAfterMove = await movementComponents(control, cliCustomer, catalog)
 	await cli('reconcile', 'primary')
 	const recoveryWorker = new ControlStore(control, 'recovery-lease-proof', 60, 'primary')
 	const leased = await recoveryWorker.claim()
@@ -802,7 +810,7 @@ try {
 				)
 			).rows[0].count
 		),
-		catalog.size
+		installedAfterMove.length
 	)
 	await runtimes.primary.provisioner.reconcile(leased, getEntry(leased.componentRef))
 	await recoveryWorker.finish(leased)

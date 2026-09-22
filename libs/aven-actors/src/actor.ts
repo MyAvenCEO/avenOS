@@ -118,6 +118,14 @@ export interface MethodSpec {
 	hitl?: string
 }
 
+/** Pure transforms compute a value without reading mutable external state or
+ * applying effects. Transform mode alone (for example a model call) is not enough. */
+export function isPureTransformation(
+	method: Pick<MethodSpec, 'mode' | 'idempotency'> | undefined
+): boolean {
+	return method?.mode === 'transform' && method.idempotency === 'pure'
+}
+
 export interface CapabilitySlot {
 	name: string
 	predicate: Predicate
@@ -127,6 +135,8 @@ export interface CapabilitySlot {
 	cardinality: 'one' | 'optional' | 'many'
 	/** Sensitive slots carry ephemeral handles, never durable secret values. */
 	sensitive?: boolean
+	/** Discovery constraint for file inputs; execution still validates the actual artifact. */
+	mediaTypes?: string[]
 }
 
 /** Per-actor model lane: which model answers as this actor, and how. */
@@ -228,12 +238,32 @@ export function llmSettings(m: Manifest): LlmSettings | null {
 }
 
 /** What a handler gives back: a record for the UI, prose for the model. */
+/** A trusted handler rejected a command before applying any effect. This is an
+ * execution fact, not a retry hint inferred from an HTTP status or error text.
+ * Never use after a lost acknowledgement or a partially committed operation. */
+export class ActorCommandRejected extends Error {}
+
 export interface HandlerResult {
 	record: string
 	wire: string
+	/** A possible write has no confirmed outcome. Hosts must stop and reconcile,
+	 * not feed this back to the model as permission to issue another operation. */
+	outcome?: 'uncertain'
 }
 
-export type Handler = (payload: Record<string, unknown>) => HandlerResult | Promise<HandlerResult>
+/** Host-owned execution metadata, never supplied by model arguments. */
+export interface ActorCallContext {
+	intentId?: string
+	operationId?: string
+	contributionId?: string
+	signal?: AbortSignal
+	routeConversation?: (intentId: string) => void
+	canPresent?: () => boolean
+}
+export type Handler = (
+	payload: Record<string, unknown>,
+	context?: ActorCallContext
+) => HandlerResult | Promise<HandlerResult>
 
 /**
  * The natural-language service an ask() consults; injected, never imported.
@@ -435,13 +465,18 @@ export class Actor {
 	#mailbox: {
 		method: string
 		payload: Record<string, unknown>
+		context?: ActorCallContext
 		resolve: (r: HandlerResult) => void
 	}[] = []
 	#pumping = false
 
-	deliver(method: string, payload: Record<string, unknown>): Promise<HandlerResult> {
+	deliver(
+		method: string,
+		payload: Record<string, unknown>,
+		context?: ActorCallContext
+	): Promise<HandlerResult> {
 		return new Promise((resolve) => {
-			this.#mailbox.push({ method, payload, resolve })
+			this.#mailbox.push({ method, payload, context, resolve })
 			void this.#pump()
 		})
 	}
@@ -453,14 +488,18 @@ export class Actor {
 			while (this.#mailbox.length > 0) {
 				const message = this.#mailbox.shift()
 				if (!message) break
-				message.resolve(await this.#handle(message.method, message.payload))
+				message.resolve(await this.#handle(message.method, message.payload, message.context))
 			}
 		} finally {
 			this.#pumping = false
 		}
 	}
 
-	async #handle(method: string, payload: Record<string, unknown>): Promise<HandlerResult> {
+	async #handle(
+		method: string,
+		payload: Record<string, unknown>,
+		context?: ActorCallContext
+	): Promise<HandlerResult> {
 		const handler = this.#handlers[method]
 		if (!handler) {
 			const record = JSON.stringify({
@@ -469,21 +508,29 @@ export class Actor {
 			})
 			return { record, wire: `${this.manifest.id} does not know ${method}` }
 		}
-		// Supervision as backtracking, the runtime half: a handler that throws
-		// gets one fresh attempt — the Erlang restart in miniature. Only after
-		// the retry also dies is the failure recorded and returned as a
-		// structured result; ok:false results are answers, not crashes, and are
-		// never retried.
-		for (let attempt = 0; ; attempt++) {
-			try {
-				return await handler(payload)
-			} catch (err) {
-				const reason = err instanceof Error ? err.message : String(err)
-				if (attempt === 0) continue
-				this.failures++
-				this.lastError = `${method}: ${reason}`
-				const record = JSON.stringify({ ok: false, error: `${method} failed: ${reason}` })
-				return { record, wire: `${method} failed: ${reason}` }
+		// A thrown handler may already have committed an external effect. Never
+		// replay it implicitly; recovery belongs to the operation's admission ledger.
+		let dispatched = false
+		try {
+			if (context?.signal?.aborted)
+				throw Error('This response was stopped before the tool started.')
+			dispatched = true
+			return await handler(payload, context)
+		} catch (err) {
+			const reason = err instanceof Error ? err.message : String(err)
+			this.failures++
+			this.lastError = `${method}: ${reason}`
+			const record = JSON.stringify({ ok: false, error: `${method} failed: ${reason}` })
+			const spec = this.manifest.methods.find((entry) => entry.name === method)
+			const mode = spec?.mode
+			return {
+				record,
+				wire: `${method} failed: ${reason}`,
+				...(dispatched &&
+					!(err instanceof ActorCommandRejected) &&
+					mode !== 'observe' &&
+					mode !== 'view' &&
+					!isPureTransformation(spec) && { outcome: 'uncertain' as const })
 			}
 		}
 	}

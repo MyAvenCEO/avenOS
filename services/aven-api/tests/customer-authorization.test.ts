@@ -11,7 +11,9 @@ const components = [
 		'ceo.aven:component:data:intents@1',
 		['intents:read', 'intents:write', 'intents:delete', 'intents:merge']
 	],
-	['os.aven:component:actors:run-repository@1', ['actor-runs:read', 'actor-runs:write']]
+	['os.aven:component:actors:run-repository@1', ['actor-runs:read', 'actor-runs:write']],
+	['ceo.aven:component:data:productivity@1', ['productivity:read', 'productivity:write']],
+	['ceo.aven:component:data:credentials@1', ['credentials:read', 'credentials:write']]
 ] as const
 
 describe('customer membership authorization', () => {
@@ -55,7 +57,7 @@ describe('customer membership authorization', () => {
 				}
 			}
 		} as unknown as pg.Pool
-		const store = new CustomerStore(pool)
+		const store = new CustomerStore(pool, 'https://api.aven.ceo')
 		const grant = () => store.authorize(claims, environment, components[1][0], ['intents:delete'])
 		expect((await grant()).membershipRole).toBe('owner')
 		role = 'member'

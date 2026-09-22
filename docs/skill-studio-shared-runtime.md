@@ -1,8 +1,11 @@
 # Skill Studio: shared Actor discovery, composition, and execution
 
-Status: v2 shared discovery, composition, validation, publication, finite execution,
-agent parity and artifact preview implemented. The wider unattended Source and
-advanced control-step acceptance gates remain open and fail closed.
+Status: shared v2 discovery, authoring, publication and finite execution foundations
+are implemented. Production generic execution installs the email-brief Actor,
+19 document Actors with 21 methods, Markdown write/patch methods, and the
+source-linked report Actor. Other
+client-only Actors still need execution adapters. Unattended Sources and advanced control-step
+acceptance gates also remain open and fail closed.
 
 Studio must let a person or their Aven discover every permitted installed Actor,
 compose its capabilities, and understand what is needed to execute the resulting
@@ -12,18 +15,24 @@ visual preview in the artifact library, not opaque program JSON.
 
 This document owns the integration contracts, clean-cut decisions, delivery
 order, and acceptance criteria for that change. [Skill Studio](skill-studio.md)
-owns the product experience and reports current coverage. The
+owns the conceptual model, and the [experience specification](skill-studio-experience.md)
+owns the case-to-Skill interaction and UX acceptance criteria. The
 [Actor architecture](generic-actor-registry-and-runtime.md) and
 [runtime protocol](actor-runtime-formal-spec.md) own the shared machinery. The
 [customer database boundary](customer-database-platform.md) continues to apply.
 The closed v2 parser, authorized catalog and presentation boundaries, installation
 inventory, neutral Store types, v2 publisher, subject-scoped draft CAS, shared
 validator and auto-wiring composer are implemented and connected to both the
-authenticated Studio command and native editor. Finite invoke and exact nested-Skill
+authenticated Studio command and native editor. Finite invoke, exact nested-Skill,
+serial fail-fast collection loops, presence and scalar-observation conditional
 programs execute through the generic Actor runtime with execution-time authorization,
 cancellation and trusted Store reprojection. All permitted Actors and methods are
 inventory-visible; a method becomes authorable and runnable only when its owning
-package supplies a complete trusted installation. Advanced control steps and durable
+package supplies a complete trusted installation. Empty-output human review barriers now
+pause through runner-owned typed requests and verified decisions. Isolated real-Qwen
+tests cover restart, sequential gates, denial and approval; the compact native controls
+still require native journey qualification. Decision-output artifacts are not enabled.
+Solver goals, partial-result loops and durable
 unattended Sources remain fail-closed milestones. The exact current product boundary
 and executable proof are recorded in
 [Skill Studio verification](skill-studio-verification.md); sections below retain the
@@ -83,8 +92,18 @@ unattended worker. The full initiative includes all three, delivered in that ord
 Concrete HTTP/IMAP packages become runnable only after their own security and
 publication acceptance gates pass.
 
+The [all-existing-Actor experience requirement](skill-studio-experience.md#every-existing-actor-must-be-usable)
+is a completion gate across these levels. Document, client, device, and event-driven
+Actors cannot remain catalog-only exceptions in the completed Studio. Existing
+implementations need package-owned adapters and honest action/session contracts;
+they need not pretend to be finite artifact transforms. Declared device/server
+handoffs required by composed existing capabilities are in scope and must preserve
+authorization, invocation identity, cancellation, result bindings, and trial mode.
+This supersedes the earlier single-placement delivery restriction; unrestricted
+process migration remains excluded.
+
 First delivery excludes arbitrary uploaded executable code, cross-customer Skills,
-hybrid placement within a run, live migration of Actor memory, arbitrary scripting
+live migration of Actor memory, arbitrary scripting
 in bindings, automatic installation, and automatically approving effects. It does
 not promise every imaginable business outcome or model accuracy.
 
@@ -163,7 +182,9 @@ Each visible method entry contains:
   separately authorized for disclosure.
 - Supported placement labels, model/network/effect indicators, and known estimates
   with units; an unknown estimate remains unknown.
-- `canAuthor`, `canPlan`, `canInvokeNow`, and required runtime feature identifiers.
+- `canAuthor`, `canPlan`, `invocationStatus: not-evaluated`, and required runtime
+  feature identifiers. Discovery has no bound inputs or fresh invoke decision;
+  it must not report an untested invocation as either ready or unavailable.
 
 The page carries `catalogDigest`, an opaque principal-scoped `authorityContext`, an
 opaque view token, capture time, expiry, snapshot-bound cursor, and coverage counts
@@ -211,9 +232,14 @@ a new server-recognized proof contract by advertising it on the bus.
 
 ## 5. Versioned Skill and binding model
 
-Register `studio.skill@2` with payload `version: 2` as the only supported program
+Register `studio.skill@3` with payload `version: 2` as the only supported program
 format after cutover. There is no older reader, converter, dual-write or migration
 path. Never mutate an already registered immutable type.
+The Store schema revision is independent of the program grammar: `studio.skill@3`
+adds artifact-field parameter bindings while retaining payload `version: 2`.
+`studio.subscription@4` pins references to this Skill type and retains its
+`contractVersion: 3` connection payload. Older stored definitions are not converted
+or executed by this runtime; their original records remain untouched.
 The shared program schema belongs in `libs/aven-actors`, not the Svelte component.
 New control records carry `contractVersion`; no reader guesses a version from fields.
 
@@ -318,11 +344,15 @@ requests cancellation of active children, retaining all committed outputs.
 
 ### Limits and nested policy
 
-Initial host ceilings: 16 input ports, 16 output ports, 32 authored nodes per Skill,
-8 nesting levels, 64 capability invocations across the activation, 256 members per
-collection, 4 concurrent children, 3 attempts per invocation, 16 observation segments,
-and 256 KiB of public definition JSON. No old budget semantics are carried forward.
-These are configurable downward by policy, not upward by child definitions.
+Current finite-execution ceilings are 16 input ports, 16 output ports, 32 authored
+nodes per Skill, 8 nesting levels, 4,096 capability invocations and
+256 collection members, with 256 KiB of public definition JSON. New drafts start
+with 16 invocations, 4 levels and 64 members. Every descendant consumes its ancestors'
+budgets as well as its own. Collection execution is currently serial even when the
+declared concurrency ceiling permits more. Policy cannot exceed the host ceilings.
+
+Per-invocation retry and observation-segment limits belong to the remaining durable
+continuation design below; they are not guarantees of the current finite interpreter.
 
 Separate limits for logical invocations, attempts, model calls/tokens, network bytes,
 elapsed time, and concurrency. Reserve each applicable unit atomically before work;
@@ -548,9 +578,14 @@ be implemented and verified before credential-backed capabilities become runnabl
 
 ## 9. Studio and agent interface
 
-Keep Explore, Compose, and Activity. Add an Operations drawer within Explore/Compose,
-not another disconnected application. Its default is relevant ready operations;
-All operations includes permitted blocked entries and searchable Actor groupings.
+Use the persistent case, procedure, and results context defined in the
+[experience specification](skill-studio-experience.md#one-persistent-work-context).
+Operations belong in a contextual drawer. Rank them by applicability to the selected
+case, including authorable operations whose inputs can be supplied. Full inventory
+inspection includes permitted blocked entries and searchable Actor groupings.
+The experience specification also defines new temporary execution, example-suite,
+and variant-routing requirements. Those are additional runtime work, not behavior
+already provided by the planning-only preview below or by a production run.
 
 | Situation | Required interaction |
 | --- | --- |
@@ -618,7 +653,7 @@ Actions on the selected Skill are:
   into the immutable definition preview.
 
 The renderer is selected through the artifact semantic-view dispatch for
-`studio.skill@2`; `ArtifactsPage.svelte` must not pretend every selected item has file
+`studio.skill@3`; `ArtifactsPage.svelte` must not pretend every selected item has file
 bytes. Use `ArtifactSkillPreview.svelte` and a reusable compact Skill card, sharing
 the presentation builder with Studio. Keep the raw inspector optional.
 
@@ -679,11 +714,14 @@ output ports, cursor schema, occurrence identity, scheduling/limits, authority m
 and lifecycle implementation. The supervisor resolves these from the trusted registry.
 Source code, credentials, sockets, and renewable grants never enter Skill artifacts.
 
-Register `studio.source@2` and `studio.subscription@2` for the new Source contract.
+Define the new Source contract before assigning its Store type version. Current
+session-authorized subscriptions use `studio.subscription@4`; this future supervisor
+contract must not reinterpret those immutable records as unattended authorization.
 A Source definition pins its source contract and capture interface. A subscription
 pins its Skill revision, trigger output/type, source/producer selector, fixed companion
-inputs, execution generation, placement, and rate/backlog policy. Initial v2 bindings
-are trigger plus fixed inputs; related-artifact joins/windows remain separately gated.
+inputs, execution generation, placement, and rate/backlog policy. Current bindings
+are trigger plus fixed inputs, with optional ordered accumulation; related-artifact
+joins/windows remain separately gated.
 
 Use a durable source-control ledger in the customer runtime schema: definition head,
 enabled state, revision, lease/fence, cursor, next poll/backoff, and last safe error.

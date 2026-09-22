@@ -1,8 +1,8 @@
-import AvenVibeEngine from './AvenVibeEngine.svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
 import { registryTick } from './reactivity.svelte'
 import { singleton } from './singleton'
+import TaskWindow from './TaskWindow.svelte'
 import { todoActor } from './todo.svelte'
 import { isWindow, WindowActor } from './window.actor.svelte'
 
@@ -19,7 +19,7 @@ import { isWindow, WindowActor } from './window.actor.svelte'
 export const listWindow = singleton(
 	'aven.window.list',
 	() =>
-		new WindowActor(todoActor, AvenVibeEngine, {
+		new WindowActor(todoActor, TaskWindow, {
 			key: 'list',
 			name: 'Todos',
 			// Closed until asked for: a window renders inline in the conversation
@@ -30,10 +30,10 @@ export const listWindow = singleton(
 export const boardWindow = singleton(
 	'aven.window.board',
 	() =>
-		new WindowActor(todoActor, AvenVibeEngine, {
+		new WindowActor(todoActor, TaskWindow, {
 			key: 'board',
 			name: 'Kanban Board',
-			props: { view: todoActor.manifest.views?.[0]?.view },
+			props: { board: true },
 			open: false
 		})
 )
@@ -67,7 +67,12 @@ class StreamActor extends Actor {
 			]
 		})
 		this.bind({
-			stream_show: () => {
+			stream_show: (_p, context) => {
+				if (context?.canPresent?.() === false)
+					return {
+						record: '{"ok":false,"error":"The user changed screens; the view was left unchanged."}',
+						wire: 'The user changed screens; the view was left unchanged.'
+					}
 				for (const other of bus.actors()) if (isWindow(other)) other.open = false
 				return {
 					record: JSON.stringify({ ok: true, stream: true }),
@@ -79,11 +84,6 @@ class StreamActor extends Actor {
 }
 export const streamActor = singleton('aven.stream', () => new StreamActor())
 
-// The board and the list are two FACES of the same subject — each its own
-// window actor, switched like any other ("show the board"). The combined
-// todos-window from before this split may linger on the HMR-surviving
-// bus; clear it so it cannot shadow the pair.
-bus.unregister('todos-window')
 bus.register(listWindow)
 bus.register(boardWindow)
 bus.register(streamActor)

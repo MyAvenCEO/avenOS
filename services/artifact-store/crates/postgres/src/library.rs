@@ -16,6 +16,11 @@ pub struct LibraryQuery {
     pub direction: Option<String>,
     pub after: Option<String>,
     pub limit: Option<u32>,
+    pub r#where: Option<String>,
+    pub view: Option<String>,
+    pub measure: Option<String>,
+    pub snapshot_sequence: Option<i64>,
+    pub store_epoch: Option<Uuid>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -55,9 +60,20 @@ impl PostgresStore {
         }
         let category = query.category.as_deref().unwrap_or("all");
         if ![
-            "all", "email", "invoice", "credit-note", "receipt", "statement", "voucher",
-            "contract", "contract-summary", "transport-ticket", "booking-confirmation",
-            "delivery-notification", "other", "unknown",
+            "all",
+            "email",
+            "invoice",
+            "credit-note",
+            "receipt",
+            "statement",
+            "voucher",
+            "contract",
+            "contract-summary",
+            "transport-ticket",
+            "booking-confirmation",
+            "delivery-notification",
+            "other",
+            "unknown",
         ]
         .contains(&category)
         {
@@ -71,23 +87,70 @@ impl PostgresStore {
         let sort = query.sort.as_deref().unwrap_or("date");
         let sortable: &[&str] = match query.collection.as_str() {
             "documents" => &["date", "name", "category", "mediaType", "size"],
-            "invoices" => &["date", "supplier", "invoiceNumber", "issueDate", "grossMinor", "dueDate", "netMinor", "taxMinor", "currency"],
-            "statements" => &["date", "accountHolder", "accountIban", "periodStart", "periodEnd", "openingBalanceMinor", "closingBalanceMinor", "currency"],
-            "transactions" => &["date", "bookingDate", "counterpartyName", "description", "amountMinor", "accountIban", "valueDate"],
-            "line-items" => &["date", "invoiceNumber", "description", "quantity", "unitPriceMinor", "netMinor", "grossMinor"],
+            "invoices" => &[
+                "date",
+                "supplier",
+                "invoiceNumber",
+                "issueDate",
+                "grossMinor",
+                "dueDate",
+                "netMinor",
+                "taxMinor",
+                "currency",
+            ],
+            "statements" => &[
+                "date",
+                "accountHolder",
+                "accountIban",
+                "periodStart",
+                "periodEnd",
+                "openingBalanceMinor",
+                "closingBalanceMinor",
+                "currency",
+            ],
+            "transactions" => &[
+                "date",
+                "bookingDate",
+                "counterpartyName",
+                "description",
+                "amountMinor",
+                "accountIban",
+                "valueDate",
+            ],
+            "line-items" => &[
+                "date",
+                "invoiceNumber",
+                "description",
+                "quantity",
+                "unitPriceMinor",
+                "netMinor",
+                "grossMinor",
+            ],
             _ => return Err(invalid()),
         };
         if !sortable.contains(&sort) {
             return Err(invalid());
         }
         let limit = query.limit.unwrap_or(50).clamp(1, 100);
+        let predicates = crate::knowledge::predicates(&query.collection, query.r#where.as_deref())?;
+        let view = query.view.as_deref().unwrap_or("rows");
+        crate::knowledge::validate_view(&query.collection, view, query.measure.as_deref())?;
+        if view == "schema" {
+            return Ok(crate::knowledge::catalog());
+        }
+        if view == "summary" && query.after.is_some() {
+            return Err(StoreError::InvalidLibraryQuery(
+                "Summary evaluates the whole selection; omit the row cursor.".into(),
+            ));
+        }
         let identity = json!([
             query.collection,
             category,
             search,
             query.source_id,
             sort,
-            direction
+            direction,
+            predicates
         ]);
         let epoch: Uuid = sqlx::query_scalar(
             "SELECT store_epoch FROM artifact_store.store_state WHERE singleton=true",
@@ -96,6 +159,12 @@ impl PostgresStore {
         .await?;
         let latest: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(scope_sequence),0) FROM artifact_store.publications WHERE scope_id=$1")
             .bind(scope).fetch_one(&self.pool).await?;
+        if query.snapshot_sequence.is_some() != query.store_epoch.is_some()
+            || query.store_epoch.is_some_and(|e| e != epoch)
+            || query.snapshot_sequence.is_some_and(|s| s < 0 || s > latest)
+        {
+            return Err(invalid());
+        }
         let cursor: Option<Cursor> = query
             .after
             .as_deref()
@@ -109,11 +178,23 @@ impl PostgresStore {
                 || c.snapshot > latest
                 || c.snapshot < 0
                 || c.key.len() > 256
+                || query.snapshot_sequence.is_some_and(|s| s != c.snapshot)
         }) {
             return Err(invalid());
         }
-        let snapshot = cursor.as_ref().map_or(latest, |c| c.snapshot);
-        let rows = sqlx::query(include_str!("library.sql"))
+        let snapshot = cursor
+            .as_ref()
+            .map_or(query.snapshot_sequence.unwrap_or(latest), |c| c.snapshot);
+        let sql = format!(
+            "{} {}",
+            include_str!("library.sql"),
+            if view == "summary" {
+                include_str!("knowledge-summary.sql")
+            } else {
+                include_str!("library-page.sql")
+            }
+        );
+        let rows = sqlx::query(&sql)
             .bind(scope)
             .bind(snapshot)
             .bind(&query.collection)
@@ -124,9 +205,24 @@ impl PostgresStore {
             .bind(direction)
             .bind(cursor.as_ref().map(|c| &c.value))
             .bind(cursor.as_ref().map(|c| &c.key))
-            .bind(i64::from(limit) + 1)
+            .bind(if view == "summary" {
+                -1
+            } else {
+                i64::from(limit) + 1
+            })
+            .bind(&predicates)
+            .bind(&query.measure)
             .fetch_all(&self.pool)
             .await?;
+        if view == "summary" {
+            let groups: Vec<Value> = rows
+                .iter()
+                .map(|r| r.try_get("item"))
+                .collect::<Result<_, _>>()?;
+            return Ok(
+                json!({"storeEpoch":epoch,"snapshotSequence":snapshot,"collection":query.collection,"where":predicates,"measure":query.measure,"groups":groups,"semantics":crate::knowledge::catalog()["summary"]}),
+            );
+        }
         let next = if rows.len() > limit as usize {
             let row = &rows[limit as usize - 1];
             Some(serde_json::to_string(&Cursor {
@@ -146,7 +242,8 @@ impl PostgresStore {
             .map(|r| r.try_get("item"))
             .collect::<Result<_, _>>()?;
         Ok(
-            json!({ "storeEpoch": epoch, "snapshotSequence": snapshot, "items": items, "nextAfter": next }),
+            json!({ "storeEpoch": epoch, "snapshotSequence": snapshot, "items": items, "nextAfter": next,
+                "schema": crate::knowledge::catalog()["collections"][&query.collection] }),
         )
     }
 }

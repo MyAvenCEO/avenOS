@@ -1,9 +1,4 @@
-import {
-	ACTOR_RUN_PROTOCOL,
-	ACTOR_RUN_PROTOCOL_V1,
-	type PlanRunStartCommand,
-	resourceId
-} from '@avenos/actors'
+import { ACTOR_RUN_PROTOCOL, type PlanRunStartCommand, resourceId } from '@avenos/actors'
 import { describe, expect, test } from 'vitest'
 import { parsePlanRunStartCommand } from '../src/command.js'
 
@@ -69,15 +64,16 @@ describe('artifact-first run command', () => {
 		expect(() => parsePlanRunStartCommand(value)).toThrow()
 	})
 
-	test('accepts legacy exact commands but rejects exploration on protocol version 1', () => {
-		const legacy = command()
-		legacy.protocol = ACTOR_RUN_PROTOCOL_V1
-		legacy.goals = ['ceo.aven.bookkeeping.invoice_details(invoice_1)']
-		delete legacy.goalSpec
-		expect(parsePlanRunStartCommand(legacy)).toEqual(legacy)
-
-		const invalid = command()
-		invalid.protocol = ACTOR_RUN_PROTOCOL_V1
-		expect(() => parsePlanRunStartCommand(invalid)).toThrow()
+	test('rejects unsupported protocols for either execution mode', () => {
+		for (const protocol of [
+			'os.aven:protocol:actors:plan-runner@1',
+			'os.aven:protocol:actors:plan-runner@3'
+		]) {
+			const invalid = { ...command(), protocol }
+			expect(() => parsePlanRunStartCommand(invalid)).toThrow()
+			delete invalid.goalSpec
+			invalid.goals = ['ceo.aven.bookkeeping.invoice_details(invoice_1)']
+			expect(() => parsePlanRunStartCommand(invalid)).toThrow()
+		}
 	})
 })

@@ -1,3 +1,5 @@
+import { currencyMinorDigits } from '@avenos/actors'
+
 export type ArtifactLocator =
 	| { kind: 'artifact-root' }
 	| { kind: 'json-pointer'; pointer: string }
@@ -37,14 +39,45 @@ export function numberValue(value: unknown): number | null {
 	return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-export function formatMoney(minor: unknown, currency: unknown): string {
-	const value = numberValue(minor)
-	const code = typeof currency === 'string' && currency.length === 3 ? currency : 'EUR'
-	if (value === null) return '—'
+export function formatMoney(
+	minor: unknown,
+	currency: unknown,
+	currencyDisplay: 'symbol' | 'code' = 'symbol'
+): string {
+	const raw =
+		typeof minor === 'string'
+			? minor
+			: typeof minor === 'number' && Number.isSafeInteger(minor)
+				? String(minor)
+				: ''
+	if (!/^-?(0|[1-9]\d{0,127})$/.test(raw)) return '—'
+	if (typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency))
+		return `${raw} minor units · currency unknown`
+	const digits = currencyMinorDigits(currency)
+	if (digits === null) return `${raw} minor units · currency ${currency} not recognized`
 	try {
-		return new Intl.NumberFormat('de-DE', { style: 'currency', currency: code }).format(value / 100)
+		const formatter = new Intl.NumberFormat('de-DE', {
+			style: 'currency',
+			currency,
+			currencyDisplay
+		})
+		const value = BigInt(raw),
+			negative = value < 0n
+		const absolute = negative ? -value : value,
+			scale = 10n ** BigInt(digits)
+		const whole = absolute / scale
+		// BigInt formatting preserves every digit; avoid a float conversion even for cents.
+		const template = negative ? -(whole || 1n) : whole
+		return formatter
+			.formatToParts(template)
+			.map((part) => {
+				if (part.type === 'fraction') return (absolute % scale).toString().padStart(digits, '0')
+				if (part.type === 'integer' && negative && whole === 0n) return '0'
+				return part.value
+			})
+			.join('')
 	} catch {
-		return `${(value / 100).toFixed(2)} ${code}`
+		return `${raw} minor units · ${currency}`
 	}
 }
 

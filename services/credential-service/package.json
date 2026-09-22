@@ -1,0 +1,27 @@
+{
+	"name": "@avenos/credential-service",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"build": "bun build src/index.ts --target=bun --outdir=build",
+		"check": "tsc --noEmit",
+		"test": "vitest run",
+		"start": "bun src/index.ts"
+	},
+	"dependencies": {
+		"@avenos/aven-customer-contracts": "workspace:*",
+		"@avenos/aven-customer-runtime": "workspace:*",
+		"@avenos/aven-identity": "workspace:*",
+		"@avenos/credential-storage": "workspace:*",
+		"@avenos/http-boundary": "workspace:*",
+		"zod": "4.4.3"
+	},
+	"devDependencies": {
+		"@types/bun": "1.3.13",
+		"@types/node": "24.10.13",
+		"jose": "6.2.10",
+		"typescript": "6.0.3",
+		"vitest": "4.1.11"
+	}
+}

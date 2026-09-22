@@ -50,14 +50,17 @@ export class CustomerMovementStore {
 			componentRef: string
 			targetSchemaVersion: number
 			migrationSetDigest: string
+			requiredByDefault: boolean
 		}>
 	): Promise<void> {
 		if (
 			!catalog.length ||
+			!catalog.some((c) => c.requiredByDefault === true) ||
 			new Set(catalog.map((c) => c.componentRef)).size !== catalog.length ||
 			catalog.some(
 				(c) =>
 					!c.componentRef ||
+					typeof c.requiredByDefault !== 'boolean' ||
 					!Number.isSafeInteger(c.targetSchemaVersion) ||
 					c.targetSchemaVersion < 1 ||
 					!/^[a-f0-9]{64}$/.test(c.migrationSetDigest)

@@ -1,0 +1,225 @@
+{
+  "typeKey": "mail.message-parts",
+  "version": 1,
+  "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "parser": {
+        "type": "string",
+        "const": "mail-parser/0.11.9"
+      },
+      "profile": {
+        "type": "string",
+        "const": "bounded-mail-v1"
+      },
+      "outcome": {
+        "type": "string",
+        "enum": [
+          "inspected",
+          "unavailable"
+        ]
+      },
+      "reason": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "resource-limit",
+              "part-limit",
+              "invalid-part",
+              "invalid-range",
+              "header-limit",
+              "decoded-limit",
+              "raw-limit",
+              "malformed",
+              "input"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "subject": {
+        "type": "string",
+        "maxLength": 4096
+      },
+      "parts": {
+        "maxItems": 128,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^1(?:\\.[1-9][0-9]*){0,16}$"
+            },
+            "headerStart": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4194304
+            },
+            "bodyStart": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4194304
+            },
+            "end": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4194304
+            },
+            "mediaType": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "charset": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "transferEncoding": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "container",
+                "materialized",
+                "unsupported"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "multipart",
+                "nested-message",
+                "invalid-encoding",
+                "transfer-encoding",
+                "charset",
+                "media-type",
+                "decoded",
+                "empty"
+              ]
+            },
+            "fileIndex": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "path",
+            "headerStart",
+            "bodyStart",
+            "end",
+            "mediaType",
+            "charset",
+            "transferEncoding",
+            "outcome",
+            "reason",
+            "fileIndex"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "files": {
+        "maxItems": 128,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            },
+            "mediaType": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 280
+            },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8388608
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "name",
+            "mediaType",
+            "byteLength",
+            "sha256"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "parser",
+      "profile",
+      "outcome",
+      "reason",
+      "subject",
+      "parts",
+      "files"
+    ],
+    "additionalProperties": false
+  },
+  "blobPolicy": "forbidden",
+  "referenceRules": [
+    {
+      "role": "message",
+      "minimum": 1,
+      "maximum": 1,
+      "allowedTargetTypes": {
+        "kind": "exact",
+        "types": [
+          {
+            "typeKey": "mail.message",
+            "version": 1
+          }
+        ]
+      },
+      "attributesSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      }
+    },
+    {
+      "role": "file",
+      "minimum": 0,
+      "maximum": 128,
+      "allowedTargetTypes": {
+        "kind": "exact",
+        "types": [
+          {
+            "typeKey": "core.file",
+            "version": 1
+          }
+        ]
+      },
+      "attributesSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      }
+    }
+  ]
+}

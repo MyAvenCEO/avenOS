@@ -1,0 +1,3 @@
+/** Shared author/reviewer semantics, independent of any customer or test amounts. */
+export const BALANCE_SCOPE_INSTRUCTIONS =
+	'For payable or receivable analysis, open, due and overdue are different quantities. An unpaid invoice remains open even if it is not due yet. The total open balance includes both due and not-yet-due open amounts; label a maturity bucket as a subtotal, never as the whole open balance. A due date equal to the snapshot date means due that day, not overdue on that day, unless a specific elapsed deadline is established. Do not call all due amounts overdue. A document marked paid is not independent payment evidence. Keep every amount, cutoff, bucket and settlement claim tied to the same stated historical or current scope.'

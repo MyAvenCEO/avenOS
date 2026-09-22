@@ -1,4 +1,8 @@
 import type { ActorRegistrySnapshot } from '../registry'
+import { cardinalityFits } from './cardinality'
+
+/** Store schema revision; the executable program grammar remains version 2. */
+export const STUDIO_SKILL_ARTIFACT_VERSION = 3
 
 export interface StudioSkillPort {
 	schema: string
@@ -17,6 +21,7 @@ export type StudioPortBinding =
 export type StudioParameterBinding =
 	| { kind: 'literal'; value: unknown }
 	| { kind: 'parameter'; name: string }
+	| { kind: 'input-field'; port: string; path: string }
 
 interface StudioStepBase {
 	id: string
@@ -70,7 +75,13 @@ export type StudioSkillStep = StudioStepBase &
 				kind: 'when'
 				condition:
 					| { kind: 'presence'; from: StudioPortBinding }
-					| { kind: 'observation'; from: StudioPortBinding; caseId: string }
+					| {
+							kind: 'observation'
+							from: StudioPortBinding
+							path: string
+							equals: string | number | boolean | null
+							caseId: string
+					  }
 				branches: Record<
 					string,
 					{ steps: StudioSkillStep[]; outputs: Record<string, StudioPortBinding> }
@@ -81,6 +92,7 @@ export type StudioSkillStep = StudioStepBase &
 
 export interface StudioSkillV2 {
 	version: 2
+	caseArtifactId?: string
 	name: string
 	inputs: Record<string, StudioSkillPort>
 	parametersSchema: Record<string, unknown>
@@ -224,7 +236,7 @@ function publicLiteral(value: unknown, path: string, depth = 0): unknown {
 	if (depth > 8) fail(path, 'Literal nesting is too deep.')
 	if (value === null || typeof value === 'boolean') return value
 	if (typeof value === 'number' && Number.isFinite(value)) return value
-	if (typeof value === 'string' && value.length <= 1024) return value
+	if (typeof value === 'string' && value.length <= 65_536) return value
 	if (Array.isArray(value) && value.length <= 64)
 		return value.map((item, index) => publicLiteral(item, `${path}.${index}`, depth + 1))
 	if (value && typeof value === 'object' && Object.keys(value).length <= 64)
@@ -234,6 +246,12 @@ function publicLiteral(value: unknown, path: string, depth = 0): unknown {
 
 function parameter(value: unknown, path: string): StudioParameterBinding {
 	const item = object(value, path)
+	if (item.kind === 'input-field') {
+		closed(item, ['kind', 'port', 'path'], path)
+		if (typeof item.path !== 'string' || !/^\/(?:[^~]|~[01]){1,256}$/.test(item.path))
+			fail(path, 'Input field needs an exact JSON pointer into the artifact payload.')
+		return { kind: 'input-field', port: identifier(item.port, path), path: item.path as string }
+	}
 	if (item.kind === 'literal') {
 		closed(item, ['kind', 'value'], path)
 		return { kind: 'literal', value: publicLiteral(item.value, `${path}.value`) }
@@ -410,7 +428,9 @@ function steps(value: unknown, path: string, max = 32, depth = 0): StudioSkillSt
 				fail(at, 'Unknown branch condition.')
 			closed(
 				condition,
-				condition.kind === 'presence' ? ['kind', 'from'] : ['kind', 'from', 'caseId'],
+				condition.kind === 'presence'
+					? ['kind', 'from']
+					: ['kind', 'from', 'path', 'equals', 'caseId'],
 				at
 			)
 			const branch = named(item.branches, `${at}.branches`, 8, (value, branchAt) => {
@@ -421,6 +441,21 @@ function steps(value: unknown, path: string, max = 32, depth = 0): StudioSkillSt
 					outputs: named(body.outputs, `${branchAt}.outputs`, 16, binding)
 				}
 			})
+			if (
+				condition.kind === 'observation' &&
+				(typeof condition.path !== 'string' || !/^\/(?:[^~]|~[01]){1,256}$/.test(condition.path))
+			)
+				fail(at, 'Observation needs an exact JSON pointer into its input payload.')
+			if (
+				condition.kind === 'observation' &&
+				!(
+					condition.equals === null ||
+					typeof condition.equals === 'boolean' ||
+					(typeof condition.equals === 'string' && condition.equals.length <= 1024) ||
+					(typeof condition.equals === 'number' && Number.isFinite(condition.equals))
+				)
+			)
+				fail(at, 'Observation needs an explicit scalar comparison value.')
 			if (
 				condition.kind === 'presence' &&
 				(Object.keys(branch).length !== 2 || !branch.present || !branch.absent)
@@ -440,6 +475,8 @@ function steps(value: unknown, path: string, max = 32, depth = 0): StudioSkillSt
 						: {
 								kind: 'observation',
 								from: binding(condition.from, at),
+								path: condition.path as string,
+								equals: condition.equals as string | number | boolean | null,
 								caseId: identifier(condition.caseId, at)
 							},
 				branches: branch,
@@ -451,8 +488,21 @@ function steps(value: unknown, path: string, max = 32, depth = 0): StudioSkillSt
 }
 
 function publicSchemaNode(value: unknown, path: string, depth = 0): Record<string, unknown> {
+	// Construct plain validated values: callers can supply reactive UI proxies,
+	// which structuredClone cannot read even though they contain valid JSON.
 	if (depth > 4) fail(path, 'Public parameter schema nesting is too deep.')
-	const schema = object(value, path)
+	const { description, ...schema } = object(value, path)
+	const constraints = publicSchemaConstraints(schema, path, depth)
+	return description === undefined
+		? constraints
+		: { ...constraints, description: shortText(description, `${path}.description`, 1024) }
+}
+
+function publicSchemaConstraints(
+	schema: Record<string, unknown>,
+	path: string,
+	depth: number
+): Record<string, unknown> {
 	const kind = schema.type
 	if (kind === 'object') {
 		closed(
@@ -461,8 +511,20 @@ function publicSchemaNode(value: unknown, path: string, depth = 0): Record<strin
 			path
 		)
 		if (schema.additionalProperties !== false) fail(path, 'Public object schemas must be closed.')
-		const properties = named(schema.properties, `${path}.properties`, 16, (item, at) =>
-			publicSchemaNode(item, at, depth + 1)
+		// Top-level settings are graph binding names. Nested object keys are data
+		// schema fields (bookingDate, amountSign…), not graph identifiers.
+		const entries = Object.entries(object(schema.properties, `${path}.properties`))
+		if (entries.length > 16) fail(path, 'Too many public object fields.')
+		const properties = Object.fromEntries(
+			entries.map(([key, value]) => {
+				if (depth === 0) identifier(key, path)
+				else if (
+					!/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(key) ||
+					['constructor', 'prototype', '__proto__'].includes(key)
+				)
+					fail(path, 'Invalid nested parameter field.')
+				return [key, publicSchemaNode(value, `${path}.properties.${key}`, depth + 1)]
+			})
 		)
 		const required =
 			schema.required === undefined ? [] : stringList(schema.required, `${path}.required`, 16)
@@ -513,7 +575,7 @@ function publicSchemaNode(value: unknown, path: string, depth = 0): Record<strin
 		if (
 			!Number.isInteger(schema.maxLength) ||
 			Number(schema.maxLength) < 1 ||
-			Number(schema.maxLength) > 1024
+			Number(schema.maxLength) > 65_536
 		)
 			fail(`${path}.maxLength`, 'Public strings need a bounded length.')
 		if (
@@ -532,7 +594,12 @@ function publicSchemaNode(value: unknown, path: string, depth = 0): Record<strin
 				))
 		)
 			fail(`${path}.enum`, 'Public choices must be bounded strings.')
-		return structuredClone(schema)
+		return {
+			type: kind,
+			maxLength: schema.maxLength,
+			...(schema.minLength === undefined ? {} : { minLength: schema.minLength }),
+			...(schema.enum === undefined ? {} : { enum: [...(schema.enum as string[])] })
+		}
 	}
 	if (kind === 'number' || kind === 'integer') {
 		closed(schema, ['type', 'minimum', 'maximum', 'enum'], path)
@@ -551,7 +618,12 @@ function publicSchemaNode(value: unknown, path: string, depth = 0): Record<strin
 				schema.enum.some((item) => typeof item !== 'number' || !Number.isFinite(item)))
 		)
 			fail(`${path}.enum`, 'Public numeric choices must be bounded.')
-		return structuredClone(schema)
+		return {
+			type: kind,
+			minimum: schema.minimum,
+			maximum: schema.maximum,
+			...(schema.enum === undefined ? {} : { enum: [...(schema.enum as number[])] })
+		}
 	}
 	if (kind === 'boolean') {
 		closed(schema, ['type'], path)
@@ -577,6 +649,12 @@ function canonicalPublicSchema(value: unknown): string {
 	if (Array.isArray(value)) return `[${value.map(canonicalPublicSchema).join(',')}]`
 	if (value && typeof value === 'object')
 		return `{${Object.entries(value)
+			// Descriptions document a schema, not its accepted values. A properties
+			// map may itself have a field named description; do not remove that field.
+			.filter(
+				([key]) =>
+					key !== 'description' || typeof (value as Record<string, unknown>).type !== 'string'
+			)
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([key, item]) => `${JSON.stringify(key)}:${canonicalPublicSchema(item)}`)
 			.join(',')}}`
@@ -631,8 +709,48 @@ export function parseStudioSkillParameters(
 ): Record<string, unknown> {
 	const schema = parameterSchema(definition.parametersSchema)
 	if (!matchesPublicSchema(value, schema))
-		fail('parameters', 'Run settings do not match the Skill form.', 'PARAMETER_TYPE_MISMATCH')
+		fail(
+			'parameters',
+			`Run settings do not match the Skill form: ${publicSchemaMismatch(value, schema)}.`,
+			'PARAMETER_TYPE_MISMATCH'
+		)
 	return structuredClone(value as Record<string, unknown>)
+}
+
+/** Explain a failed shared validation without echoing values or source contents. */
+function publicSchemaMismatch(value: unknown, schema: Record<string, unknown>, path = ''): string {
+	const pointer = (key: string) => `${path}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`
+	if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
+		const properties = schema.properties as Record<string, Record<string, unknown>>
+		for (const key of schema.required as string[])
+			if (!Object.hasOwn(value, key)) return `${pointer(key)} is required`
+		for (const [key, item] of Object.entries(value)) {
+			if (!Object.hasOwn(properties, key)) return `${pointer(key)} is not an allowed field`
+			if (!matchesPublicSchema(item, properties[key]!))
+				return publicSchemaMismatch(item, properties[key]!, pointer(key))
+		}
+	}
+	if (schema.type === 'array' && Array.isArray(value)) {
+		const items = schema.items as Record<string, unknown>
+		const index = value.findIndex((item) => !matchesPublicSchema(item, items))
+		if (index !== -1) return publicSchemaMismatch(value[index], items, pointer(String(index)))
+	}
+	const bounds = Object.fromEntries(
+		Object.entries(schema).filter(([key]) =>
+			[
+				'type',
+				'minLength',
+				'maxLength',
+				'minimum',
+				'maximum',
+				'minItems',
+				'maxItems',
+				'maxProperties',
+				'enum'
+			].includes(key)
+		)
+	)
+	return `${path || '/'} must satisfy ${JSON.stringify(bounds)}`
 }
 
 export function parseStudioSkillV2(value: unknown): StudioSkillV2 {
@@ -646,7 +764,16 @@ export function parseStudioSkillV2(value: unknown): StudioSkillV2 {
 	const item = object(value, 'program')
 	closed(
 		item,
-		['version', 'name', 'inputs', 'parametersSchema', 'steps', 'outputs', 'policy'],
+		[
+			'version',
+			'name',
+			'inputs',
+			'parametersSchema',
+			'steps',
+			'outputs',
+			'policy',
+			'caseArtifactId'
+		],
 		'program'
 	)
 	if (item.version !== 2)
@@ -667,13 +794,22 @@ export function parseStudioSkillV2(value: unknown): StudioSkillV2 {
 	if (typeof policy.allowModel !== 'boolean') fail('policy.allowModel', 'Choose a model policy.')
 	const definition: StudioSkillV2 = {
 		version: 2,
+		...(item.caseArtifactId !== undefined
+			? {
+					caseArtifactId: (() => {
+						if (typeof item.caseArtifactId !== 'string' || !uuid.test(item.caseArtifactId))
+							fail('caseArtifactId', 'Select an exact case artifact.')
+						return item.caseArtifactId as string
+					})()
+				}
+			: {}),
 		name: shortText(item.name, 'name'),
 		inputs,
 		parametersSchema: parameterSchema(item.parametersSchema),
 		steps: steps(item.steps, 'steps'),
 		outputs,
 		policy: {
-			maxInvocations: positiveInteger(policy.maxInvocations, 'policy.maxInvocations', 64),
+			maxInvocations: positiveInteger(policy.maxInvocations, 'policy.maxInvocations', 4096),
 			maxDepth: positiveInteger(policy.maxDepth, 'policy.maxDepth', 8),
 			maxMembers: positiveInteger(policy.maxMembers, 'policy.maxMembers', 256),
 			maxConcurrentChildren: positiveInteger(
@@ -714,13 +850,13 @@ function validateStaticBindings(definition: StudioSkillV2): void {
 		target: StudioSkillPort,
 		path: string
 	): void => {
-		if (!source && target.cardinality === 'optional') return
+		if (!source && ['optional', 'many'].includes(target.cardinality)) return
 		if (
 			!source ||
 			source.schema !== target.schema ||
 			source.type.key !== target.type.key ||
 			source.type.version !== target.type.version ||
-			source.cardinality !== target.cardinality ||
+			!cardinalityFits(source.cardinality, target.cardinality) ||
 			source.role !== target.role ||
 			source.predicate !== target.predicate
 		)
@@ -735,7 +871,11 @@ function validateStaticBindings(definition: StudioSkillV2): void {
 		if (value.kind === 'none') return null
 		if (value.kind === 'item') fail(path, 'Item binding is valid only for its collection child.')
 		if (value.kind === 'step' && !state.previous.has(value.stepId))
-			fail(path, 'Bind to a preceding step.', 'FORWARD_BINDING')
+			fail(
+				path,
+				`Bound producer ${JSON.stringify(value.stepId)} is missing or does not precede its consumer at ${path}. Move the producer before the consumer or rewire the binding in the same edit batch.`,
+				'FORWARD_BINDING'
+			)
 		return (
 			state.known.get(
 				value.kind === 'input' ? `input:${value.port}` : `step:${value.stepId}:${value.port}`
@@ -754,7 +894,17 @@ function validateStaticBindings(definition: StudioSkillV2): void {
 					...Object.entries(step.parameters),
 					...(step.kind === 'invoke' ? Object.entries(step.configuration ?? {}) : [])
 				])
-					if (
+					if (parameter.kind === 'input-field') {
+						if (
+							!Object.hasOwn(step.inputs, parameter.port) ||
+							step.inputs[parameter.port]!.kind === 'none'
+						)
+							fail(
+								`${at}.parameters.${name}`,
+								'Input field must reference a bound input port.',
+								'MISSING_PORT'
+							)
+					} else if (
 						parameter.kind === 'parameter' &&
 						!Object.hasOwn(definition.parametersSchema.properties as object, parameter.name)
 					)
@@ -764,8 +914,16 @@ function validateStaticBindings(definition: StudioSkillV2): void {
 							'MISSING_PARAMETER'
 						)
 			for (const dep of step.after ?? [])
-				if (!state.previous.has(dep))
-					fail(`${at}.after`, 'Dependency must precede this step.', 'FORWARD_BINDING')
+				if (!state.previous.has(dep)) {
+					const repair = body.some((candidate) => candidate.id === dep)
+						? `Move ${JSON.stringify(dep)} before ${JSON.stringify(step.id)} using move-step in the same edit batch. set-after declares a dependency; it does not reorder steps.`
+						: `Update this step's after dependencies using set-after in the same batch as replacing or removing the dependency; keep any required execution ordering.`
+					fail(
+						`${at}.after`,
+						`Step ${JSON.stringify(step.id)} depends on ${JSON.stringify(dep)}, which is missing or does not precede it. ${repair}`,
+						'FORWARD_BINDING'
+					)
+				}
 			const bindings =
 				step.kind === 'invoke' || step.kind === 'skill'
 					? Object.values(step.inputs)
@@ -836,6 +994,28 @@ export function validateStudioSkillCapabilities(
 	registry: ActorRegistrySnapshot
 ): StudioSkillV2Issue[] {
 	const issues: StudioSkillV2Issue[] = []
+	const usedParameters = new Set<string>()
+	const collectParameters = (steps: StudioSkillStep[]) => {
+		for (const step of steps) {
+			if (step.kind === 'when')
+				for (const branch of Object.values(step.branches)) collectParameters(branch.steps)
+			if (step.kind === 'invoke' || step.kind === 'skill')
+				for (const binding of [
+					...Object.values(step.parameters),
+					...Object.values(step.kind === 'invoke' ? (step.configuration ?? {}) : {})
+				])
+					if (binding.kind === 'parameter') usedParameters.add(binding.name)
+		}
+	}
+	collectParameters(definition.steps)
+	for (const name of Object.keys(definition.parametersSchema.properties as object))
+		if (!usedParameters.has(name))
+			issues.push({
+				path: `parametersSchema.properties.${name}`,
+				code: 'UNUSED_PARAMETER',
+				message:
+					'This run setting has no effect. Bind it to an operation or child parameter, or remove it from the public form.'
+			})
 	const inputs = new Map<string, StudioSkillPort>()
 	for (const [name, value] of Object.entries(definition.inputs)) inputs.set(`input:${name}`, value)
 	const walk = (body: StudioSkillStep[], prefix: string, known: Map<string, StudioSkillPort>) => {
@@ -927,7 +1107,8 @@ export function validateStudioSkillCapabilities(
 				try {
 					const actorSchema = publicSchemaNode(
 						(methodParameters as Record<string, unknown>)[name],
-						parameterAt
+						parameterAt,
+						1
 					)
 					if (binding.kind === 'literal' && !matchesPublicSchema(binding.value, actorSchema))
 						issues.push({
@@ -997,15 +1178,13 @@ export function validateStudioSkillCapabilities(
 							? known.get(`step:${binding.stepId}:${binding.port}`)
 							: null
 				if (!declared) continue
-				if (binding.kind === 'none' && declared.cardinality === 'optional') continue
+				if (binding.kind === 'none' && ['optional', 'many'].includes(declared.cardinality)) continue
 				if (
 					!source ||
 					!declared.schema ||
 					source.schema !== declared.schema ||
 					source.predicate !== declared.predicate ||
-					source.role !== declared.role ||
-					(source.cardinality !== declared.cardinality &&
-						!(source.cardinality === 'one' && declared.cardinality === 'optional'))
+					!cardinalityFits(source.cardinality, declared.cardinality)
 				)
 					issues.push({
 						path: `${at}.inputs.${key}`,
@@ -1086,14 +1265,15 @@ export function studioSkillChildReferences(definition: StudioSkillV2): string[] 
 function equivalentPort(
 	left: StudioSkillPort,
 	right: StudioSkillPort,
-	cardinality: StudioSkillPort['cardinality'] = right.cardinality
+	cardinality: StudioSkillPort['cardinality'] = right.cardinality,
+	compareRole = true
 ): boolean {
 	return (
 		left.schema === right.schema &&
 		left.type.key === right.type.key &&
 		left.type.version === right.type.version &&
 		left.predicate === right.predicate &&
-		left.role === right.role &&
+		(!compareRole || left.role === right.role) &&
 		left.cardinality === cardinality
 	)
 }
@@ -1189,15 +1369,16 @@ export function validateStudioSkillChildren(
 										return collection && { ...collection, cardinality: 'one' as const }
 									})()
 								: undefined
-				if (binding.kind === 'none' && target.cardinality === 'optional') continue
+				if (binding.kind === 'none' && ['optional', 'many'].includes(target.cardinality)) continue
 				if (
 					!source ||
-					(!equivalentPort(source, target) &&
-						!(
-							source.cardinality === 'one' &&
-							target.cardinality === 'optional' &&
-							equivalentPort(source, target, 'one')
-						))
+					!cardinalityFits(source.cardinality, target.cardinality) ||
+					!equivalentPort(
+						{ ...source, cardinality: target.cardinality },
+						target,
+						target.cardinality,
+						false
+					)
 				)
 					issues.push({
 						path: `${at}.inputs.${name}`,
@@ -1240,6 +1421,8 @@ export function validateStudioSkillChildren(
 				for (const [name, binding] of Object.entries(step.parameters)) {
 					const target = properties[name]
 					if (!target) continue
+					// The exact value is validated against the child form at runtime.
+					if (binding.kind === 'input-field') continue
 					const source =
 						binding.kind === 'parameter'
 							? (definition.parametersSchema.properties as Record<string, Record<string, unknown>>)[

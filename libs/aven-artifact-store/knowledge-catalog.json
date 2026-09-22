@@ -1,0 +1,67 @@
+{
+	"version": 1,
+	"semantics": "Reported observations, not confirmed business truth. Financial collections include only source-bound representations selected by the existing document-validation projection. Missing, null, empty and unknown values never satisfy a predicate, including not-in. Filters are ANDed. Exact string comparison is case-sensitive. Integer-minor fields accept canonical integer strings (no separators or leading zeros) in predicates. Identifiers are mentions, never proof of ownership. No extraction or model calls occur during reads.",
+	"collections": {
+		"documents": {
+			"label": "Documents",
+			"subject": "source file",
+			"fields": { "name": "text", "category": "text", "mediaType": "text", "status": "text" },
+			"measures": []
+		},
+		"invoices": {
+			"label": "Invoices and receipts",
+			"subject": "document unit, or source file when not segmented",
+			"fields": {
+				"supplier": "text",
+				"invoiceNumber": "text",
+				"documentKind": "text",
+				"issueDate": "date",
+				"dueDate": "date",
+				"currency": "currency",
+				"customerNumber": "text",
+				"orderNumber": "text"
+			},
+			"measures": ["grossMinor", "netMinor", "taxMinor", "amountPaidMinor", "totalOutstandingMinor"]
+		},
+		"statements": {
+			"label": "Bank statements",
+			"subject": "document unit, or source file when not segmented",
+			"fields": {
+				"accountHolder": "text",
+				"accountIban": "iban-mention",
+				"currency": "currency",
+				"periodStart": "date",
+				"periodEnd": "date"
+			},
+			"measures": ["openingBalanceMinor", "closingBalanceMinor"]
+		},
+		"transactions": {
+			"label": "Statement transactions",
+			"subject": "transaction occurrence within one selected statement revision",
+			"fields": {
+				"counterpartyName": "text",
+				"description": "text",
+				"accountIban": "iban-mention",
+				"currency": "currency",
+				"bookingDate": "date",
+				"valueDate": "date"
+			},
+			"measures": ["amountMinor"]
+		},
+		"line-items": {
+			"label": "Invoice line items",
+			"subject": "line occurrence within one selected invoice revision",
+			"fields": {
+				"supplier": "text",
+				"invoiceNumber": "text",
+				"description": "text",
+				"currency": "currency"
+			},
+			"measures": ["netMinor", "grossMinor"]
+		}
+	},
+	"commonFields": { "status": "text" },
+	"operators": ["present", "eq", "not-in"],
+	"limits": { "predicates": 8, "valuesPerPredicate": 16, "valueCharacters": 256, "pageSize": 100 },
+	"summary": "Counts are decimal strings and count subjects in the named collection, not distinct business events. A money measure sums reported integer minor units, separately per reported currency. It is NOT an outstanding balance or reconciliation. Missing amounts and unknown currencies are counted separately, not treated as zero. checked means validation reported consistency, not human approval. review can follow completed validation that found missing values or concerns; zero checked records does NOT mean no validation was performed. Duplicate source imports are not deduplicated business events. No currency conversion. Follow row cursors to inspect exact source and representation evidence."
+}

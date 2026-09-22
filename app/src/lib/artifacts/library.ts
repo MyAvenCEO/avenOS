@@ -1,4 +1,5 @@
 import type { BrowsedArtifact } from './artifact-tree'
+import { formatMoney } from './artifact-view'
 
 export type Collection = 'documents' | 'invoices' | 'statements' | 'transactions' | 'line-items'
 
@@ -111,16 +112,7 @@ export function cellValue(row: LibraryRow, col: LibraryColumn): string {
 	if (col.key === 'category') return categoryLabel(value)
 	if (col.key === 'date' && typeof value === 'string')
 		return new Date(value).toLocaleDateString('de-DE')
-	if (col.money && (typeof value === 'number' || typeof value === 'string')) {
-		const number = Number(value)
-		if (!Number.isFinite(number)) return String(value)
-		const currency = row.data.currency
-		const amount = (number / 100).toLocaleString('de-DE', {
-			minimumFractionDigits: 2,
-			maximumFractionDigits: 6
-		})
-		return `${amount}${typeof currency === 'string' ? ` ${currency}` : ' · Währung unbekannt'}`
-	}
+	if (col.money) return formatMoney(value, row.data.currency, 'code')
 	if (typeof value === 'object') return JSON.stringify(value)
 	return String(value)
 }

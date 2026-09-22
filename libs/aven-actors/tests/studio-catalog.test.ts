@@ -186,7 +186,7 @@ describe('authorized Studio catalog', () => {
 		expect(view.readiness).toBe('unsupported-runtime')
 		const incomplete = page.entries.find((entry) => entry.capabilityId.includes(':incomplete@'))!
 		expect(incomplete.readiness).toBe('contract-incomplete')
-		expect(incomplete.canInvokeNow).toBe(false)
+		expect(incomplete.invocationStatus).toBe('not-evaluated')
 		const observe = page.entries.find((entry) => entry.capabilityId.includes(':observe@'))!
 		expect(observe.readiness).toBe('unsupported-runtime')
 		expect(observe.canPlan).toBe(false)
@@ -206,7 +206,7 @@ describe('authorized Studio catalog', () => {
 		})
 		expect(
 			supported.entries.find((entry) => entry.capabilityId === observe.capabilityId)
-		).toMatchObject({ readiness: 'needs-input', canPlan: true, canInvokeNow: false })
+		).toMatchObject({ readiness: 'needs-input', canPlan: true, invocationStatus: 'not-evaluated' })
 		expect(supported.catalogDigest).toBe(page.catalogDigest)
 		expect(JSON.stringify(page)).not.toContain('private-address')
 	})

@@ -1,8 +1,8 @@
+import { transportError } from '@avenos/chat-engine/transport-error'
 import {
 	type DocumentLlmClient,
 	LlmDocumentModelGateway as HeadlessDocumentModelGateway
 } from '@avenos/document-ingest/llm-gateway'
-import { transportError } from '$lib/artifacts/transport-error'
 import { completeWithLlm, discoverLlmModels } from '$lib/models/gateway'
 
 const defaultClient: DocumentLlmClient = {

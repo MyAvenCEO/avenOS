@@ -296,6 +296,9 @@ describe('split identity -> facade -> os.aven runner', () => {
 						state text NOT NULL,
 						revision bigint NOT NULL,
 						record jsonb NOT NULL,
+						journal_engine text,
+						execution_owner uuid,
+						journal_resuming boolean NOT NULL DEFAULT false,
 						created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 						updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 						UNIQUE(subject_id,idempotency_key)

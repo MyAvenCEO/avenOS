@@ -24,6 +24,7 @@ import {
 } from './registry'
 import {
 	assertPortableRunValue,
+	type PlanRunExecutionContext,
 	type PlanRunExecutor,
 	type PlanRunStartRequest,
 	type PlanRunUnderstandingOutput
@@ -95,6 +96,8 @@ export interface ActorStepPayload extends Record<string, unknown> {
 	stepId: string
 	capabilityId: CapabilityId
 	inputs: Record<string, ActorStepInput>
+	/** Exact members of every named input, including empty optional/collection ports. */
+	inputMembers?: Record<string, ActorStepInput[]>
 	parameters: Record<string, unknown>
 	configuration: Record<string, unknown>
 }
@@ -104,6 +107,23 @@ export interface ActorStepResult {
 	ok: true
 	outputs: Record<string, unknown>
 	warnings?: string[]
+}
+
+/** Host-owned boundary reached only after live authorization and factory admission.
+ * This is not an Actor parameter or a portable program extension. A host can retain
+ * the exact admitted invocation while dispatch is active, or suspend for review
+ * before entering Actor code. Its finally block owns cleanup on every exit. */
+export interface AdmittedActorInvocation {
+	definitionRef: string
+	principal: ActorPrincipal
+	access: ActorAccessContext
+	payload: ActorStepPayload
+}
+export interface ActorInvocationHost {
+	invoke(
+		invocation: AdmittedActorInvocation,
+		dispatch: () => Promise<HandlerResult>
+	): Promise<HandlerResult>
 }
 
 export interface PhysicalProgramExecutionRequest {
@@ -120,6 +140,8 @@ export interface PhysicalProgramExecutionRequest {
 	resource?: Record<string, unknown>
 	/** Live attempt cancellation. Hosts must still fence Store publication independently. */
 	signal?: AbortSignal
+	/** Installed by the execution host, never loaded from the program. */
+	invocationHost?: ActorInvocationHost
 }
 
 export interface PhysicalProgramExecutionResult {
@@ -157,11 +179,16 @@ export interface ActorExecutionHost {
 	affordances?(request: PlanRunStartRequest): Awaitable<AffordanceDefinition[]>
 	/** Previously committed facts which may enable cross-artifact actions. */
 	relatedIngredients?(request: PlanRunStartRequest): Awaitable<Ingredient[]>
+	invocationHost?(
+		request: PlanRunStartRequest,
+		context?: PlanRunExecutionContext
+	): Awaitable<ActorInvocationHost>
 }
 
 /** Compose the same generic plan executor into either a local or server runner. */
 export function createActorPlanExecutor(host: ActorExecutionHost): PlanRunExecutor {
-	return async (request) => {
+	return async (request, context) => {
+		throwIfAborted(context?.signal)
 		if (request.executionEnvironment !== host.executionEnvironment) {
 			throw new Error(
 				`${host.executionEnvironment} execution host cannot run ${request.executionEnvironment} placement`
@@ -240,6 +267,8 @@ export function createActorPlanExecutor(host: ActorExecutionHost): PlanRunExecut
 			...(instances && { instances }),
 			artifacts,
 			parameters: request.parameters,
+			signal: context?.signal,
+			invocationHost: await host.invocationHost?.(request, context),
 			...(resource && { resource })
 		})
 		const output = enrichmentSpec
@@ -446,6 +475,20 @@ async function executeTargetStep(
 	inputs: RuntimeInputBinding[],
 	policyDecisionIds: Set<string>
 ): Promise<{ drafts: RuntimeOutputDraft[]; warnings: string[] }> {
+	const response = await invokeActorCapability(request, step, capability, inputs, policyDecisionIds)
+	const result = parseActorStepResult(response)
+	return { drafts: outputDrafts(capability, step, result), warnings: result.warnings ?? [] }
+}
+
+/** Shared live authorization, admission and lifetime boundary for both plan forms. */
+export async function invokeActorCapability(
+	request: PhysicalProgramExecutionRequest,
+	step: PhysicalPlanStep,
+	capability: RegisteredCapability,
+	inputs: RuntimeInputBinding[],
+	policyDecisionIds: Set<string>
+): Promise<HandlerResult> {
+	throwIfAborted(request.signal)
 	if (step.target.kind === 'instance')
 		return executeInstanceStep(request, step, capability, inputs, policyDecisionIds)
 	return executeFactoryStep(request, step, capability, inputs, policyDecisionIds)
@@ -457,7 +500,7 @@ async function executeInstanceStep(
 	capability: RegisteredCapability,
 	inputs: RuntimeInputBinding[],
 	policyDecisionIds: Set<string>
-): Promise<{ drafts: RuntimeOutputDraft[]; warnings: string[] }> {
+): Promise<HandlerResult> {
 	if (step.target.kind !== 'instance') throw new Error('invalid instance target')
 	const target = step.target
 	const advertised = request.registry.instances.find(
@@ -505,17 +548,20 @@ async function executeInstanceStep(
 		stepId: step.id,
 		capabilityId: step.capability as CapabilityId,
 		inputs: boundInputs,
+		inputMembers: namedInputs(capability, inputs),
 		parameters: step.parameters ?? request.parameters ?? {},
 		configuration: step.configuration ?? {}
 	}
 	assertPortableRunValue(payload)
-	const response = await dispatch(actor, {
-		to: actor.uuid,
-		method: step.method,
+	const response = await dispatchAdmitted(
+		request,
+		target.definitionRef,
+		actor,
+		step.method,
 		payload
-	})
-	const result = parseActorStepResult(response)
-	return { drafts: outputDrafts(capability, step, result), warnings: result.warnings ?? [] }
+	)
+	throwIfAborted(request.signal)
+	return response
 }
 
 async function executeFactoryStep(
@@ -524,7 +570,7 @@ async function executeFactoryStep(
 	capability: RegisteredCapability,
 	inputs: RuntimeInputBinding[],
 	policyDecisionIds: Set<string>
-): Promise<{ drafts: RuntimeOutputDraft[]; warnings: string[] }> {
+): Promise<HandlerResult> {
 	if (step.target.kind !== 'factory') throw new Error('invalid factory target')
 	const factory = request.factories.resolve(step.target.factoryId)
 	if (!factory || factory.offer.offerId !== step.target.offerId) {
@@ -601,23 +647,51 @@ async function executeFactoryStep(
 			stepId: step.id,
 			capabilityId: step.capability as CapabilityId,
 			inputs: boundInputs,
+			inputMembers: namedInputs(capability, inputs),
 			parameters: step.parameters ?? request.parameters ?? {},
 			configuration: admission.normalizedConfiguration
 		}
 		assertPortableRunValue(payload)
-		const envelope = {
-			id: `${request.runId}:${step.id}:attempt-1`,
-			from: `run:${request.runId}`,
-			to: spawned.actor.uuid,
-			method: step.method,
+		const response = await dispatchAdmitted(
+			request,
+			step.target.definitionRef,
+			spawned.actor,
+			step.method,
 			payload
-		}
-		const response = await dispatch(spawned.actor, envelope)
-		const result = parseActorStepResult(response)
-		const drafts = outputDrafts(capability, step, result)
-		return { drafts, warnings: result.warnings ?? [] }
+		)
+		throwIfAborted(request.signal)
+		return response
 	} finally {
 		await spawned.release()
+	}
+}
+
+async function dispatchAdmitted(
+	request: PhysicalProgramExecutionRequest,
+	definitionRef: string,
+	actor: Actor,
+	method: string,
+	payload: ActorStepPayload
+) {
+	let dispatched = false
+	let open = true
+	const send = async () => {
+		// A review or host check may await. Cancellation must win before dispatch;
+		// the hook cannot accidentally retry an unknown mutation outcome.
+		throwIfAborted(request.signal)
+		if (!open || dispatched) throw new Error('ACTOR_INVOCATION_ALREADY_DISPATCHED')
+		dispatched = true
+		return dispatch(actor, { to: actor.uuid, method, payload })
+	}
+	try {
+		return await (request.invocationHost
+			? request.invocationHost.invoke(
+					{ definitionRef, principal: request.principal, access: request.access, payload },
+					send
+				)
+			: send())
+	} finally {
+		open = false
 	}
 }
 
@@ -632,6 +706,15 @@ function authorizationInputs(inputs: RuntimeInputBinding[]) {
 		schemaVersion: artifact.schemaVersion,
 		contentDigest: artifact.contentDigest
 	}))
+}
+
+function namedInputs(capability: RegisteredCapability, inputs: RuntimeInputBinding[]) {
+	return Object.fromEntries(
+		(capability.inputSlots ?? []).map((slot) => [
+			slot.name,
+			inputs.filter((input) => input.slot === slot.name).map((input) => input.artifact)
+		])
+	)
 }
 
 async function dispatch(

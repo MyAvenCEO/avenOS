@@ -60,6 +60,7 @@ function database() {
 				id: parameters[0],
 				subject_id: parameters[1],
 				definition: parameters[2],
+				origin_artifact_id: parameters[3],
 				revision: 1,
 				published_artifact_id: null,
 				published_revision: null,
@@ -125,7 +126,7 @@ describe('fresh v2 Studio draft CAS', () => {
 		await expect(
 			drafts.save({ id, revision: 1, definition: definition('Stale') }, subject)
 		).rejects.toThrow('DRAFT_CHANGED')
-		expect(db.client.release).toHaveBeenCalledTimes(3)
+		expect(db.client.release).toHaveBeenCalledTimes(5)
 	})
 
 	test('rejects an old definition before mutable storage is touched', async () => {

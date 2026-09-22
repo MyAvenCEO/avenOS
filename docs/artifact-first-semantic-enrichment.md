@@ -2,6 +2,12 @@
 
 Status: draft product and runtime contract; initial generic runtime slice implemented
 
+Proposed next policy: [Semantic collections, observations, and document intake](semantic-artifact-collections.md)
+reviews schema-first queries, bounded baseline/demand enrichment, and query-triggered
+Skills. If accepted, it replaces this paper's unbudgeted exhaustive default; it is not
+implemented behavior. The existing exhaustive-runtime slice described below remains
+distinct from that proposed product policy.
+
 Audience: contributors to avenCEO document skills, Actor planning and execution,
 Artifact Store schemas, and artifact-facing product views
 

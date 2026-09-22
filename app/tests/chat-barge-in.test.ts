@@ -17,8 +17,10 @@ describe('Chat barge-in', () => {
 			requests.push(messages)
 			if (requests.length === 1) {
 				yield { kind: 'tool', index: 0, id: 'call-1', name: 'probe', args: '{}' }
+				yield { kind: 'finish', reason: 'tool_calls' }
 			} else {
 				yield { kind: 'text', text: 'Found it.' }
+				yield { kind: 'finish', reason: 'stop' }
 			}
 		}
 		const chat = new Chat(
@@ -42,7 +44,9 @@ describe('Chat barge-in', () => {
 		chat.use('long-intent')
 		await chat.send('Current question')
 		expect(requests).toHaveLength(2)
-		expect(requests[0].length).toBeLessThanOrEqual(26)
+		// The bounded host identity snapshot is separate from dialogue history.
+		expect(requests[0].length).toBeLessThanOrEqual(27)
+		expect(requests[0][1].content).toContain('"conversationIntentId":"long-intent"')
 		expect(requests[0].some((message) => message.content === 'Old 0')).toBe(false)
 		expect(
 			requests[1].some(
@@ -90,11 +94,15 @@ describe('Chat barge-in', () => {
 				})
 			}
 			yield { kind: 'text', text: 'Follow-up reply.' }
+			yield { kind: 'finish', reason: 'stop' }
 		}
 		const chat = new Chat({}, undefined, stream)
 		const first = chat.send('first')
 		await waitUntil(() => chat.routingReply === 'Opening. ')
 		const followUp = chat.send('second', speaker)
+		// A follow-up queues; cancellation must be a separate explicit action.
+		expect(chat.turns.at(-1)?.queued).toBe(true)
+		chat.stop()
 		await Promise.all([first, followUp])
 
 		expect(chat.turns.map((turn) => [turn.role, turn.content])).toEqual([
@@ -111,6 +119,7 @@ describe('Chat environment reset', () => {
 	test('discards conversations from every prior Intent session', async () => {
 		const stream = async function* (): AsyncGenerator<StreamEvent> {
 			yield { kind: 'text', text: 'Reply.' }
+			yield { kind: 'finish', reason: 'stop' }
 		}
 		const chat = new Chat({}, undefined, stream)
 		chat.use('first-intent')

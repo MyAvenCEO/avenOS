@@ -7,7 +7,6 @@ import {
 } from '../src/ids'
 import {
 	ACTOR_RUN_PROTOCOL,
-	ACTOR_RUN_PROTOCOL_V1,
 	assertPlanRunTransition,
 	type PlanRunStartRequest,
 	portableRunClone
@@ -16,7 +15,6 @@ import {
 describe('portable plan runner protocol', () => {
 	test('belongs to the neutral runtime authority rather than identity or an application', () => {
 		expect(ACTOR_RUN_PROTOCOL).toBe('os.aven:protocol:actors:plan-runner@2')
-		expect(ACTOR_RUN_PROTOCOL_V1).toBe('os.aven:protocol:actors:plan-runner@1')
 		expect(AVEN_RUNTIME_AUTHORITY).toBe('os.aven')
 		expect(AVEN_ID_AUTHORITY).toBe('id.aven')
 		expect(AVEN_CEO_AUTHORITY).toBe('ceo.aven')

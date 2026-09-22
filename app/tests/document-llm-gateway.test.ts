@@ -43,7 +43,7 @@ describe('document LLM gateway adapter', () => {
 		let completion: LlmCompletionRequest | undefined
 		const client: DocumentLlmClient = {
 			discover: async (capabilities) => {
-				expect(capabilities).toEqual(['vision', 'structured-output'])
+				expect([...capabilities].sort()).toEqual(['structured-output', 'vision'])
 				return models
 			},
 			complete: async (request) => {
@@ -71,7 +71,10 @@ describe('document LLM gateway adapter', () => {
 		)
 		const completed = await gateway.complete(request)
 		expect(completion).toEqual(documentLlmRequest('vision/primary', request))
-		expect(completion?.requiredCapabilities).toEqual(['vision', 'structured-output'])
+		expect([...(completion?.requiredCapabilities ?? [])].sort()).toEqual([
+			'structured-output',
+			'vision'
+		])
 		expect(completion?.output).toMatchObject({ format: 'json', name: 'classify_document' })
 		expect(completed.structured).toEqual({ resolvedKind: 'invoice' })
 		expect(completed.receipt).toMatchObject({

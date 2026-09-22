@@ -17,7 +17,12 @@ export const DOCUMENT_ASSEMBLER_MANIFEST = manifest(
 	'Document assembler',
 	'Assembles page representations into one bounded document representation.',
 	'document_assemble',
-	['ceo.aven.docs.extracted_text(F, P, T)'],
+	[
+		'ceo.aven.docs.file(F)',
+		'ceo.aven.docs.page(F, P)',
+		'ceo.aven.docs.extracted_text(F, P, T)',
+		'ceo.aven.docs.text_layout(F, P, L)'
+	],
 	['ceo.aven.docs.document_text(F, T)', 'ceo.aven.docs.document_layout(F, L)']
 )
 

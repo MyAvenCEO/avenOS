@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import {
 	discoverIntentSources,
 	type ProjectionArtifact,
-	preserveLiveFileProjection
+	preserveLiveFileProjection,
+	summarizeFileSources
 } from '../src/lib/intents/persistent-artifact-projection'
 
 const artifact = (
@@ -22,6 +23,19 @@ const artifact = (
 })
 
 describe('persistent intent artifact projection', () => {
+	test('batch progress keeps every unfinished and review outcome visible', () => {
+		expect(summarizeFileSources([{ state: 'succeeded' }, {}]).state).toBe('active')
+		expect(summarizeFileSources([{ state: 'succeeded' }, { state: 'needs_review' }]).state).toBe(
+			'needs_review'
+		)
+		expect(summarizeFileSources([{ state: 'failed' }, { state: 'succeeded' }]).state).toBe('failed')
+		expect(summarizeFileSources([{ state: 'succeeded' }, { state: 'succeeded' }]).state).toBe(
+			'succeeded'
+		)
+		expect(summarizeFileSources([{ state: 'active' }, { state: 'failed' }]).note).toContain(
+			'1 failed'
+		)
+	})
 	test('reconstructs the source only from roots committed in the same publication', async () => {
 		const artifacts = [
 			artifact('file-a', 'publication-a', 'file', 'core.file'),
@@ -34,8 +48,8 @@ describe('persistent intent artifact projection', () => {
 			'intent-b': { payload: { intentId: 'intent-two' } }
 		}
 		const result = await discoverIntentSources(artifacts, async (id) => payloads[id])
-		expect(result.get('intent-one')).toEqual({ artifactId: 'file-a', typeKey: 'core.file' })
-		expect(result.get('intent-two')).toEqual({ artifactId: 'file-b', typeKey: 'core.file' })
+		expect(result.get('intent-one')).toEqual([{ artifactId: 'file-a', typeKey: 'core.file' }])
+		expect(result.get('intent-two')).toEqual([{ artifactId: 'file-b', typeKey: 'core.file' }])
 	})
 
 	test('ignores malformed, unreadable, unrelated, and incomplete publications independently', async () => {
@@ -55,11 +69,11 @@ describe('persistent intent artifact projection', () => {
 			return { payload: { intentId: 42 } }
 		})
 		expect([...result]).toEqual([
-			['good-intent-id', { artifactId: 'good-file', typeKey: 'core.file' }]
+			['good-intent-id', [{ artifactId: 'good-file', typeKey: 'core.file' }]]
 		])
 	})
 
-	test('chooses the newest valid source if an intent was declared more than once', async () => {
+	test('keeps every source in a multi-document Intent, newest first', async () => {
 		const artifacts = [
 			artifact('old-file', 'old', 'file', 'core.file', 1),
 			artifact('old-intent', 'old', 'intent', 'intent.declaration', 1, 1),
@@ -69,7 +83,10 @@ describe('persistent intent artifact projection', () => {
 		const result = await discoverIntentSources(artifacts, async () => ({
 			payload: { intentId: 'same-intent' }
 		}))
-		expect(result.get('same-intent')?.artifactId).toBe('new-file')
+		expect(result.get('same-intent')?.map((source) => source.artifactId)).toEqual([
+			'new-file',
+			'old-file'
+		])
 	})
 
 	test('an empty conversation refresh cannot erase a newer live file projection', () => {

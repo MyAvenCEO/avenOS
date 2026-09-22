@@ -1,5 +1,6 @@
-import { researchSpecs } from '../src/lib/chat/research'
-import { cleanRetrievalChatTools } from '../src/lib/intents/retrieval-tools'
+import { cleanRetrievalChatTools } from '@avenos/actors/retrieval'
+import { researchSpecs } from '@avenos/chat-engine/research'
+import { createCalculationActor, MessageBus } from '../../libs/aven-actors/src'
 import { heldoutArtifacts, heldoutCases, heldoutRubrics } from './corpus/heldout-retrieval'
 import { openAIEvaluationStream } from './openai-evaluation'
 import 'fake-indexeddb/auto'
@@ -17,7 +18,7 @@ import { breakingRubrics, gradeRubric, rubricFingerprint } from './retrieval-gra
  * This exercises the production Chat turn loop and context-selection helpers.
  */
 
-import { pageMessages, recentWireMessages } from '../src/lib/chat/history-selection'
+import { pageMessages, recentWireMessages } from '@avenos/chat-engine/history-selection'
 import {
 	type ChatMessage,
 	type StreamEvent,
@@ -1330,13 +1331,18 @@ for (const testCase of selectedCases.filter(
 		}
 	}
 	const cleanTools = cleanRetrievalChatTools(backendTools)
+	const calculationBus = new MessageBus()
+	const calculator = createCalculationActor()
+	calculationBus.register(calculator)
+	const availableSpecs = [...cleanTools.specs, ...calculationBus.toolSpecs()]
 	const modelCalls: Array<{ name: string; args: Record<string, unknown> }> = []
 	chat = new Chat(
 		{},
 		{
-			specs: cleanTools.specs,
+			specs: availableSpecs,
 			run: (name, raw) => {
 				modelCalls.push({ name, args: JSON.parse(raw || '{}') })
+				if (name === 'calculate') return calculationBus.dispatch('chat', name, JSON.parse(raw))
 				return cleanTools.run(name, raw)
 			}
 		},
@@ -1440,7 +1446,7 @@ for (const testCase of selectedCases.filter(
 	const routingPass = !testCase.expectsSwitch || switched
 	const validToolCalls =
 		modelCalls.length > 0
-			? modelCalls.every(({ name }) => cleanTools.specs.some((spec) => spec.name === name))
+			? modelCalls.every(({ name }) => availableSpecs.some((spec) => spec.name === name))
 			: names.every((name) => name === 'message_detail' || specs.some((spec) => spec.name === name))
 	const correctLanguage =
 		testCase.language === 'de'
@@ -1466,7 +1472,7 @@ for (const testCase of selectedCases.filter(
 		diagnostics: replay?.diagnostics ?? chat.diagnostics,
 		toolResults,
 		modelCalls,
-		toolSurface: [...cleanTools.specs, ...researchSpecs].map((t) => t.name),
+		toolSurface: [...availableSpecs, ...researchSpecs].map((t) => t.name),
 		repairModel: process.env.OPENAI_REPAIR_MODEL ?? null,
 		distinctSourceReads: [...sourceReads],
 		difficulty: testCase.difficulty ?? null,
@@ -1496,6 +1502,7 @@ for (const testCase of selectedCases.filter(
 		forbiddenHit
 	}
 	results.push(result)
+	calculator.dispose()
 	if (process.env.LIVE_LLM_EVIDENCE_PATH)
 		await Bun.write(
 			process.env.LIVE_LLM_EVIDENCE_PATH,

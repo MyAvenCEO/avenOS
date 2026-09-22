@@ -1,0 +1,22 @@
+{
+	"name": "@avenos/productivity",
+	"private": true,
+	"version": "26.8.28-next.9",
+	"type": "module",
+	"exports": {
+		"./*": "./src/*.ts"
+	},
+	"dependencies": {
+		"@avenos/actors": "workspace:*",
+		"pg": "8.16.3",
+		"zod": "4.4.3"
+	},
+	"devDependencies": {
+		"@types/pg": "8.15.6",
+		"@types/node": "24.10.13",
+		"typescript": "6.0.3"
+	},
+	"scripts": {
+		"check": "tsc --noEmit"
+	}
+}

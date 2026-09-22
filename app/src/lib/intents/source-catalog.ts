@@ -8,7 +8,7 @@ export class SourceCatalog implements SourceProvider {
 	readonly #pending = new Map<string, SourceEntry>()
 	readonly #unavailable = new Set<string>()
 	readonly #deferred = new Set<string>()
-	#running = 0
+	readonly #running = new Map<symbol, SourceEntry>()
 	#pauseUntil = 0
 	#resume: ReturnType<typeof setTimeout> | undefined
 	inventoryComplete = false
@@ -31,7 +31,10 @@ export class SourceCatalog implements SourceProvider {
 		try {
 			if (await this.index.hasVersion(entry.artifactId, version)) {
 				const cached = await this.index.text(entry.artifactId)
-				if (cached) return cached
+				if (cached) {
+					this.#unavailable.delete(entry.artifactId)
+					return cached
+				}
 			}
 		} catch {
 			/* Cache failure must not prevent an authenticated source read. */
@@ -39,9 +42,13 @@ export class SourceCatalog implements SourceProvider {
 		const text = await this.fetchText(entry)
 		if (this.#closed || this.#versions.get(entry.artifactId) !== version)
 			throw Error('Source changed during read; retry')
-		await this.index.put(entry, text, version).catch(() => {
+		try {
+			await this.index.put(entry, text, version)
+			if (text.complete) this.#unavailable.delete(entry.artifactId)
+			else this.#unavailable.add(entry.artifactId)
+		} catch {
 			this.#unavailable.add(entry.artifactId)
-		})
+		}
 		return text
 	}
 	entries() {
@@ -58,7 +65,7 @@ export class SourceCatalog implements SourceProvider {
 	}
 	register(entry: SourceEntry, version = '', ready = true) {
 		if (this.#closed) return
-		const fingerprint = JSON.stringify([entry, version, ready])
+		const fingerprint = JSON.stringify(['whole-document-page-coverage-3', entry, version, ready])
 		if (this.#versions.get(entry.artifactId) === fingerprint) return
 		const prior = this.#entries.get(entry.artifactId)
 		if (prior) this.#titles.get(prior.title.toLowerCase())?.delete(entry.artifactId)
@@ -86,10 +93,11 @@ export class SourceCatalog implements SourceProvider {
 				}, this.#pauseUntil - Date.now())
 			return
 		}
-		while (!this.#closed && this.#running < 2 && this.#pending.size) {
+		while (!this.#closed && this.#running.size < 2 && this.#pending.size) {
 			const [id, entry] = this.#pending.entries().next().value as [string, SourceEntry]
 			this.#pending.delete(id)
-			this.#running++
+			const attempt = Symbol()
+			this.#running.set(attempt, entry)
 			const version = this.#versions.get(id)
 			void (async () => {
 				try {
@@ -114,17 +122,30 @@ export class SourceCatalog implements SourceProvider {
 						await this.index.put(entry, { content: '', complete: false }).catch(() => {})
 					}
 				} finally {
-					this.#running--
+					this.#running.delete(attempt)
 					setTimeout(() => this.#pump(), 0)
 				}
 			})()
 		}
 	}
-	coverage() {
+	coverage(scope: { intent?: unknown; before?: unknown } = {}) {
+		const intent = String(scope.intent ?? ''),
+			before = String(scope.before ?? '')
+		const matches = (entry: SourceEntry) =>
+			(!intent || entry.intentId === intent) &&
+			(!before || !entry.createdAt || entry.createdAt.slice(0, 10) <= before)
+		const entries = [...this.#entries.values()].filter(matches)
+		const pending = new Set([
+			...this.#pending.keys(),
+			...this.#deferred,
+			...[...this.#running.values()].map((entry) => entry.artifactId)
+		])
 		return {
-			pending: this.#pending.size + this.#running + this.#deferred.size,
-			unavailable: this.#unavailable.size,
-			totalSources: this.#entries.size,
+			pending: entries.filter((entry) => pending.has(entry.artifactId)).length,
+			unavailable: entries.filter(
+				(entry) => !pending.has(entry.artifactId) && this.#unavailable.has(entry.artifactId)
+			).length,
+			totalSources: entries.length,
 			inventoryComplete: this.inventoryComplete
 		}
 	}

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { pageMessages, recentWireMessages } from '../src/lib/chat/history-selection'
+import { pageMessages, recentWireMessages } from '@avenos/chat-engine/history-selection'
 import type { ChatMessage } from '../src/lib/chat/redpill'
 
 const old = Array.from(
@@ -15,9 +15,22 @@ test('a long conversation sends only recent completed messages plus the current 
 	const recent = recentWireMessages(wire, old.length)
 	expect(recent.messages).toHaveLength(25)
 	expect(recent.omitted).toBe(476)
+	expect(recent.priorMessages).toBe(24)
 	expect(recent.messages[0].role).toBe('user')
 	expect(recent.messages.at(-1)?.content).toBe('Current request')
 	expect(wire).toHaveLength(501)
+})
+
+test('active input and tool results do not imply that prior conversation was supplied', () => {
+	const active: ChatMessage[] = [
+		{ role: 'user', content: 'What was my previous message?' },
+		{ role: 'tool', tool_call_id: 'lookup', content: 'A result for this turn' }
+	]
+	expect(recentWireMessages(active, 0).priorMessages).toBe(0)
+	expect(
+		recentWireMessages([{ role: 'user', content: 'A retained preference.' }, ...active], 1)
+			.priorMessages
+	).toBe(1)
 })
 
 test('recent tool calls keep their result, and the active round is never trimmed', () => {

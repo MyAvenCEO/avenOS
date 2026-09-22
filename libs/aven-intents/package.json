@@ -1,0 +1,19 @@
+{
+	"name": "@avenos/intents",
+	"private": true,
+	"version": "26.8.28-next.9",
+	"type": "module",
+	"description": "Shared Intent admission and receipt contracts.",
+	"exports": {
+		"./*": "./src/*.ts"
+	},
+	"dependencies": {
+		"zod": "4.4.3"
+	},
+	"scripts": {
+		"check": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"typescript": "6.0.3"
+	}
+}

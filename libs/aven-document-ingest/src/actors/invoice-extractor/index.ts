@@ -21,7 +21,13 @@ export const INVOICE_EXTRACTOR_MANIFEST = manifest(
 	'Invoice extractor',
 	'Extracts a grounded compact invoice candidate and complete finance details.',
 	'document_extract_invoice',
-	['ceo.aven.docs.file(F)', 'ceo.aven.docs.document_classification(F, C)'],
+	[
+		'ceo.aven.docs.file(F)',
+		'ceo.aven.docs.document_classification(F, C)',
+		'ceo.aven.docs.page(F, P)',
+		'ceo.aven.docs.extracted_text(F, P, T)',
+		'ceo.aven.docs.text_layout(F, P, L)'
+	],
 	['ceo.aven.bookkeeping.invoice_candidate(F, I)', 'ceo.aven.bookkeeping.invoice_details(F, D)']
 )
 

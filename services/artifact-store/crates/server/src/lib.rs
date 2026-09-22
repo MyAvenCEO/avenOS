@@ -273,7 +273,8 @@ impl TenantStoreRegistry {
         }
         let cache_key = format!("{database}:{routing_generation}");
         let last_used = self.use_sequence.fetch_add(1, Ordering::Relaxed);
-        if let Some(cached) = self.stores.write().await.get_mut(&cache_key) {
+        let mut stores = self.stores.write().await;
+        if let Some(cached) = stores.get_mut(&cache_key) {
             cached.last_used = last_used;
             return Ok(cached.store.clone());
         }
@@ -285,12 +286,10 @@ impl TenantStoreRegistry {
             routing_generation,
             &self.credential_root,
         )?;
-        let store = PostgresStore::connect(&database_url, self.connections_per_store).await?;
-        let mut stores = self.stores.write().await;
-        if let Some(existing) = stores.get_mut(&cache_key) {
-            existing.last_used = last_used;
-            return Ok(existing.store.clone());
-        }
+        // No database I/O while holding the registry lock. Publish the lazy pool
+        // before requests acquire connections; racing initial reads must not each
+        // open an independent pool and exceed the tenant role's connection limit.
+        let store = PostgresStore::connect_lazy(&database_url, self.connections_per_store)?;
         if stores.len() >= self.max_stores {
             if let Some(oldest) = stores
                 .iter()
@@ -430,6 +429,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/scopes/{scope_id}/publications", get(read_feed))
         .route("/v1/scopes/{scope_id}/artifacts", get(query_artifacts))
         .route("/v1/scopes/{scope_id}/library", get(read_library))
+        .route("/v1/scopes/{scope_id}/inbox", get(read_inbox))
         .route(
             "/v1/scopes/{scope_id}/artifacts/{artifact_id}",
             get(get_artifact),
@@ -437,6 +437,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/v1/scopes/{scope_id}/artifacts/{artifact_id}/producer-inputs",
             get(get_producer_inputs),
+        )
+        .route(
+            "/v1/scopes/{scope_id}/artifacts/{artifact_id}/references",
+            get(get_references),
         )
         .route(
             "/v1/scopes/{scope_id}/artifacts/{artifact_id}/supporting-evidence",
@@ -485,6 +489,7 @@ async fn context(
 ) -> Result<impl IntoResponse, ApiError> {
     state.auth.authenticate(&headers)?;
     let store = state.store.resolve(&headers).await?;
+    store.verify_types(state.catalog.definitions()).await?;
     Ok(Json(store.context().await?))
 }
 
@@ -516,6 +521,7 @@ async fn stage_upload(
         .map_err(|_| ApiError::staging_quota())?;
     let context = state.auth.authorize(&headers, scope_id)?;
     let store = scoped_store(&state, &headers, scope_id).await?;
+    store.verify_types(state.catalog.definitions()).await?;
     let sha256 = required_header(&headers, "x-expected-sha256")?.to_owned();
     let length = required_header(&headers, "content-length")?
         .parse::<u64>()
@@ -552,6 +558,7 @@ async fn publish(
 ) -> Result<Response, ApiError> {
     let context = state.auth.authorize(&headers, scope_id)?;
     let store = scoped_store(&state, &headers, scope_id).await?;
+    store.verify_types(state.catalog.definitions()).await?;
     let expected_epoch = required_header(&headers, "if-artifact-store-epoch")?
         .parse::<Uuid>()
         .map_err(|_| ApiError::malformed("If-Artifact-Store-Epoch must be a UUID"))?;
@@ -608,6 +615,20 @@ async fn get_artifact(
         .await?
         .ok_or_else(ApiError::unavailable)?;
     Ok(Json(artifact).into_response())
+}
+
+async fn get_references(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((scope_id, artifact_id)): Path<(Uuid, Uuid)>,
+) -> Result<Response, ApiError> {
+    state.auth.authorize(&headers, scope_id)?;
+    let store = scoped_store(&state, &headers, scope_id).await?;
+    let references = store
+        .get_references(scope_id, artifact_id)
+        .await?
+        .ok_or_else(ApiError::unavailable)?;
+    Ok(Json(references).into_response())
 }
 
 async fn get_producer_inputs(
@@ -762,6 +783,28 @@ async fn read_library(
     state.auth.authorize(&headers, scope_id)?;
     let store = scoped_store(&state, &headers, scope_id).await?;
     Ok(Json(store.library(scope_id, query).await?).into_response())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct InboxQuery {
+    after: Option<Uuid>,
+    limit: Option<u32>,
+}
+async fn read_inbox(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(scope_id): Path<Uuid>,
+    Query(query): Query<InboxQuery>,
+) -> Result<Response, ApiError> {
+    state.auth.authorize(&headers, scope_id)?;
+    let store = scoped_store(&state, &headers, scope_id).await?;
+    Ok(Json(
+        store
+            .inbox(scope_id, query.after, query.limit.unwrap_or(50))
+            .await?,
+    )
+    .into_response())
 }
 
 #[derive(Deserialize)]
@@ -1062,7 +1105,7 @@ impl ApiError {
 impl From<StoreError> for ApiError {
     fn from(error: StoreError) -> Self {
         match error {
-            StoreError::Reconciling => Self::new(
+            StoreError::Reconciling | StoreError::CatalogIncomplete => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ErrorCode::StoreReconciliationRequired,
                 error.to_string(),
@@ -1097,7 +1140,11 @@ impl From<StoreError> for ApiError {
                 ErrorCode::UploadDigestMismatch,
                 error.to_string(),
             ),
-            StoreError::StagingQuotaExceeded => Self::staging_quota(),
+            StoreError::StagingQuotaExceeded => Self::new(
+                StatusCode::TOO_MANY_REQUESTS,
+                ErrorCode::StagingQuotaExceeded,
+                "unfinished uploads reached the workspace reservation or staging-byte limit",
+            ),
             StoreError::StorageQuotaExceeded => Self::new(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 ErrorCode::LimitExceeded,

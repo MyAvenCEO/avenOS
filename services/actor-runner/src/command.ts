@@ -1,6 +1,5 @@
 import {
 	ACTOR_RUN_PROTOCOL,
-	ACTOR_RUN_PROTOCOL_V1,
 	assertPortableRunValue,
 	type PlanRunStartCommand
 } from '@avenos/actors/run'
@@ -48,7 +47,7 @@ const goalSpec = z.union([
 
 const planRunStartCommandSchema = z
 	.object({
-		protocol: z.union([z.literal(ACTOR_RUN_PROTOCOL), z.literal(ACTOR_RUN_PROTOCOL_V1)]),
+		protocol: z.literal(ACTOR_RUN_PROTOCOL),
 		requestId: z.string().min(1).max(255),
 		idempotencyKey: z.string().min(1).max(512),
 		requestedAt: z.iso.datetime({ offset: true }),
@@ -61,13 +60,6 @@ const planRunStartCommandSchema = z
 	})
 	.strict()
 	.superRefine((command, context) => {
-		if (command.protocol === ACTOR_RUN_PROTOCOL_V1 && command.goalSpec) {
-			context.addIssue({
-				code: 'custom',
-				path: ['goalSpec'],
-				message: 'protocol version 1 supports exact goals only'
-			})
-		}
 		const mode = command.goalSpec?.mode ?? 'exact'
 		if (mode === 'explore' && command.goals.length > 0) {
 			context.addIssue({

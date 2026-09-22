@@ -1,0 +1,25 @@
+{
+  "typeKey": "web.http-response-inspection",
+  "version": 1,
+  "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "profile": { "type": "string", "const": "utf8-data-v1" },
+      "outcome": { "type": "string", "enum": ["supported", "unsupported", "mismatch", "no-content"] },
+      "detectedMediaType": { "anyOf": [{ "type": "string", "enum": ["application/json", "text/plain"] }, { "type": "null" }] },
+      "declaredMediaType": { "anyOf": [{ "type": "string", "maxLength": 256 }, { "type": "null" }] },
+      "byteLength": { "type": "integer", "minimum": 0, "maximum": 4194304 },
+      "reason": { "type": "string", "enum": ["json", "plain-text", "encoding", "media-type", "invalid-json", "empty"] }
+    },
+    "required": ["profile", "outcome", "detectedMediaType", "declaredMediaType", "byteLength", "reason"],
+    "additionalProperties": false
+  },
+  "blobPolicy": "forbidden",
+  "referenceRules": [{
+    "role": "response", "minimum": 1, "maximum": 1,
+    "allowedTargetTypes": { "kind": "exact", "types": [{ "typeKey": "web.http-response", "version": 1 }] },
+    "attributesSchema": { "type": "object", "additionalProperties": false, "required": [], "properties": {} }
+  }]
+}

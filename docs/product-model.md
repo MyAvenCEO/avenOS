@@ -75,6 +75,43 @@ select or plan several Actors. Actors publish Artifacts rather than treating pri
 memory as durable truth. These distinctions let an Aven continue work without being
 defined by one interface or model provider.
 
+### Messages enter an Intent only after routing
+
+Written and accepted spoken messages first stay in the global input widget. A short,
+tool-free model check compares each contribution with its selected Intent, six recent
+messages, and at most fifty candidate Intent summaries. A fitting contribution enters
+the selected conversation automatically. A suggested move or new Intent waits for a
+destination choice: accept the suggestion, keep the original Intent, search for another,
+or name a new one. An explicit instruction to create or open a named Intent already
+supplies that choice; a model-inferred topic change does not. A failed check leaves
+the message available to retry, edit or discard.
+Unassigned messages do not appear in conversation history or the customer database.
+The candidate index is bounded; it is not an exhaustive semantic search of every
+conversation. The destination picker can search older stored Intents explicitly.
+After assignment, the original wording and the host-recorded destination decision
+are saved together. A later human choice of an existing Intent supersedes an earlier
+request in that wording to create a new one. Generation, answer review and history
+replay receive that decision; it is not presented as an agent-executed tool call.
+
+The input remains free for the next message. A choice pending in one selected context
+does not block submissions made after switching to another Intent. Immediate follow-ups
+submitted in the same context wait for its destination decision, then use that accepted
+destination as their default. They still receive their own routing check. Agents work
+independently across Intents; assigned messages within one Intent execute in order.
+Interrupting narration does not cancel work. Selecting another view during admission
+does not change a submitted message's default or let a delayed decision steal focus.
+
+Unassigned inputs are retained in a private, user-and-environment-scoped local draft
+store. After reload, recovered inputs require a destination check or choice before
+sending. An assigned input is saved to the customer database before foreground work
+starts, and settled answers are saved there too. The desktop's running and queued
+execution is still held in memory: retaining the input is not a guarantee that an
+interrupted response resumes automatically. The server has a separate durable
+admission and execution foundation, but it is not yet the desktop's execution owner.
+Environment switching is held while admission, agent work, or conversation saves
+remain pending. Routing resolves the conversation destination; it does not grant
+authority for actions discussed in that conversation.
+
 ## Identity, ownership, and authorization
 
 `aven.id` establishes which human subject authenticated and how. It does not own an

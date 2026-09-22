@@ -2,11 +2,11 @@ import { createServer } from 'node:http'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import {
 	acquireHttpResource,
-	FetchHttpResourceTransport,
 	finalizedHttpResponseArtifact,
 	type HttpResponseCandidate
 } from '../src/acquisition'
 import { parseHttpRequestArtifact } from '../src/contracts'
+import { PinnedHttpResourceTransport } from '../src/transport'
 import { createMemoryCustomerVault } from '../src/vault'
 
 const TENANT = '10000000-0000-4000-8000-000000000001'
@@ -119,13 +119,17 @@ describe('authenticated HTTP resource end to end', () => {
 		let indexed: HttpResponseCandidate | null = null
 		const dependencies = {
 			vault: vault.sessions,
+			access: { authorize: async () => ({ policyRevision: 'test-policy-1' }) },
 			responses: { find: async () => indexed },
 			egress: {
 				authorize: async (candidate: typeof request) => {
 					if (new URL(candidate.url).origin !== origin) throw new Error('fixture egress escaped')
 				}
 			},
-			transport: new FetchHttpResourceTransport(),
+			transport: new PinnedHttpResourceTransport({
+				allowedOrigins: [],
+				localTestOrigins: [origin]
+			}),
 			requestPolicy: { allowHttpOrigins: [origin] },
 			now: () => new Date('2026-08-30T12:00:00.000Z')
 		}
@@ -134,6 +138,7 @@ describe('authenticated HTTP resource end to end', () => {
 			subjectId: SUBJECT,
 			sessionId: 'session-e2e',
 			executionEnvironment: 'server' as const,
+			artifactScope: { mode: 'production' as const, id: 'reports' },
 			runId: 'run-e2e',
 			stepId: 'fetch-e2e'
 		}
@@ -158,6 +163,7 @@ describe('authenticated HTTP resource end to end', () => {
 		expect(JSON.stringify({ downloaded, payload })).not.toContain('customer-secret')
 		indexed = {
 			artifactId: RESPONSE_ARTIFACT,
+			cacheKey: downloaded.cacheKey,
 			payload,
 			body: { sha256: 'a'.repeat(64), length: stored.byteLength },
 			fresh: false

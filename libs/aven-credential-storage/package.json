@@ -1,0 +1,29 @@
+{
+	"name": "@avenos/credential-storage",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"exports": {
+		".": "./src/envelope.ts",
+		"./keys": "./src/keys.ts",
+		"./contracts": "./src/contracts.ts",
+		"./authority": "./src/authority.ts",
+		"./postgres": "./src/postgres.ts"
+	},
+	"scripts": {
+		"check": "tsc --noEmit",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@avenos/http-resources": "workspace:*",
+		"jose": "6.2.10",
+		"pg": "8.16.3",
+		"zod": "4.4.3"
+	},
+	"devDependencies": {
+		"@types/node": "24.10.13",
+		"@types/pg": "8.15.6",
+		"typescript": "6.0.3",
+		"vitest": "4.1.11"
+	}
+}

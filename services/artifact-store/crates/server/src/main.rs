@@ -63,16 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     max_stores as usize,
                     connections,
                 )?;
-                let mut auth = FixedServiceAuth::for_tenants(token, publisher)?;
-                if let Ok(actor_token) = env::var("ARTIFACT_STORE_ACTOR_RUNNER_BEARER_TOKEN") {
-                    auth = auth.with_credential(
-                        actor_token,
-                        StablePublisher {
-                            issuer: "os.aven".to_owned(),
-                            subject: "service:actor-runner".to_owned(),
-                        },
-                    )?;
-                }
+                let auth = service_publishers(FixedServiceAuth::for_tenants(token, publisher)?)?;
                 (
                     AppState::for_tenants(registry, catalog, auth),
                     "per-customer".to_owned(),
@@ -80,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 let scope_id = required_env("ARTIFACT_STORE_SCOPE_ID")?.parse::<Uuid>()?;
                 let store = PostgresStore::connect(&database_url, 10).await?;
-                let auth = FixedServiceAuth::new(token, publisher, scope_id)?;
+                let auth = service_publishers(FixedServiceAuth::new(token, publisher, scope_id)?)?;
                 store.ensure_scope(scope_id).await?;
                 (AppState::new(store, catalog, auth), scope_id.to_string())
             };
@@ -117,6 +108,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
+}
+
+fn service_publishers(mut auth: FixedServiceAuth) -> Result<FixedServiceAuth, Box<dyn std::error::Error>> {
+    for (name, subject) in [
+        ("ARTIFACT_STORE_ACTOR_RUNNER_BEARER_TOKEN", "service:actor-runner"),
+        ("ARTIFACT_STORE_HTTP_EXECUTOR_BEARER_TOKEN", "service:credential-executor"),
+        ("ARTIFACT_STORE_IMAP_EXECUTOR_BEARER_TOKEN", "service:credential-executor"),
+    ] {
+        if let Ok(token) = env::var(name) {
+            auth = auth.with_credential(token, StablePublisher {
+                issuer: "os.aven".to_owned(), subject: subject.to_owned(),
+            })?;
+        }
+    }
+    Ok(auth)
 }
 
 fn optional_positive_env(name: &str, default: u32) -> Result<u32, Box<dyn std::error::Error>> {

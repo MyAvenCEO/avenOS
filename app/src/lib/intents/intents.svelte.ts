@@ -1,3 +1,5 @@
+import { cleanRetrievalHandlers, retrievalSpecs } from '@avenos/actors/retrieval'
+import { pageMessages } from '@avenos/chat-engine/history-selection'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { Actor } from '$lib/actors/actor'
 import { bus, type HeldPreview } from '$lib/actors/bus'
@@ -9,20 +11,29 @@ import {
 	type ArtifactProcessingState,
 	artifactTypeLabel
 } from '$lib/artifacts/processing'
-import { pageMessages } from '$lib/chat/history-selection'
+import { captureInputContext, screenReferences } from '../chat/input-capture'
+import { screenContext, screenContextPrompt } from '../chat/screen-context.svelte'
+import { studioCaseContext, studioCasePrompt } from '../skills/studio-case-context'
 import { persistentLogEntries } from './activity-log'
 import { artifactManifest } from './artifact-manifest'
+import { runIntentCommand } from './command-result'
 import {
 	DEFAULT_INTENT_CONTEXT_LIMIT,
 	INTENT_LOOKUP_LIMIT,
 	lookupIntents,
 	selectContextIntents
 } from './context-selection'
-import { preserveLiveFileProjection } from './persistent-artifact-projection'
-import { cleanRetrievalHandlers, retrievalSpecs } from './retrieval-tools'
+import { preserveLiveFileProjection, summarizeFileSources } from './persistent-artifact-projection'
+import { persistentTurns } from './persistent-turns'
 import { SourceCatalog } from './source-catalog'
-import { readSource, type SourceProvider, searchSources } from './source-retrieval'
+import {
+	readSource,
+	SOURCE_PAGE_CHARS,
+	type SourceProvider,
+	searchSources
+} from './source-retrieval'
 import { readStoredSource } from './stored-source'
+import { shell } from './talk.svelte'
 
 /**
  * THE INTENTS — the workspace's subjects, MOCKED (0158) but owned by an
@@ -50,6 +61,9 @@ export interface MockArtifact {
 	artifactId?: string
 	typeKey?: string
 	stageKey?: string
+	/** Exact source associations from the processing projection; never inferred from titles. */
+	sourceArtifactIds?: string[]
+	relation?: 'source' | 'file-skill-output' | 'attached'
 	/** Last persisted processing state of this artifact (live view wins). */
 	state?: ArtifactProcessingState
 	searchVersion?: string
@@ -61,6 +75,8 @@ export interface MockArtifact {
 export interface SkillStatus {
 	skill: string
 	state: 'done' | 'running' | 'waiting'
+	/** Preserve the processing outcome instead of presenting warnings as pending work. */
+	processingState?: ArtifactProcessingState | 'waiting'
 	note: string
 	/** Which workflow of the TEMPLATE this instance runs. */
 	workflow: string
@@ -104,6 +120,8 @@ export interface Contribution {
 	text: string | null
 	payload: Record<string, unknown>
 	createdAt: string
+	feedback?: import('@avenos/chat-engine/response-feedback').ResponseFeedback | null
+	feedbackCheckComplete?: boolean
 }
 
 export interface PersistentIntentDetail {
@@ -825,24 +843,26 @@ const persistencePending = (title: string) => ({
 
 class IntentsActor extends Actor {
 	environmentRevision = 0
-	items = $state<MockIntent[]>(structuredClone(INTENTS))
+	items = $state<MockIntent[]>(isTauri() ? [] : structuredClone(INTENTS))
 	contextItemsById = $derived(new Map(this.items.map((item) => [item.id, item])))
-	selectedId = $state(INTENTS[0].id)
-	recentIds = $state<string[]>([INTENTS[0].id])
+	selectedId = $state(isTauri() ? '' : INTENTS[0].id)
+	recentIds = $state<string[]>(isTauri() ? [] : [INTENTS[0].id])
 
 	/** Customer-environment changes discard the LRU along with the workspace projection. */
 	resetForEnvironment(): void {
+		this.#attachments.clear()
 		this.environmentRevision++
 		this.#sourceCatalog?.close()
 		this.#sourceCatalog = null
 		this.#searchScope = null
-		this.items = structuredClone(INTENTS)
-		this.selectedId = INTENTS[0].id
-		this.recentIds = [INTENTS[0].id]
+		this.items = isTauri() ? [] : structuredClone(INTENTS)
+		this.selectedId = isTauri() ? '' : INTENTS[0].id
+		this.recentIds = isTauri() ? [] : [INTENTS[0].id]
 	}
 
 	/** Opening an intent moves it to the front of the small prompt index. */
 	select(id: string): void {
+		shell.inboxOpen = false
 		this.selectedId = id
 		this.recentIds = [id, ...this.recentIds.filter((recent) => recent !== id)].slice(
 			0,
@@ -925,6 +945,11 @@ class IntentsActor extends Actor {
 				artifactId: artifact.artifactId,
 				typeKey: artifact.typeKey,
 				stageKey: artifact.stageKey ?? undefined,
+				relation: artifact.relation,
+				sourceArtifactIds:
+					artifact.relation === 'file-skill-output' && detail.sourceArtifactId
+						? [detail.sourceArtifactId]
+						: [],
 				searchVersion: detail.fileSkill?.projectionVersion ?? '',
 				// The processing projection lives on the file-skill row; the
 				// source file carries it into the manifest and the tool result.
@@ -958,6 +983,7 @@ class IntentsActor extends Actor {
 						{
 							skill: 'file',
 							state: skillState,
+							processingState: detail.fileSkill.state,
 							note: presentation?.summary || processingNote(detail.fileSkill.state),
 							workflow: 'file',
 							done: stageDone,
@@ -976,6 +1002,8 @@ class IntentsActor extends Actor {
 		)
 		if (existing) Object.assign(existing, mapped)
 		else this.items.unshift(mapped)
+		for (const [artifactId, title] of this.#attachments.get(detail.id) ?? [])
+			this.attachGeneratedDocument(detail.id, artifactId, title)
 		this.indexIntent(mapped)
 	}
 
@@ -983,7 +1011,9 @@ class IntentsActor extends Actor {
 		const intent = this.items.find((candidate) => candidate.id === intentId)
 		if (!intent) return
 		const source = intent.artifacts.find(
-			(artifact) => artifact.artifactId === artifactId || artifact.typeKey === 'core.file'
+			(artifact) =>
+				artifact.artifactId === artifactId ||
+				(!artifact.artifactId && artifact.typeKey === 'core.file')
 		)
 		const value: MockArtifact = {
 			kind: 'doc',
@@ -1013,56 +1043,73 @@ class IntentsActor extends Actor {
 			candidate.artifacts.some((artifact) => artifact.artifactId === artifactId)
 		)
 		if (!intent) return
-		intent.type = presentation.preferredType
-		intent.status =
-			presentation.state === 'succeeded'
-				? 'done'
-				: presentation.state === 'failed'
-					? 'error'
-					: presentation.state === 'needs_review'
-						? 'waiting'
-						: 'working'
 		const source = intent.artifacts.find((artifact) => artifact.artifactId === artifactId)
 		if (source) {
 			source.state = presentation.state
 			source.summary = presentation.summary ?? undefined
 			source.label = artifactTypeLabel(presentation.preferredType)
 		}
+		const originals = intent.artifacts.filter(
+			(artifact) => artifact.typeKey === 'core.file' && !artifact.stageKey
+		)
+		const batch = originals.length > 1 ? summarizeFileSources(originals) : null
+		const processingState = batch?.state ?? presentation.state
+		intent.type = batch ? 'file' : presentation.preferredType
+		if (intent.status !== 'archive')
+			intent.status =
+				processingState === 'succeeded'
+					? 'done'
+					: processingState === 'failed'
+						? 'error'
+						: processingState === 'needs_review'
+							? 'waiting'
+							: 'working'
 		for (const output of presentation.derivedArtifacts) {
-			if (intent.artifacts.some((artifact) => artifact.artifactId === output.artifactId)) continue
+			const existing = intent.artifacts.find(
+				(artifact) => artifact.artifactId === output.artifactId
+			)
+			if (existing) {
+				existing.sourceArtifactIds = [
+					...new Set([...(existing.sourceArtifactIds ?? []), artifactId])
+				]
+				continue
+			}
 			intent.artifacts.push({
 				kind: 'doc',
 				title: output.typeKey,
 				note: `${output.typeKey} · ${output.stageKey}`,
 				artifactId: output.artifactId,
 				typeKey: output.typeKey,
-				stageKey: output.stageKey
+				stageKey: output.stageKey,
+				sourceArtifactIds: [artifactId],
+				relation: 'file-skill-output'
 			})
 		}
 		const fileSkill = intent.skills.find((skill) => skill.skill === 'file')
 		const runtimeSkillState =
-			presentation.state === 'succeeded'
+			processingState === 'succeeded'
 				? ('done' as const)
-				: presentation.state === 'active'
+				: processingState === 'active'
 					? ('running' as const)
 					: ('waiting' as const)
 		const next = {
 			skill: 'file',
 			state: runtimeSkillState,
-			note: presentation.summary ?? 'Processing locally',
+			processingState,
+			note: batch?.note ?? presentation.summary ?? 'Processing locally',
 			workflow: 'file',
-			done: presentation.stages
+			done: (batch ? [] : presentation.stages)
 				.filter((stage) => stage.state === 'succeeded')
 				.map((stage) => stage.key),
-			current: presentation.stages.find((stage) =>
+			current: (batch ? [] : presentation.stages).find((stage) =>
 				['running', 'queued', 'pending', 'publishing'].includes(stage.state)
 			)?.key,
-			stages: presentation.stages
+			stages: batch ? [] : presentation.stages
 		}
 		if (fileSkill) Object.assign(fileSkill, next)
 		else intent.skills.push(next)
-		for (const artifact of intent.artifacts)
-			artifact.searchVersion = presentation.derivedArtifacts.map((a) => a.artifactId).join(',')
+		if (source)
+			source.searchVersion = presentation.derivedArtifacts.map((a) => a.artifactId).join(',')
 		this.indexIntent(intent)
 	}
 
@@ -1085,7 +1132,7 @@ class IntentsActor extends Actor {
 						'to it; the current request and your answer move there too. Use whenever the ' +
 						'user asks to open or work on another intent, AND whenever a request is about ' +
 						'another intent than the one on screen — route it there first, then answer. ' +
-						'Accepts the id or a part of the title.',
+						'Accepts the id or a part of the title. Archived Intents can be opened without restoring them. If the input routing receipt already delivered this contribution here, no navigation call is needed.',
 					parameters: {
 						type: 'object',
 						properties: { intent: { type: 'string', description: 'id, or part of the title' } },
@@ -1096,10 +1143,15 @@ class IntentsActor extends Actor {
 					name: 'intent_create',
 					description:
 						'Creates a new intent and switches to it. Use when the user starts something new ' +
-						'that is not part of the current intent.',
+						'that is not part of the current intent. Creation opens the topic; it does not authorize research. If only a broad topic is given, create it and ask one short question about the desired outcome before searching or acting.',
 					parameters: {
 						type: 'object',
 						properties: {
+							id: {
+								type: 'string',
+								format: 'uuid',
+								description: 'Stable creation ID for safe retries; optional.'
+							},
 							title: { type: 'string', description: 'short imperative title' },
 							type: { type: 'string', description: 'one word: auftrag, frist, abgleich, …' },
 							source: { type: 'string', description: 'where it came from, e.g. "Freitext · Chat"' },
@@ -1166,7 +1218,8 @@ class IntentsActor extends Actor {
 				},
 				{
 					name: 'intent_restore',
-					description: 'Brings an archived intent back to the active list and switches to it.',
+					description:
+						'Brings an archived Intent back to the active list. Only use when the user asks to unarchive or restore it, not merely to open, read or continue its conversation.',
 					parameters: {
 						type: 'object',
 						properties: { intent: { type: 'string', description: 'id, or part of the title' } },
@@ -1241,35 +1294,28 @@ class IntentsActor extends Actor {
 					const hit = await this.resolvePersistent(String(p.intent ?? ''))
 					if (!hit) return this.miss(String(p.intent ?? ''))
 					const query = String(p.query ?? '').trim()
-					const detail =
-						hit.persistent && isTauri()
-							? await invoke<PersistentIntentDetail>('intent_get', { intentId: hit.id })
-							: null
-					const history = detail
-						? detail.contributions
-								.filter(
-									(entry) =>
-										(entry.contributorKind === 'human' || entry.contributorKind === 'agent') &&
-										entry.text !== null
-								)
-								.map((entry) => ({
-									role:
-										entry.contributorKind === 'human' ? ('user' as const) : ('assistant' as const),
-									content: entry.text ?? ''
-								}))
-						: chatActor.core.messageHistory(hit.id)
+					if (hit.persistent && isTauri()) {
+						const preview = await invoke<Record<string, unknown>>('intent_preview', {
+							intentId: hit.id
+						})
+						const text = JSON.stringify({
+							...preview,
+							artifacts: hit.artifacts
+								.slice(-10)
+								.reverse()
+								.map((a) => a.title),
+							artifactCount: hit.artifacts.length,
+							olderArtifactsAvailable: hit.artifacts.length > 10
+						})
+						return { record: text, wire: text }
+					}
+					const history = chatActor.core.messageHistory(hit.id)
 					const conversationPage = pageMessages(history, query, 0, 10)
-					const activity = detail
-						? detail.contributions
-								.filter((entry) => entry.kind !== 'message')
-								.slice(-10)
-								.map((entry) => `${entry.kind}: ${(entry.text ?? '').slice(0, 500)}`)
-						: hit.log
-								.slice(-10)
-								.map(
-									(entry) =>
-										`${entry.step}: ${(entry.note ?? entry.card?.text ?? '').slice(0, 500)}`
-								)
+					const activity = hit.log
+						.slice(-10)
+						.map(
+							(entry) => `${entry.step}: ${(entry.note ?? entry.card?.text ?? '').slice(0, 500)}`
+						)
 					const result = {
 						ok: true,
 						id: hit.id,
@@ -1277,11 +1323,8 @@ class IntentsActor extends Actor {
 						status: hit.status,
 						source: hit.source,
 						conversation: conversationPage.rows,
-						conversationMatches: detail ? undefined : conversationPage.total,
-						olderMessagesAvailable: detail?.contributionsHasMore ?? conversationPage.hasMore,
-						notice: detail
-							? 'This is recent history only. Use intent_messages to search all stored messages.'
-							: undefined,
+						conversationMatches: conversationPage.total,
+						olderMessagesAvailable: conversationPage.hasMore,
 						matchMode: conversationPage.matchMode,
 						activity,
 						artifacts: hit.artifacts
@@ -1305,7 +1348,7 @@ class IntentsActor extends Actor {
 					})
 					return { record: JSON.stringify(result), wire: JSON.stringify(result) }
 				},
-				intent_messages: async (p) => {
+				intent_messages: async (p, context) => {
 					if (isTauri()) {
 						const result = await invoke('intent_search', {
 							messages: true,
@@ -1313,12 +1356,15 @@ class IntentsActor extends Actor {
 								query: p.query,
 								cursor: p.cursor,
 								limit: Math.min(Number(p.limit ?? 10), 20),
-								intent: p.intent
+								intent: p.intent,
+								state: p.state,
+								role: p.role,
+								order: p.order
 							}
 						})
 						return { record: JSON.stringify(result), wire: JSON.stringify(result) }
 					}
-					const key = String(p.intent ?? this.selectedId)
+					const key = String(p.intent ?? context?.intentId ?? this.selectedId)
 					const hit = this.find(key)
 					if (!hit) return this.miss(key)
 					const detail =
@@ -1339,7 +1385,10 @@ class IntentsActor extends Actor {
 								}))
 						: chatActor.core.messageHistory(hit.id)
 					const query = String(p.query ?? '').trim()
-					const page = pageMessages(history, query, Number(p.offset ?? 0), Number(p.limit ?? 10))
+					const page = pageMessages(history, query, Number(p.offset ?? 0), Number(p.limit ?? 10), {
+						role: p.role as 'user' | 'assistant' | undefined,
+						order: p.order as 'oldest' | 'newest' | undefined
+					})
 					const result = {
 						ok: true,
 						intent: hit.id,
@@ -1359,21 +1408,22 @@ class IntentsActor extends Actor {
 								: '')
 					}
 				},
-				intent_switch: async (p) => {
+				intent_switch: async (p, context) => {
 					const hit = await this.resolvePersistent(String(p.intent ?? ''))
 					if (!hit) return this.miss(String(p.intent ?? ''))
-					this.goTo(hit.id)
+					if (context?.routeConversation) context.routeConversation(hit.id)
+					else this.goTo(hit.id)
 					return {
 						record: JSON.stringify({ ok: true, selected: hit.id }),
-						wire: `"${hit.title}" is on screen now.`
+						wire: `This conversation now belongs to "${hit.title}". The user's screen selection may differ.`
 					}
 				},
-				intent_create: async (p) => {
+				intent_create: async (p, context) => {
 					const title = String(p.title ?? '').trim()
 					if (title === '')
 						return { record: '{"ok":false,"error":"title missing"}', wire: 'A title is needed.' }
 					if (isTauri()) {
-						const id = crypto.randomUUID()
+						const id = p.id ? String(p.id) : crypto.randomUUID()
 						const detail = await invoke<PersistentIntentDetail>('intent_create', {
 							intent: {
 								id,
@@ -1385,14 +1435,15 @@ class IntentsActor extends Actor {
 							}
 						})
 						this.applyPersistent(detail)
-						this.goTo(id)
+						if (context?.routeConversation) context.routeConversation(id)
+						else this.goTo(id)
 						return {
 							record: JSON.stringify({ ok: true, created: id, persistent: true }),
-							wire: `Created "${title}" and switched to it.`
+							wire: `Created "${title}". This conversation and its queued follow-ups now belong there. The user may be viewing a different Intent; do not claim their screen changed.`
 						}
 					}
 					const intent: MockIntent = {
-						id: slug(title),
+						id: p.id ? String(p.id) : slug(title),
 						type: String(p.type ?? 'auftrag'),
 						title,
 						source: String(p.source ?? 'Freitext · Chat'),
@@ -1411,11 +1462,12 @@ class IntentsActor extends Actor {
 						artifacts: [],
 						skills: []
 					}
-					this.items.unshift(intent)
-					this.goTo(intent.id)
+					if (!this.items.some((i) => i.id === intent.id)) this.items.unshift(intent)
+					if (context?.routeConversation) context.routeConversation(intent.id)
+					else this.goTo(intent.id)
 					return {
 						record: JSON.stringify({ ok: true, created: intent.id }),
-						wire: `Created "${title}" and switched to it.`
+						wire: `Created "${title}". This conversation and its queued follow-ups now belong there. The user may be viewing a different Intent; do not claim their screen changed.`
 					}
 				},
 				intent_update: async (p) => {
@@ -1443,7 +1495,7 @@ class IntentsActor extends Actor {
 								record: '{"ok":false,"error":"nothing to change"}',
 								wire: 'Nothing to change.'
 							}
-						const detail = await invoke<PersistentIntentDetail>('intent_update', {
+						const detail = await this.persistentCommand('intent_update', {
 							intentId: hit.id,
 							update
 						})
@@ -1488,7 +1540,7 @@ class IntentsActor extends Actor {
 						wire: `Updated ${changed.join(', ')} of "${hit.title}".`
 					}
 				},
-				intent_merge: async (p) => {
+				intent_merge: async (p, context) => {
 					const target = this.find(String(p.into ?? ''))
 					if (!target) return this.miss(String(p.into ?? ''))
 					const froms = (Array.isArray(p.from) ? p.from : [p.from])
@@ -1496,6 +1548,7 @@ class IntentsActor extends Actor {
 						.filter((f): f is MockIntent => !!f && f.id !== target.id)
 					if (froms.length === 0)
 						return { record: '{"ok":false,"error":"nothing to merge"}', wire: 'Nothing to merge.' }
+					chatActor.core.assertMergeable([target.id, ...froms.map((i) => i.id)])
 					if (target.persistent || froms.some((intent) => intent.persistent)) {
 						if (!isTauri() || !target.persistent || froms.some((intent) => !intent.persistent)) {
 							return {
@@ -1506,7 +1559,7 @@ class IntentsActor extends Actor {
 						if (target.persistentVersion === undefined) return persistencePending(target.title)
 						if (froms.some((intent) => intent.persistentVersion === undefined))
 							return persistencePending('one or more source intents')
-						const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
+						const detail = await this.persistentCommand('intent_lifecycle', {
 							intentId: target.id,
 							action: 'merge',
 							command: {
@@ -1527,7 +1580,7 @@ class IntentsActor extends Actor {
 							(intent) => !froms.some((source) => source.id === intent.id)
 						)
 						this.applyPersistent(detail)
-						this.goTo(target.id)
+						if (context?.canPresent?.() !== false) this.goTo(target.id)
 						return {
 							record: JSON.stringify({
 								ok: true,
@@ -1549,13 +1602,13 @@ class IntentsActor extends Actor {
 							if (!target.skills.some((t) => t.skill === sk.skill)) target.skills.push(sk)
 						this.items = this.items.filter((i) => i.id !== f.id)
 					}
-					this.goTo(target.id)
+					if (context?.canPresent?.() !== false) this.goTo(target.id)
 					return {
 						record: JSON.stringify({ ok: true, into: target.id, merged: froms.map((f) => f.id) }),
 						wire: `Merged ${froms.map((f) => `"${f.title}"`).join(', ')} into "${target.title}".`
 					}
 				},
-				intent_archive: async (p) => {
+				intent_archive: async (p, context) => {
 					const hit = this.find(String(p.intent ?? ''))
 					if (!hit) return this.miss(String(p.intent ?? ''))
 					if (hit.status === 'archive')
@@ -1565,13 +1618,13 @@ class IntentsActor extends Actor {
 						}
 					if (hit.persistent && isTauri()) {
 						if (hit.persistentVersion === undefined) return persistencePending(hit.title)
-						const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
+						const detail = await this.persistentCommand('intent_lifecycle', {
 							intentId: hit.id,
 							action: 'archive',
 							command: { id: hit.id, expectedVersion: hit.persistentVersion }
 						})
 						this.applyPersistent(detail)
-						this.goTo(hit.id)
+						if (context?.canPresent?.() !== false) this.goTo(hit.id)
 						return {
 							record: JSON.stringify({ ok: true, archived: hit.id, persistent: true }),
 							wire: `Archived "${hit.title}".`
@@ -1579,53 +1632,56 @@ class IntentsActor extends Actor {
 					}
 					hit.before = hit.status
 					hit.status = 'archive'
-					// The request and its answer belong to the intent being archived:
-					// they are its last exchange, so they go — and show — there.
-					this.goTo(hit.id)
+					if (context?.canPresent?.() !== false) this.goTo(hit.id)
 					return {
 						record: JSON.stringify({ ok: true, archived: hit.id }),
 						wire: `Archived "${hit.title}".`
 					}
 				},
-				intent_restore: async (p) => {
+				intent_restore: async (p, context) => {
 					const hit = this.find(String(p.intent ?? ''))
 					if (!hit) return this.miss(String(p.intent ?? ''))
 					if (hit.persistent && isTauri()) {
 						if (hit.persistentVersion === undefined) return persistencePending(hit.title)
-						const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
+						const detail = await this.persistentCommand('intent_lifecycle', {
 							intentId: hit.id,
 							action: 'restore',
 							command: { id: hit.id, expectedVersion: hit.persistentVersion }
 						})
 						this.applyPersistent(detail)
-						this.goTo(hit.id)
+						if (context?.canPresent?.() !== false) this.goTo(hit.id)
 						return {
 							record: JSON.stringify({ ok: true, restored: hit.id, persistent: true }),
-							wire: `"${hit.title}" is back on the list and on screen.`
+							wire: `"${hit.title}" is back on the list.`
 						}
 					}
 					if (hit.status === 'archive') hit.status = hit.before ?? 'done'
-					this.goTo(hit.id)
+					if (context?.canPresent?.() !== false) this.goTo(hit.id)
 					return {
 						record: JSON.stringify({ ok: true, restored: hit.id }),
-						wire: `"${hit.title}" is back on the list and on screen.`
+						wire: `"${hit.title}" is back on the list.`
 					}
 				},
 				intent_delete: async (p) => {
 					const hit = this.find(String(p.intent ?? ''))
 					if (!hit) return this.miss(String(p.intent ?? ''))
+					if (chatActor.core.status(hit.id) !== 'idle')
+						return {
+							record: '{"ok":false,"error":"intent busy"}',
+							wire: 'Wait for this Intent and its queued messages to finish before deleting it.'
+						}
 					if (this.items.length === 1)
 						return { record: '{"ok":false,"error":"last intent"}', wire: 'The last intent stays.' }
 					if (hit.persistent && isTauri()) {
 						if (hit.persistentVersion === undefined) return persistencePending(hit.title)
-						await invoke('intent_delete', {
+						await this.persistentCommand('intent_delete', {
 							intentId: hit.id,
 							command: { id: hit.id, expectedVersion: hit.persistentVersion }
 						})
 					}
 					await this.#sourceCatalog?.removeIntent(hit.id)
 					this.items = this.items.filter((i) => i.id !== hit.id)
-					if (this.selectedId === hit.id) this.select(this.items[0].id)
+					if (this.selectedId === hit.id) this.select(this.items[0]?.id ?? '')
 					return {
 						record: JSON.stringify({ ok: true, deleted: hit.id }),
 						wire: `Deleted "${hit.title}".`
@@ -1636,7 +1692,52 @@ class IntentsActor extends Actor {
 					return { record: JSON.stringify(result), wire: JSON.stringify(result) }
 				},
 				artifact_detail: async (p) => {
-					const result = await readSource(await this.checkedSourceProvider(), p)
+					const provider = await this.checkedSourceProvider()
+					let result: Record<string, unknown> = await readSource(provider, p)
+					// Exact artifacts discovered through Studio are readable even when
+					// they are derived records rather than top-level Intent attachments.
+					// The native boundary independently admits every scoped read.
+					const artifactId = String(p.artifact ?? '')
+					if (
+						!result.ok &&
+						Array.isArray(result.candidates) &&
+						!result.candidates.length &&
+						/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(artifactId)
+					) {
+						try {
+							const envelope = await invoke<{ typeKey: string; payload: Record<string, unknown> }>(
+								'artifact_get',
+								{ artifactId }
+							)
+							const source = await readStoredSource(artifactId, (command, args) =>
+								invoke(command, args)
+							)
+							const offset = Number(p.offset ?? 0)
+							if (!Number.isSafeInteger(offset) || offset < 0 || offset > source.content.length)
+								throw Error('Invalid source offset')
+							const end = Math.min(source.content.length, offset + SOURCE_PAGE_CHARS)
+							result = {
+								ok: true,
+								artifactId,
+								kind: envelope.typeKey,
+								title: String(envelope.payload.originalName ?? envelope.typeKey),
+								content: source.content.slice(offset, end),
+								offset,
+								nextOffset: end < source.content.length ? end : null,
+								complete: source.complete && end === source.content.length,
+								sourceComplete: source.complete,
+								totalChars: source.content.length,
+								notice:
+									'This is the exact derived artifact, not independent confirmation of its producer’s interpretation. Inspect provenance to identify its original source.'
+							}
+						} catch (error) {
+							result = {
+								ok: false,
+								artifactId,
+								error: `Artifact content unavailable: ${String(error)}`
+							}
+						}
+					}
 					return { record: JSON.stringify(result), wire: JSON.stringify(result) }
 				}
 			})
@@ -1644,6 +1745,31 @@ class IntentsActor extends Actor {
 	}
 
 	#sourceCatalog: SourceCatalog | null = null
+	#attachments = new Map<string, Map<string, string>>()
+	registerDiscoveredAttachment(intentId: string, artifactId: string, title: string) {
+		const attachments = this.#attachments.get(intentId) ?? new Map<string, string>()
+		attachments.set(artifactId, title)
+		this.#attachments.set(intentId, attachments)
+		this.sourceProvider()
+		this.#sourceCatalog?.register(
+			{ artifactId, intentId, title, kind: 'core.file' },
+			artifactId,
+			true
+		)
+		this.attachGeneratedDocument(intentId, artifactId, title)
+	}
+	private attachGeneratedDocument(intentId: string, artifactId: string, title: string) {
+		const intent = this.items.find((i) => i.id === intentId)
+		if (intent && !intent.artifacts.some((a) => a.artifactId === artifactId))
+			intent.artifacts.push({
+				kind: 'doc',
+				title,
+				artifactId,
+				typeKey: 'core.file',
+				note: 'Generated document',
+				stageKey: 'skill-output'
+			})
+	}
 	#searchScope: string | null = null
 	async initializeSourceSearch() {
 		if (!isTauri()) return
@@ -1688,7 +1814,11 @@ class IntentsActor extends Actor {
 		if (!this.#sourceCatalog) {
 			this.#sourceCatalog = new SourceCatalog(async (entry) => {
 				if (!isTauri()) throw Error('Source text requires a connected desktop environment')
-				return readStoredSource(entry.artifactId, (command, args) => invoke(command, args))
+				return readStoredSource(
+					entry.artifactId,
+					(command, args) => invoke(command, args),
+					chatActor.core.artifactInfo(entry.artifactId)?.processing
+				)
 			}, this.#searchScope ?? undefined)
 		}
 		return this.#sourceCatalog
@@ -1711,10 +1841,27 @@ class IntentsActor extends Actor {
 				)
 	}
 
-	/** Put an Intent on screen and carry this question and answer into its stream. */
+	/** Select a view. Routing a running conversation uses its own call context. */
 	goTo(id: string): void {
 		this.select(id)
-		chatActor.core.relocateTurn(id)
+		chatActor.core.use(id)
+	}
+
+	private persistentCommand(
+		command: 'intent_update' | 'intent_lifecycle' | 'intent_delete',
+		input: { intentId: string; [key: string]: unknown }
+	): Promise<PersistentIntentDetail> {
+		const revision = this.environmentRevision
+		return runIntentCommand(
+			() => invoke<PersistentIntentDetail>(command, input),
+			async () => {
+				const detail = await invoke<PersistentIntentDetail>('intent_get', {
+					intentId: input.intentId
+				})
+				if (revision !== this.environmentRevision) throw Error('Environment changed.')
+				this.applyPersistent(detail)
+			}
+		)
 	}
 
 	async resolvePersistent(key: string): Promise<MockIntent | undefined> {
@@ -1731,20 +1878,7 @@ class IntentsActor extends Actor {
 		const detail = await invoke<PersistentIntentDetail>('intent_get', { intentId: id })
 		if (revision !== this.environmentRevision) throw Error('Environment changed during lookup.')
 		this.applyPersistent(detail)
-		chatActor.core.hydrate(
-			detail.id,
-			detail.contributions.flatMap((c) =>
-				(c.contributorKind === 'human' || c.contributorKind === 'agent') && c.text
-					? [
-							{
-								id: c.id,
-								role: c.contributorKind === 'human' ? ('user' as const) : ('assistant' as const),
-								content: c.text
-							}
-						]
-					: []
-			)
-		)
+		chatActor.core.hydrate(detail.id, persistentTurns(detail))
 		return this.items.find((i) => i.id === id)
 	}
 
@@ -1774,11 +1908,45 @@ export const intents = singleton('aven.intents', () => new IntentsActor())
 bus.register(intents)
 
 // The model sees a small live index. intent_list can search the whole workspace.
-chatActor.core.context = () => {
-	const on = intents.items.find((i) => i.id === intents.selectedId)
+chatActor.core.onSelect = (id) => intents.select(id)
+chatActor.core.inputCatalog = async (query = '', defaultId = chatActor.core.session) => {
+	const revision = intents.environmentRevision
+	const loaded = intents.items.filter(
+		(i) =>
+			!query ||
+			`${i.title} ${i.routingSummary ?? ''}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())
+	)
+	let stored: { id: string; title: string; routingSummary?: string; updatedAt?: string }[] = []
+	if (isTauri()) {
+		const result = await invoke<{ intents: typeof stored }>('intent_search', {
+			input: { query, limit: 50 }
+		})
+		if (revision !== intents.environmentRevision) throw Error('The workspace changed.')
+		stored = result.intents
+	}
+	const unique = new Map<
+		string,
+		{ id: string; title: string; summary?: string; updatedAt?: string }
+	>()
+	// Include the selected and recent Intents first, then bounded stored candidates.
+	for (const i of [
+		...loaded.sort((a, b) => Number(b.id === defaultId) - Number(a.id === defaultId)),
+		...stored
+	])
+		if (!unique.has(i.id))
+			unique.set(i.id, {
+				id: i.id,
+				title: i.title.slice(0, 160),
+				summary: i.routingSummary?.slice(0, 240),
+				updatedAt: stored.find((s) => s.id === i.id)?.updatedAt
+			})
+	return [...unique.values()].slice(0, 50)
+}
+chatActor.core.context = (session) => {
+	const on = intents.items.find((i) => i.id === session)
 	const shown = selectContextIntents(
 		intents.items,
-		intents.selectedId,
+		session,
 		intents.recentIds,
 		DEFAULT_INTENT_CONTEXT_LIMIT,
 		intents.contextItemsById
@@ -1806,11 +1974,29 @@ chatActor.core.context = () => {
 	})
 	return (
 		`RECENT INTENTS (${shown.length} shown; workspace_search includes unloaded records):\n${rows || '- none'}\n` +
-		`ON SCREEN: ${on ? `${on.id} — "${on.title}"` : 'none'}.\n` +
-		'If the request names another intent, call intent_switch with it first. ' +
+		`CONVERSATION INTENT (not necessarily the current screen selection): ${on ? `${on.id} — "${on.title}"` : 'none'}.\n` +
+		'Read supporting Intents without switching this conversation. Message destinations are assigned by the input widget. ' +
 		'If the user refers to older work or says the information should already exist, ' +
 		'use workspace_search with kind intent, then workspace_read with kind intent before answering. ' +
-		'For new work that matches no existing intent, call intent_create first.' +
+		'Creating a Skill does not require creating another Intent.' +
 		(artifactContext === '' ? '' : `\n\n${artifactContext}`)
 	)
 }
+chatActor.core.captureInputContext = () =>
+	captureInputContext({
+		references: screenReferences(
+			screenContext.selection,
+			studioCaseContext.active && studioCaseContext.view === 'case'
+				? studioCaseContext.artifactId
+				: ''
+		),
+		prompt: studioCasePrompt() + screenContextPrompt()
+	})
+chatActor.core.contextReferences = (session) =>
+	selectContextIntents(
+		intents.items,
+		session,
+		intents.recentIds,
+		DEFAULT_INTENT_CONTEXT_LIMIT,
+		intents.contextItemsById
+	).map((intent) => ({ kind: 'intent', id: intent.id, title: shortIndexText(intent.title, 160) }))

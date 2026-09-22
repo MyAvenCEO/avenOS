@@ -12,11 +12,14 @@
 		"./actors/registry": "./src/actors/registry.ts",
 		"./actors/*": "./src/actors/*/index.ts",
 		"./execution": "./src/execution.ts",
+		"./composition": "./src/composition.ts",
 		"./llm-gateway": "./src/llm-gateway.ts",
 		"./model": "./src/model.ts",
 		"./provenance": "./src/provenance.ts",
+		"./shared": "./src/shared.ts",
 		"./decoding": "./src/decoding.ts",
 		"./csv": "./src/csv.ts",
+		"./csv-mapping": "./src/csv-mapping.ts",
 		"./csv-confirmation": "./src/csv-confirmation.ts",
 		"./pdf-text": "./src/pdf-text.ts",
 		"./reconciliation-flow": "./src/reconciliation-flow.ts",
@@ -36,6 +39,7 @@
 		"pdfjs-dist": "^6.2.108"
 	},
 	"devDependencies": {
+		"@types/node": "24.10.13",
 		"typescript": "^6.0.2",
 		"vitest": "^4.1.11"
 	}

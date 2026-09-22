@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { loadMachine } from '../src/lib/actors/machine'
 import { createSession } from '../src/lib/actors/sandbox'
-import todoMachineSource from '../src/lib/actors/todo-machine.pl?raw'
-import { composeTodoProgram } from '../src/lib/actors/views/todo/logic'
+import { composeTodoProgram } from './fixtures/sandbox-tasks/logic'
+import todoMachineSource from './fixtures/sandbox-tasks/machine.pl?raw'
 
 /**
  * The gate (card 0142): the live todo reducer runs its transitions against

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
-import { expect, type Page, test } from '@playwright/test'
+import { type BrowserContext, expect, type Page, test } from '@playwright/test'
 import pg from 'pg'
 import { ACTOR_RUN_PROTOCOL } from '../../libs/aven-actors/src/index.js'
 import {
@@ -10,6 +10,11 @@ import {
 	deriveDatabasePassword
 } from '../../libs/aven-customer-contracts/src/index.js'
 import { signWebhookHeaders } from '../../services/checkout/src/lib/server/billing/provider.js'
+import { liveBackgroundProcessJourney } from './live-background-process-journey.js'
+import { liveNativeConversationJourney } from './live-native-conversation-journey.js'
+import { nativeIntentWork } from './native-intent-work.js'
+import { nativeScreenshot } from './native-screenshot.js'
+import { studioAgentJourney, studioHistoryIntentCount } from './studio-agent-journey.js'
 import { TauriSession } from './tauri-driver.js'
 
 const identity = process.env.E2E_IDENTITY_ORIGIN as string
@@ -26,6 +31,8 @@ const tauriFixture = process.env.E2E_TAURI_FIXTURE as string
 const silentVoiceFixtureJson = process.env.E2E_SILENT_VOICE_FIXTURE as string
 const silentDuplexFixtureJson = process.env.E2E_SILENT_DUPLEX_FIXTURE as string
 const productionProvisioningSecret = 'identity-production-provisioning-secret-for-e2e-only'
+const liveChat = process.env.E2E_LIVE_CHAT === 'true'
+const backgroundChat = process.env.E2E_BACKGROUND_CHAT === 'true'
 const directorySecret = 'site-host-directory-token-for-e2e-only'
 
 function requireEnvironment() {
@@ -83,6 +90,25 @@ async function waitForE2eSpeaking(session: TauriSession, expected: boolean): Pro
 	throw new Error(`Tauri voice playback did not become speaking=${expected}`)
 }
 
+async function waitForVisibleVoiceDraft(session: TauriSession, text: string): Promise<void> {
+	// WebKit's body-level WebDriver text omits this visible ellipsized paragraph.
+	// Verify its exact DOM text AND a visible, unobscured point, not merely existence.
+	await expect
+		.poll(
+			() =>
+				session.execute<boolean>(
+					`const e = document.querySelector('[data-stage] .excerpt');
+		if (!e || e.textContent !== arguments[0]) return false;
+		const r = e.getBoundingClientRect(), style = getComputedStyle(e);
+		return style.visibility === 'visible' && Number(style.opacity) > 0 && r.width > 0 && r.height > 0 &&
+			r.top >= 0 && r.bottom <= innerHeight && e.contains(document.elementFromPoint(r.left + 5, r.top + r.height / 2));`,
+					[text]
+				),
+			{ timeout: 20000 }
+		)
+		.toBe(true)
+}
+
 interface SilentVoiceFixture {
 	text: string
 	session_id: string
@@ -110,7 +136,6 @@ interface TauriAcceptance {
 	extractedTextArtifactId: string
 	serverSourceArtifactId: string
 	serverExtractedTextArtifactId: string
-	remoteReconciliationCandidateId: string
 }
 
 interface BrowsedArtifact {
@@ -123,9 +148,11 @@ interface BrowsedArtifact {
 async function waitForDocumentGraph(
 	artifactBase: string,
 	authorizedHeaders: Record<string, string>,
-	excludedSources: ReadonlySet<string>
+	excludedSources: ReadonlySet<string>,
+	session: TauriSession
 ): Promise<{ sourceId: string; extractedTextId: string; graph: BrowsedArtifact[] }> {
 	let lastArtifactResponse = 'not requested'
+	let lastProcessing: unknown
 	const deadline = Date.now() + 20_000
 	while (Date.now() < deadline) {
 		const response = await fetch(artifactBase, {
@@ -139,6 +166,13 @@ async function waitForDocumentGraph(
 				(artifact) => artifact.typeKey === 'core.file' && !excludedSources.has(artifact.artifactId)
 			)
 			if (source) {
+				const status = await session.execute<{ state: string } | null>(
+					"return globalThis['aven.document-execution-router']?.status(arguments[0]) ?? null",
+					[source.artifactId]
+				)
+				lastProcessing = status
+				if (status?.state === 'failed')
+					throw new Error(`Text document processing failed: ${JSON.stringify(status)}`)
 				const ids = new Set([source.artifactId])
 				let changed = true
 				while (changed) {
@@ -168,13 +202,16 @@ async function waitForDocumentGraph(
 					graph.some((artifact) => artifact.typeKey === 'core.file-inspection') &&
 					graph.some((artifact) => artifact.typeKey === 'docs.text-layout')
 				) {
-					return { sourceId: source.artifactId, extractedTextId: extracted.artifactId, graph }
+					if (status && ['succeeded', 'needs_review'].includes(status.state))
+						return { sourceId: source.artifactId, extractedTextId: extracted.artifactId, graph }
 				}
 			}
 		}
 		await new Promise((resolve) => setTimeout(resolve, 250))
 	}
-	throw new Error(`document import did not publish its complete graph: ${lastArtifactResponse}`)
+	throw new Error(
+		`document import did not publish its complete graph: ${JSON.stringify(lastProcessing)}; ${lastArtifactResponse}`
+	)
 }
 
 async function canonicalDocumentGraph(
@@ -202,7 +239,11 @@ async function canonicalDocumentGraph(
 			return {
 				localKey: artifact.localKey,
 				typeKey: artifact.typeKey,
-				payload: envelope.payload,
+				payload:
+					process.env.TEST_DOCUMENT_PROVIDER_BASE_URL &&
+					artifact.typeKey === 'core.document-classification'
+						? { resolvedKind: (envelope.payload as { resolvedKind: string }).resolvedKind }
+						: envelope.payload,
 				content,
 				inputs: artifact.inputs.map((input) => ({
 					role: input.role,
@@ -216,6 +257,22 @@ async function canonicalDocumentGraph(
 	return values.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
 }
 
+async function waitForCustomerIdle(session: TauriSession): Promise<void> {
+	await session.findEventually('[data-testid^="environment-choice-"]:not(:disabled)', 30_000)
+}
+
+async function authorizeTauri(session: TauriSession, page: Page): Promise<void> {
+	await session.waitForBodyText('GERÄTECODE')
+	const body = await session.bodyText()
+	const code = body.match(/\b([A-Z0-9]{4})-([A-Z0-9]{4})\b/)
+	if (!code) throw new Error(`Tauri did not display a device code:\n${body}`)
+	await page.goto(`${identityBrowser}/device?user_code=${code[1]}${code[2]}`)
+	await expect(page.getByRole('heading', { name: 'Authorize this device' })).toBeVisible()
+	await page.getByRole('button', { name: 'Authorize' }).click()
+	await expect(page.getByRole('heading', { name: 'Device connected' })).toBeVisible()
+	await session.waitForBodyText('Process on')
+}
+
 async function tauriAcceptance(
 	page: import('@playwright/test').Page,
 	environmentId: string,
@@ -223,15 +280,7 @@ async function tauriAcceptance(
 ): Promise<TauriAcceptance> {
 	const session = await TauriSession.launch(tauriApplication, tauriDriver)
 	try {
-		await session.waitForBodyText('GERÄTECODE')
-		const body = await session.bodyText()
-		const code = body.match(/\b([A-Z0-9]{4})-([A-Z0-9]{4})\b/)
-		if (!code) throw new Error(`Tauri did not display a device code:\n${body}`)
-		await page.goto(`${identityBrowser}/device?user_code=${code[1]}${code[2]}`)
-		await expect(page.getByRole('heading', { name: 'Authorize this device' })).toBeVisible()
-		await page.getByRole('button', { name: 'Authorize' }).click()
-		await expect(page.getByRole('heading', { name: 'Device connected' })).toBeVisible()
-		await session.waitForBodyText('Process on')
+		await authorizeTauri(session, page)
 		const dashboard = new URL(await session.url())
 		dashboard.pathname = '/dashboard'
 		dashboard.searchParams.set('e2eFixture', tauriFixture)
@@ -241,7 +290,12 @@ async function tauriAcceptance(
 		await session.click(importButton)
 
 		const artifactBase = `${api}/api/environments/${environmentId}/artifacts`
-		const localDocument = await waitForDocumentGraph(artifactBase, authorizedHeaders, new Set())
+		const localDocument = await waitForDocumentGraph(
+			artifactBase,
+			authorizedHeaders,
+			new Set(),
+			session
+		)
 		const sourceArtifactId = localDocument.sourceId
 		const extractedTextArtifactId = localDocument.extractedTextId
 		const fixture = await readFile(tauriFixture, 'utf8')
@@ -272,13 +326,15 @@ async function tauriAcceptance(
 		}
 		if (!intentId) throw new Error('Tauri import did not create its customer intent')
 
+		await waitForCustomerIdle(session)
 		dashboard.searchParams.set('e2ePlacement', 'server')
 		await session.navigate(dashboard.toString())
 		await session.click(await session.findEventually('[data-testid="e2e-import-fixture"]'))
 		const serverDocument = await waitForDocumentGraph(
 			artifactBase,
 			authorizedHeaders,
-			new Set([sourceArtifactId])
+			new Set([sourceArtifactId]),
+			session
 		)
 		expect(serverDocument.sourceId).not.toBe(sourceArtifactId)
 		expect(
@@ -327,11 +383,18 @@ async function tauriAcceptance(
 		if (!intentId) throw new Error('server import did not create its customer intent')
 
 		await session.execute(
-			"window.dispatchEvent(new KeyboardEvent('keydown', { key: 'H', bubbles: true }))"
+			// Typing on the page opens chat; a focused control retains its own keyboard behavior.
+			"document.activeElement?.blur(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'H', bubbles: true }))"
 		)
 		const composer = await session.findEventually('textarea[placeholder="Sprich — oder schreib…"]')
 		await session.type(composer, 'ello from Tauri E2E')
 		await session.click(await session.find('button[aria-label="Senden"]'))
+		// This wiring lane's prose-only provider deliberately cannot route. Exercise
+		// the ordinary manual recovery, not a fake destination classifier. Automatic
+		// routing and feedback are qualified separately against real Qwen.
+		await session.click(
+			await session.findEventually('[data-stage="failed"] [data-route-action="keep"]')
+		)
 		await session.waitForBodyText('E2E chat reply.')
 
 		let typedExchangePersisted = false
@@ -380,22 +443,44 @@ async function tauriAcceptance(
 
 		const duplex = silentDuplexFixture()
 		await session.execute(
-			"window.dispatchEvent(new KeyboardEvent('keydown', { key: 'S', bubbles: true }))"
+			"document.activeElement?.blur(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'S', bubbles: true }))"
 		)
 		const narrationComposer = await session.findEventually(
 			'textarea[placeholder="Sprich — oder schreib…"]'
 		)
 		await session.type(narrationComposer, 'tart E2E narrated answer')
 		await session.click(await session.find('button[aria-label="Senden"]'))
+		await session.click(
+			await session.findEventually('[data-stage="failed"] [data-route-action="keep"]')
+		)
 		await session.waitForBodyText('E2E narration begins.')
-		expect(await session.bodyText()).not.toContain('E2E narration tail must be cancelled.')
+		expect(await session.bodyText()).not.toContain('E2E narration continued as text.')
 		await session.click(await session.find('[data-testid="e2e-begin-narration"]'))
 		await waitForE2eSpeaking(session, true)
 		await session.click(await session.find('[data-testid="e2e-interrupt-narration"]'))
 		await waitForE2eSpeaking(session, false)
-		await session.waitForBodyText(duplex.interrupted.text)
-		await new Promise((resolve) => setTimeout(resolve, 2_300))
-		expect(await session.bodyText()).not.toContain('E2E narration tail must be cancelled.')
+		try {
+			await waitForVisibleVoiceDraft(session, duplex.interrupted.text)
+		} catch (error) {
+			await writeFile(test.info().outputPath('voice-pending.png'), await nativeScreenshot(session))
+			await writeFile(
+				test.info().outputPath('voice-pending.json'),
+				JSON.stringify(
+					await session.execute(
+						`return [...document.querySelectorAll('[data-stage], .excerpt')].map(e => ({html:e.outerHTML, rect:e.getBoundingClientRect().toJSON(), style:getComputedStyle(e).cssText}))`
+					),
+					null,
+					2
+				)
+			)
+			throw error
+		}
+		await session.click(
+			await session.findEventually('[data-stage="failed"] [data-route-action="keep"]')
+		)
+		// Barge-in stops playback, not the independent Intent's work. Its answer
+		// finishes as text, then the admitted follow-up runs in the same thread.
+		await session.waitForBodyText('E2E narration continued as text.')
 
 		let interruptedPersisted = false
 		let interruptedContributions: Array<{
@@ -426,19 +511,41 @@ async function tauriAcceptance(
 			)
 			const voiceIndex = detail.contributions.findIndex(
 				(entry, index) =>
-					index > interruptedReplyIndex &&
+					index > narrationIndex &&
 					entry.contributorKind === 'human' &&
 					entry.text === duplex.interrupted.text
 			)
 			if (
 				narrationIndex >= 0 &&
 				interruptedReplyIndex > narrationIndex &&
-				voiceIndex > interruptedReplyIndex &&
+				voiceIndex > narrationIndex &&
 				detail.contributions
 					.slice(voiceIndex + 1)
 					.some((entry) => entry.contributorKind === 'agent' && entry.text === 'E2E chat reply.')
 			) {
-				expect(detail.contributions[voiceIndex].payload).toEqual({
+				// Admission persists the queued human message immediately, so it
+				// may precede the earlier answer in storage sequence. Reply links,
+				// not adjacency, establish which request each answer completed.
+				const entries = detail.contributions as Array<
+					(typeof detail.contributions)[number] & { id: string }
+				>
+				expect(entries[interruptedReplyIndex].text).toBe(
+					'E2E narration begins. E2E narration continued as text.'
+				)
+				expect(entries[interruptedReplyIndex].payload.inReplyTo).toEqual([
+					entries[narrationIndex].id
+				])
+				expect(
+					entries
+						.slice(voiceIndex + 1)
+						.some(
+							(entry) =>
+								entry.text === 'E2E chat reply.' &&
+								Array.isArray(entry.payload.inReplyTo) &&
+								entry.payload.inReplyTo.includes(entries[voiceIndex].id)
+						)
+				).toBe(true)
+				expect(detail.contributions[voiceIndex].payload).toMatchObject({
 					anonymousSpeaker: {
 						session_id: duplex.session_id,
 						speaker_id: duplex.interrupted.speaker_id,
@@ -456,7 +563,10 @@ async function tauriAcceptance(
 			)
 
 		await session.click(await session.find('[data-testid="e2e-second-speaker"]'))
-		await session.waitForBodyText(duplex.follow_up.text)
+		await waitForVisibleVoiceDraft(session, duplex.follow_up.text)
+		await session.click(
+			await session.findEventually('[data-stage="failed"] [data-route-action="keep"]')
+		)
 		const secondSpeakerDeadline = Date.now() + 30_000
 		while (Date.now() < secondSpeakerDeadline) {
 			const detail = (await json(
@@ -483,26 +593,20 @@ async function tauriAcceptance(
 					.slice(secondSpeakerIndex + 1)
 					.some((entry) => entry.contributorKind === 'agent' && entry.text === 'E2E chat reply.')
 			) {
-				expect(detail.contributions[secondSpeakerIndex].payload).toEqual({
+				expect(detail.contributions[secondSpeakerIndex].payload).toMatchObject({
 					anonymousSpeaker: {
 						session_id: duplex.session_id,
 						speaker_id: duplex.follow_up.speaker_id,
 						confidence: duplex.follow_up.confidence
 					}
 				})
-				const remoteReconciliationCandidateId = await tauriReconciliation(
-					session,
-					dashboard,
-					artifactBase,
-					authorizedHeaders
-				)
+
 				return {
 					intentId,
 					sourceArtifactId,
 					extractedTextArtifactId,
 					serverSourceArtifactId: serverDocument.sourceId,
-					serverExtractedTextArtifactId: serverDocument.extractedTextId,
-					remoteReconciliationCandidateId
+					serverExtractedTextArtifactId: serverDocument.extractedTextId
 				}
 			}
 			await new Promise((resolve) => setTimeout(resolve, 100))
@@ -518,7 +622,8 @@ async function tauriReconciliation(
 	session: TauriSession,
 	dashboard: URL,
 	artifactBase: string,
-	headers: Record<string, string>
+	headers: Record<string, string>,
+	phase: 'pdf' | 'csv'
 ) {
 	const readType = async (typeKey: string) => {
 		const response = await fetch(
@@ -573,14 +678,10 @@ async function tauriReconciliation(
 				previousProgress = progress
 			}
 			if (
-				state.presentations.some(
-					(item) => item && ['failed', 'needs_review'].includes(item.state)
-				) ||
+				state.presentations.some((item) => item?.state === 'failed') ||
 				state.body.includes('Could not persist')
 			) {
-				throw new Error(
-					`Native financial flow reached a failed/review-required state: ${JSON.stringify(state)}`
-				)
+				throw new Error(`Native financial flow failed: ${JSON.stringify(state)}`)
 			}
 			await new Promise((resolve) => setTimeout(resolve, 200))
 		}
@@ -588,11 +689,11 @@ async function tauriReconciliation(
 			`Native reconciliation did not commit ${count} ${typeKey} occurrences: ${JSON.stringify(diagnostics)}`
 		)
 	}
-	let invoices = 0
-	let transactions = 0
-	let decisions = 0
+	let invoices = (await readType('bookkeeping.open-item')).length
+	let transactions = (await readType('banking.transaction')).length
+	let decisions = (await readType('reconciliation.decision')).length
 	let remoteCandidateId = ''
-	for (const placement of ['local', 'server']) {
+	for (const placement of phase === 'pdf' ? ['local', 'server'] : []) {
 		for (const kind of placement === 'local'
 			? ['invoice', 'statement']
 			: ['statement', 'invoice']) {
@@ -614,7 +715,36 @@ async function tauriReconciliation(
 			await session.click(await session.findEventually('[data-testid="e2e-import-fixture"]'))
 			if (kind === 'invoice') await waitForCount('bookkeeping.open-item', ++invoices)
 			else await waitForCount('banking.transaction', ++transactions)
+			await waitForCustomerIdle(session)
+			if (kind === 'invoice') {
+				const candidate = (await readType('bookkeeping.invoice-candidate')).at(-1)
+				expect(candidate?.payload).toMatchObject({
+					invoiceNumber: 'DE-2025-00001',
+					currency: 'EUR',
+					netMinor: 10000,
+					taxMinor: 1900,
+					grossMinor: 11900
+				})
+				const validations = await readType('bookkeeping.invoice-validation')
+				for (const validation of validations) {
+					// A summary invoice has no printed item table. Missing line-net
+					// coverage is honest uncertainty, not permission to invent rows.
+					expect(['consistent', 'insufficient-coverage']).toContain(validation.payload.status)
+					const checks = validation.payload.checks as Array<{ ruleId: string; outcome: string }>
+					expect(
+						checks
+							.filter((c) => c.ruleId !== 'invoice.line-net-equals-net')
+							.every((c) => c.outcome === 'PASS')
+					).toBe(true)
+					expect(['PASS', 'UNKNOWN']).toContain(
+						checks.find((c) => c.ruleId === 'invoice.line-net-equals-net')?.outcome
+					)
+				}
+			}
 		}
+		await session.click(
+			await session.findEventually('[data-review-scope="workspace"][aria-expanded="false"]')
+		)
 		await session.waitForBodyText('Confirm invoice-to-booking relationship', 15_000)
 		const before = await readType('reconciliation.decision')
 		expect(before).toHaveLength(decisions)
@@ -640,6 +770,10 @@ async function tauriReconciliation(
 			['open-item', decision.payload.openItemArtifactId],
 			['transaction', decision.payload.transactionArtifactId]
 		])
+	}
+	if (phase === 'pdf') {
+		await waitForCustomerIdle(session)
+		return remoteCandidateId
 	}
 	// CSV detection is a separate mandatory human decision. Even known, fully
 	// parsed exports must contribute zero bookings before that physical click.
@@ -713,6 +847,9 @@ async function tauriReconciliation(
 					++invoices,
 					process.env.TEST_DOCUMENT_PROVIDER_BASE_URL ? 60_000 : 20_000
 				)
+				await session.click(
+					await session.findEventually('[data-review-scope="workspace"][aria-expanded="false"]')
+				)
 				await session.waitForBodyText('Confirm invoice-to-booking relationship', 15_000)
 				expect(await readType('reconciliation.decision')).toHaveLength(beforeDecisions)
 				await session.click(
@@ -747,6 +884,7 @@ async function tauriReconciliation(
 			}
 		}
 	}
+	await waitForCustomerIdle(session)
 	return remoteCandidateId
 }
 
@@ -800,14 +938,16 @@ async function tauriEnvironmentSwitchAcceptance(
 		await page.goto(`${identityBrowser}/device?user_code=${code[1]}${code[2]}`)
 		await expect(page.getByRole('button', { name: 'Authorize' })).toBeVisible()
 		await page.getByRole('button', { name: 'Authorize' }).click()
+		await session.click(await session.findEventually('[aria-label="Choose workspace"]'))
 		await session.click(
-			await session.findEventually(`[data-testid="environment-choice-${first.id}"]`)
+			await session.findEventually(`[data-testid="environment-choice-${first.id}"]:not(:disabled)`)
 		)
 		await waitForSelectedEnvironment(first.id)
 		const firstScope = await workspaceScope()
 		expect(firstScope.scopeId).toBe(first.id)
+		await session.click(await session.findEventually('[aria-label="Choose workspace"]'))
 		await session.click(
-			await session.findEventually(`[data-testid="environment-choice-${second.id}"]`)
+			await session.findEventually(`[data-testid="environment-choice-${second.id}"]:not(:disabled)`)
 		)
 		await waitForSelectedEnvironment(second.id)
 		const secondScope = await workspaceScope()
@@ -820,8 +960,14 @@ async function tauriEnvironmentSwitchAcceptance(
 		dashboard.searchParams.set('e2ePlacement', 'local')
 		await session.navigate(dashboard.toString())
 		await session.click(await session.findEventually('[data-testid="e2e-import-fixture"]'))
+		await session.findEventually(`[data-testid="environment-choice-${first.id}"]:disabled`, 5_000)
 		const secondBase = `${api}/api/environments/${second.id}/artifacts`
-		const secondDocument = await waitForDocumentGraph(secondBase, authorizedHeaders, new Set())
+		const secondDocument = await waitForDocumentGraph(
+			secondBase,
+			authorizedHeaders,
+			new Set(),
+			session
+		)
 		expect(
 			(
 				await fetch(`${api}/api/environments/${first.id}/artifacts/${secondDocument.sourceId}`, {
@@ -830,8 +976,9 @@ async function tauriEnvironmentSwitchAcceptance(
 			).status
 		).toBe(404)
 
+		await session.click(await session.findEventually('[aria-label="Choose workspace"]'))
 		await session.click(
-			await session.findEventually(`[data-testid="environment-choice-${first.id}"]`)
+			await session.findEventually(`[data-testid="environment-choice-${first.id}"]:not(:disabled)`)
 		)
 		await waitForSelectedEnvironment(first.id)
 		expect(await workspaceScope()).toEqual(firstScope)
@@ -1010,230 +1157,18 @@ async function recordPasskeyCreation(page: Page) {
 	})
 }
 
-test('fresh split stack: checkout, identity, facade, and managed hosting', async ({ browser }) => {
-	requireEnvironment()
-	const context = await browser.newContext()
-	await context.credentials.install()
-	const page = await context.newPage()
-
-	await expect((await fetch(`${identity}/api/health/ready`)).status).toBe(200)
-	await expect((await fetch(`${checkout}/api/health/ready`)).status).toBe(200)
-	await expect((await fetch(`${api}/health/live`)).status).toBe(200)
-	await expect((await fetch(`${api}/api/billing/me`)).status).toBe(401)
-	await expect(
-		(
-			await fetch(`${identity}/internal/v1/authorizations/roles`, {
-				method: 'POST',
-				headers: { authorization: 'Bearer wrong', 'content-type': 'application/json' },
-				body: JSON.stringify({ subjectIds: [] })
-			})
-		).status
-	).toBe(401)
-	await expect(
-		(
-			await fetch(`${identity}/internal/v1/authorizations/roles`, {
-				method: 'POST',
-				headers: {
-					authorization: `Bearer ${productionProvisioningSecret}`,
-					'content-type': 'application/json'
-				},
-				body: JSON.stringify({ subjectIds: [] })
-			})
-		).status
-	).toBe(200)
-	const ignoredDeliveryId = `msg_${crypto.randomUUID()}`
-	const ignoredWebhookBody = JSON.stringify({
-		type: 'future.feature.created',
-		data: { id: crypto.randomUUID(), future: { retained: true } }
-	})
-	const ignoredWebhookHeaders = signWebhookHeaders(
-		ignoredWebhookBody,
-		'whsec_c3ludGhldGljLXdlYmhvb2sta2V5LWZvci10ZXN0cyEh',
-		ignoredDeliveryId
-	)
-	for (let attempt = 0; attempt < 2; attempt += 1) {
-		const response = await fetch(`${checkout}/api/webhooks/polar`, {
-			method: 'POST',
-			headers: { ...ignoredWebhookHeaders, 'content-type': 'application/json' },
-			body: ignoredWebhookBody
-		})
-		expect(response.status).toBe(200)
-	}
-
-	const name = `e2e-${Date.now().toString(36)}`.slice(0, 28)
-	const email = `${name}@example.test`
-	const held = await fetch(`${checkout}/api/names/hold`, {
-		method: 'POST',
-		headers: {
-			'content-type': 'application/json',
-			origin: checkoutBrowser,
-			'x-proof-of-work': await proofOfWork('secure-name')
-		},
-		body: JSON.stringify({ name, email, tier: 'aven-name' })
-	})
-	if (held.status !== 201) throw new Error(`name hold failed: ${held.status} ${await held.text()}`)
-
-	const claimMail = await waitForMail(new RegExp(`Checkout link for ${name}`))
-	const claimUrl = linkFrom(claimMail, new URL(checkoutBrowser).host)
-	await page.goto(claimUrl)
-	await expect(page.getByText(`${name}.aven.ceo`)).toBeVisible()
-	await page.getByRole('button', { name: 'Pay' }).click()
-	await expect(page).toHaveURL(/\/purchase\/success/)
-
-	const setupMail = await waitForMail(new RegExp(`Login for ${name}`))
-	let setupUrl = linkFrom(setupMail, new URL(identityBrowser).host)
-	await page.goto(setupUrl)
-	await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible()
-	await expect(page).toHaveURL(`${identityBrowser}/dashboard`)
-	// Pending onboarding remains cross-device, but neither browser receives normal service access.
-	const pendingContext = await browser.newContext()
-	const pendingPage = await pendingContext.newPage()
-	await pendingPage.goto(setupUrl)
-	await expect(pendingPage.getByRole('heading', { name: 'Your account' })).toBeVisible()
-	expect((await pendingContext.request.get(`${identityBrowser}/api/auth/token`)).status()).toBe(403)
-	expect((await context.request.get(`${identityBrowser}/api/auth/token`)).status()).toBe(403)
-	const useNotice = await waitForMail(/Your aven.id account security/, /setup link was opened/)
-	expect(useNotice.text).not.toContain('token=')
-	// Exercise the public replacement action and its real per-account cooldown. No
-	// test-only clock, privileged account edit, or direct database replacement is used.
-	await expect(async () => {
-		await page.getByRole('button', { name: 'Email a replacement setup link' }).click()
-		await expect(page.getByRole('status')).toContainText('A replacement link is queued', {
-			timeout: 1000
-		})
-	}).toPass({ timeout: 70_000, intervals: [10_000] })
-	expect((await pendingContext.request.get(setupUrl)).status()).toBe(401)
-	const replacement = await waitForMail(
-		/Your aven.id account security/,
-		/requested a replacement setup link/
-	)
-	setupUrl = linkFrom(replacement, new URL(identityBrowser).host)
-	await page.goto(setupUrl)
-	await pendingPage.goto(setupUrl)
-	await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible()
-	expect((await pendingContext.request.get(`${identityBrowser}/api/auth/token`)).status()).toBe(403)
-	await expect(page.getByLabel('Name for your new passkey')).toHaveValue(
-		new RegExp(`^aven\\.id-${email}-`)
-	)
-	const firstPasskeyName = `aven.id-${email}-My phone`
-	await page.getByLabel('Name for your new passkey').fill(firstPasskeyName)
-	await recordPasskeyCreation(page)
-	expect(
-		(
-			await context.request.get(`${identityBrowser}/api/auth/passkey/generate-register-options`, {
-				params: { name: 'x'.repeat(129) }
-			})
-		).status()
-	).toBe(400)
-	await page.getByRole('button', { name: 'Add passkey' }).click()
-	await expect(page.getByRole('list', { name: 'Passkeys' }).getByRole('listitem')).toHaveCount(1)
-	await expect(page.getByRole('list', { name: 'Passkeys' })).toContainText(firstPasskeyName)
-	expect(await page.evaluate(() => Reflect.get(globalThis, '__passkeyCreationLabels'))).toEqual({
-		name: firstPasskeyName,
-		displayName: firstPasskeyName,
-		rpId: 'localhost'
-	})
-	await page.getByRole('button', { name: /^Rename / }).click()
-	await expect(page.getByLabel('Passkey name', { exact: true })).toHaveClass('field-control')
-	await page.getByLabel('Passkey name', { exact: true }).fill('My everyday passkey')
-	await page.getByRole('button', { name: 'Save name' }).click()
-	await expect(
-		page.getByRole('button', { name: 'Rename My everyday passkey', exact: true })
-	).toBeVisible()
-	await page.reload()
-	await expect(page.getByRole('list', { name: 'Passkeys' })).toContainText('My everyday passkey')
-	expect(
-		await (await pendingContext.request.get(`${identityBrowser}/api/auth/get-session`)).json()
-	).toBeNull()
-	expect((await pendingContext.request.get(setupUrl)).status()).toBe(401)
-	await pendingContext.close()
-	const enrollmentNotice = await waitForMail(
-		/Your aven.id account security/,
-		/first passkey was registered/
-	)
-	expect(enrollmentNotice.text).not.toContain('token=')
-	const [firstCredential] = await context.credentials.get({ rpId: 'localhost' })
-	expect(firstCredential).toBeDefined()
-
-	// A second passkey represents another authenticator/device. A conforming authenticator
-	// refuses to enroll itself twice for the same account, so preserve the session in a new
-	// browser context with a separate virtual authenticator.
-	const secondContext = await browser.newContext({ storageState: await context.storageState() })
-	await secondContext.credentials.install()
-	const secondPage = await secondContext.newPage()
-	// Account and passkey-list fetches finish independently. A late account must
-	// never replace a name the user has already typed or intentionally cleared.
-	for (const earlyName of ['My early choice', '']) {
-		let releaseAccount = () => {}
-		const accountGate = new Promise<void>((resolve) => {
-			releaseAccount = resolve
-		})
-		await secondPage.route('**/api/auth/get-session**', async (route) => {
-			await accountGate
-			await route.continue()
-		})
-		try {
-			await secondPage.goto(`${identityBrowser}/dashboard`)
-			await expect(
-				secondPage.getByRole('list', { name: 'Passkeys' }).getByRole('listitem')
-			).toHaveCount(1)
-			await expect(secondPage.locator('.flow-card-description')).toHaveText('Loading…')
-			await secondPage.getByLabel('Name for your new passkey').fill('Temporary input')
-			await secondPage.getByLabel('Name for your new passkey').fill(earlyName)
-			releaseAccount()
-			await expect(secondPage.locator('.flow-card-description')).toHaveText(email)
-			await expect(secondPage.getByLabel('Name for your new passkey')).toHaveValue(earlyName)
-		} finally {
-			releaseAccount()
-			await secondPage.unroute('**/api/auth/get-session**')
-		}
-	}
-	await expect(secondPage.getByRole('button', { name: 'Add another passkey' })).toBeDisabled()
-	await secondPage.getByLabel('Name for your new passkey').fill('Spare security key')
-	await recordPasskeyCreation(secondPage)
-	await secondPage.getByRole('button', { name: 'Add another passkey' }).click()
-	await expect(
-		secondPage.getByRole('list', { name: 'Passkeys' }).getByRole('listitem')
-	).toHaveCount(2)
-	expect(
-		await secondPage.evaluate(() => Reflect.get(globalThis, '__passkeyCreationLabels'))
-	).toEqual({
-		name: 'Spare security key',
-		displayName: 'Spare security key',
-		rpId: 'localhost'
-	})
-	const [secondCredential] = await secondContext.credentials.get({ rpId: 'localhost' })
-	await expect(secondPage.getByRole('list', { name: 'Passkeys' })).toContainText(
-		'Spare security key'
-	)
-	expect(secondCredential).toBeDefined()
-	expect(secondCredential.id).not.toBe(firstCredential.id)
-	for (const width of [375, 1280]) {
-		await secondPage.setViewportSize({ width, height: 900 })
-		expect(
-			await secondPage
-				.getByLabel('Name for your new passkey')
-				.evaluate((input) => input.getBoundingClientRect().height)
-		).toBeGreaterThanOrEqual(44)
-		expect(await secondPage.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
-		await secondPage.screenshot({
-			path: test.info().outputPath(`passkey-dashboard-${width}.png`),
-			fullPage: true
-		})
-	}
-
-	await secondPage.getByRole('button', { name: 'Sign out' }).click()
-	await expect(secondPage).toHaveURL(`${identityBrowser}/login`)
-	await secondPage.getByRole('button', { name: 'Continue with passkey' }).click()
-	await expect(secondPage.getByRole('heading', { name: 'Your account' })).toBeVisible()
-
-	const sessionToken = await deviceSession(secondPage)
-	const tokenBody = (await json(
-		await fetch(`${identity}/api/auth/token`, {
-			headers: { authorization: `Bearer ${sessionToken}` }
-		})
-	)) as { token: string }
-	const claims = JSON.parse(Buffer.from(tokenBody.token.split('.')[1], 'base64url').toString()) as {
+test.describe('fresh split stack', () => {
+	test.describe.configure({ mode: 'serial' })
+	let context: BrowserContext
+	let secondContext: BrowserContext
+	let page: Page
+	let secondPage: Page
+	let name: string
+	let email: string
+	let ignoredDeliveryId: string
+	let ignoredWebhookBody: string
+	let sessionToken: string
+	let claims: {
 		sub: string
 		iss: string
 		aud: string
@@ -1242,597 +1177,1014 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 		exp: number
 		iat: number
 	}
-	expect(claims.iss).toBe(identityBrowser)
-	expect(claims.aud).toBe('aven-services')
-	expect(claims.amr).toContain('passkey')
-	expect(claims.scope.split(' ')).toContain('services:access')
-	expect(claims.exp - claims.iat).toBeLessThanOrEqual(300)
-
-	const authorizedHeaders = {
-		authorization: `Bearer ${tokenBody.token}`,
-		origin: checkoutBrowser
-	}
-	const llmModels = await fetch(`${api}/api/llm/models`, { headers: authorizedHeaders })
-	expect(llmModels.status).toBe(200)
-	const maxParallelism = Number(process.env.E2E_LLM_MAX_PARALLELISM || '5')
-	expect(await llmModels.json()).toEqual({
-		models: [
-			{
-				id: 'deepseek/deepseek-v4-flash-0731',
-				label: 'E2E Chat',
-				capabilities: ['streaming', 'text-generation', 'tool-calling'],
-				maxParallelism
-			},
-			{
-				id: 'e2e/document',
-				label: 'E2E Documents',
-				capabilities: ['structured-output', 'text-generation', 'vision'],
-				maxParallelism
-			}
-		]
-	})
-	const llmCompletion = await fetch(`${api}/api/llm/v1/chat/completions`, {
-		method: 'POST',
-		headers: { ...authorizedHeaders, 'content-type': 'application/json' },
-		body: JSON.stringify({
-			model: 'deepseek/deepseek-v4-flash-0731',
-			messages: [{ role: 'user', content: 'Prove the deterministic local LLM route.' }],
-			stream: false
-		})
-	})
-	expect(llmCompletion.status).toBe(200)
-	expect(await llmCompletion.json()).toMatchObject({
-		model: 'deepseek/deepseek-v4-flash-0731',
-		choices: [{ message: { role: 'assistant', content: 'E2E chat reply.' } }],
-		aven: {
-			modelId: 'deepseek/deepseek-v4-flash-0731',
-			providerReportedModel: 'e2e-chat'
-		}
-	})
-	const billing = await fetch(`${api}/api/billing/me`, { headers: authorizedHeaders })
-	await expect(billing.status).toBe(200)
-	await expect(billing.headers.get('access-control-allow-origin')).toBe(checkoutBrowser)
-	await expect(await billing.json()).toEqual({ subscriptions: [] })
-
-	const forged = await fetch(`${api}/api/billing/me`, {
-		headers: { ...authorizedHeaders, 'x-aven-subject': 'forged', 'x-aven-role': 'admin' }
-	})
-	await expect(forged.status).toBe(200)
-	const facadeOnly = await fetch(`${checkout}/api/billing/me`, {
-		headers: { authorization: 'Bearer checkout-facade-token-for-e2e-only' }
-	})
-	await expect(facadeOnly.status).toBe(401)
-
-	let environment:
-		| {
-				id: string
-				observedState: string
-				routingGeneration: number
-				components: { componentRef: string; observedState: string }[]
-		  }
-		| undefined
-	const environmentDeadline = Date.now() + 60_000
-	while (Date.now() < environmentDeadline) {
-		const response = await fetch(`${api}/api/environments`, { headers: authorizedHeaders })
-		expect(response.status).toBe(200)
-		const body = (await response.json()) as { environments: (typeof environment)[] }
-		environment = body.environments.find(
-			(candidate) =>
-				candidate.observedState === 'ready' &&
-				candidate.components.every((component) => component.observedState === 'ready')
-		)
-		if (environment) break
-		await new Promise((resolve) => setTimeout(resolve, 250))
-	}
-	if (!environment) throw new Error('customer environment did not reconcile')
-	const tauri = await tauriAcceptance(secondPage, environment.id, authorizedHeaders)
-	const secondName = `${name}-other`.slice(0, 28)
-	const secondNameHold = await fetch(`${checkout}/api/names/hold`, {
-		method: 'POST',
-		headers: {
-			'content-type': 'application/json',
-			origin: checkoutBrowser,
-			'x-proof-of-work': await proofOfWork('secure-name')
-		},
-		body: JSON.stringify({ name: secondName, email, tier: 'aven-name' })
-	})
-	expect(secondNameHold.status).toBe(201)
-	const secondClaimMail = await waitForMail(new RegExp(`Checkout link for ${secondName}`))
-	await page.goto(linkFrom(secondClaimMail, new URL(checkoutBrowser).host))
-	await expect(page.getByText(`${secondName}.aven.ceo`)).toBeVisible()
-	await page.getByRole('button', { name: 'Pay' }).click()
-	await expect(page).toHaveURL(/\/purchase\/success/)
-	let secondEnvironment: typeof environment | undefined
-	const secondEnvironmentDeadline = Date.now() + 60_000
-	while (Date.now() < secondEnvironmentDeadline) {
-		const body = (await json(
-			await fetch(`${api}/api/environments`, { headers: authorizedHeaders })
-		)) as { environments: (typeof environment)[] }
-		secondEnvironment = body.environments.find(
-			(candidate) =>
-				candidate.id !== environment.id &&
-				candidate.observedState === 'ready' &&
-				candidate.components.every((component) => component.observedState === 'ready')
-		)
-		if (secondEnvironment) break
-		await new Promise((resolve) => setTimeout(resolve, 250))
-	}
-	if (!secondEnvironment) throw new Error('second customer environment did not reconcile')
-	await tauriEnvironmentSwitchAcceptance(
-		secondPage,
-		{
-			id: environment.id,
-			priorSources: [tauri.sourceArtifactId, tauri.serverSourceArtifactId]
-		},
-		{ id: secondEnvironment.id },
-		authorizedHeaders
-	)
-
-	const intentBase = `${api}/api/environments/${environment.id}/intents`
-	const targetIntentId = crypto.randomUUID()
-	const sourceIntentId = crypto.randomUUID()
-	for (const [id, title] of [
-		[targetIntentId, 'Target conversation'],
-		[sourceIntentId, 'Source conversation']
-	] as const) {
-		const response = await fetch(intentBase, {
-			method: 'POST',
-			headers: { ...authorizedHeaders, 'content-type': 'application/json' },
-			body: JSON.stringify({ id, title })
-		})
-		expect(response.status).toBe(201)
-	}
-	const secondIntentId = crypto.randomUUID()
-	expect(
-		(
-			await fetch(`${api}/api/environments/${secondEnvironment.id}/intents`, {
-				method: 'POST',
-				headers: { ...authorizedHeaders, 'content-type': 'application/json' },
-				body: JSON.stringify({ id: secondIntentId, title: 'Second customer only' })
-			})
-		).status
-	).toBe(201)
-	const firstList = (
-		await json(await fetch(`${intentBase}/search`, { headers: authorizedHeaders }))
-	).intents as {
+	let authorizedHeaders: Record<string, string>
+	let environment: {
 		id: string
-	}[]
-	expect(firstList.map((intent) => intent.id)).not.toContain(secondIntentId)
-	// The same still-valid identity token must obey the current owner-only WIP policy.
-	const membershipDatabase = new pg.Pool({
-		connectionString: databaseUrl.replace(/\/postgres$/, '/aven_api'),
-		max: 1
+		observedState: string
+		routingGeneration: number
+		components: { componentRef: string; observedState: string }[]
+	}
+	let tauri: TauriAcceptance
+	let remoteReconciliationCandidateId: string
+
+	test.afterAll(async () => {
+		await secondContext?.close()
+		await context?.close()
 	})
-	try {
-		await membershipDatabase.query(
-			'UPDATE customer_environment_memberships SET role=$1 WHERE environment_id=$2 AND subject_id=$3',
-			['member', environment.id, claims.sub]
+
+	test.beforeEach(async () => {
+		if (!sessionToken) return
+		// Each journey uses a fresh short-lived service token. The membership-denial
+		// checks within a journey deliberately retain that exact token.
+		const body = await json(
+			await fetch(`${identity}/api/auth/token`, {
+				headers: { authorization: `Bearer ${sessionToken}` }
+			})
 		)
-		expect((await fetch(`${intentBase}/search`, { headers: authorizedHeaders })).status).toBe(404)
-		expect(
+		authorizedHeaders = { authorization: `Bearer ${body.token}`, origin: checkoutBrowser }
+	})
+
+	test('checkout, passkeys, device authorization, and provisioning', async ({ browser }) => {
+		requireEnvironment()
+		context = await browser.newContext()
+		await context.credentials.install()
+		page = await context.newPage()
+
+		await expect((await fetch(`${identity}/api/health/ready`)).status).toBe(200)
+		await expect((await fetch(`${checkout}/api/health/ready`)).status).toBe(200)
+		await expect((await fetch(`${api}/health/live`)).status).toBe(200)
+		await expect((await fetch(`${api}/api/billing/me`)).status).toBe(401)
+		await expect(
 			(
-				await fetch(`${intentBase}/${targetIntentId}`, {
-					method: 'DELETE',
-					headers: authorizedHeaders
+				await fetch(`${identity}/internal/v1/authorizations/roles`, {
+					method: 'POST',
+					headers: { authorization: 'Bearer wrong', 'content-type': 'application/json' },
+					body: JSON.stringify({ subjectIds: [] })
 				})
 			).status
-		).toBe(404)
-		expect(
-			(await fetch(`${intentBase}/${targetIntentId}`, { headers: authorizedHeaders })).status
-		).toBe(404)
-		await membershipDatabase.query(
-			'DELETE FROM customer_environment_memberships WHERE environment_id=$1 AND subject_id=$2',
-			[environment.id, claims.sub]
-		)
-		expect((await fetch(`${intentBase}/search`, { headers: authorizedHeaders })).status).toBe(404)
-		// Membership in the other environment is unaffected.
-		expect(
+		).toBe(401)
+		await expect(
 			(
-				await fetch(`${api}/api/environments/${secondEnvironment.id}/intents/search`, {
-					headers: authorizedHeaders
+				await fetch(`${identity}/internal/v1/authorizations/roles`, {
+					method: 'POST',
+					headers: {
+						authorization: `Bearer ${productionProvisioningSecret}`,
+						'content-type': 'application/json'
+					},
+					body: JSON.stringify({ subjectIds: [] })
 				})
 			).status
 		).toBe(200)
-	} finally {
-		await membershipDatabase.query(
-			`INSERT INTO customer_environment_memberships(environment_id,subject_id,role)
-			VALUES($1,$2,'owner') ON CONFLICT(environment_id,subject_id) DO UPDATE SET role='owner'`,
-			[environment.id, claims.sub]
+		ignoredDeliveryId = `msg_${crypto.randomUUID()}`
+		ignoredWebhookBody = JSON.stringify({
+			type: 'future.feature.created',
+			data: { id: crypto.randomUUID(), future: { retained: true } }
+		})
+		const ignoredWebhookHeaders = signWebhookHeaders(
+			ignoredWebhookBody,
+			'whsec_c3ludGhldGljLXdlYmhvb2sta2V5LWZvci10ZXN0cyEh',
+			ignoredDeliveryId
 		)
-		await membershipDatabase.end()
-	}
-	expect((await fetch(`${intentBase}/search`, { headers: authorizedHeaders })).status).toBe(200)
-	const voiceFixture = silentVoiceFixture()
-	const anonymousSpeaker = {
-		session_id: voiceFixture.session_id,
-		speaker_id: voiceFixture.speaker_id,
-		confidence: voiceFixture.confidence
-	}
-	const contribution = {
-		id: crypto.randomUUID(),
-		contributorKind: 'human',
-		kind: 'message',
-		text: voiceFixture.text,
-		payload: { anonymousSpeaker }
-	}
-	for (let attempt = 0; attempt < 2; attempt += 1) {
-		const response = await fetch(`${intentBase}/${targetIntentId}`, {
-			method: 'POST',
-			headers: { ...authorizedHeaders, 'content-type': 'application/json' },
-			body: JSON.stringify(contribution)
-		})
-		expect(response.status).toBe(201)
-	}
-	const targetDetail = (await json(
-		await fetch(`${intentBase}/${targetIntentId}`, { headers: authorizedHeaders })
-	)) as { version: number; contributions: Array<Record<string, unknown>> }
-	expect(targetDetail.version).toBe(2)
-	expect(targetDetail.contributions).toHaveLength(2)
-	expect(targetDetail.contributions[1]).toMatchObject({
-		text: voiceFixture.text,
-		payload: { anonymousSpeaker }
-	})
-	const sourceDetail = (await json(
-		await fetch(`${intentBase}/${sourceIntentId}`, { headers: authorizedHeaders })
-	)) as { version: number }
-	const mergeCommand = {
-		id: targetIntentId,
-		commandId: crypto.randomUUID(),
-		expectedVersion: targetDetail.version,
-		sources: [{ id: sourceIntentId, expectedVersion: sourceDetail.version }]
-	}
-	for (let attempt = 0; attempt < 2; attempt += 1) {
-		const response = await fetch(`${intentBase}/${targetIntentId}/merge`, {
-			method: 'POST',
-			headers: { ...authorizedHeaders, 'content-type': 'application/json' },
-			body: JSON.stringify(mergeCommand)
-		})
-		expect(response.status).toBe(200)
-	}
+		for (let attempt = 0; attempt < 2; attempt += 1) {
+			const response = await fetch(`${checkout}/api/webhooks/polar`, {
+				method: 'POST',
+				headers: { ...ignoredWebhookHeaders, 'content-type': 'application/json' },
+				body: ignoredWebhookBody
+			})
+			expect(response.status).toBe(200)
+		}
 
-	const actorBase = `${api}/api/environments/${environment.id}/actor-runs`
-	const actorStart = await fetch(actorBase, {
-		method: 'POST',
-		headers: {
-			...authorizedHeaders,
-			'content-type': 'application/json',
-			'x-aven-tenant-grant': 'forged-caller-grant'
-		},
-		body: JSON.stringify({
-			protocol: ACTOR_RUN_PROTOCOL,
-			requestId: crypto.randomUUID(),
-			idempotencyKey: crypto.randomUUID(),
-			requestedAt: new Date().toISOString(),
-			skillRef: 'ceo.aven:skill:e2e:already-satisfied@1',
-			executionEnvironment: 'server',
-			ingredients: [{ predicate: 'ceo.aven.e2e.done(test)' }],
-			goals: ['ceo.aven.e2e.done(test)'],
-			parameters: {}
+		name = `e2e-${Date.now().toString(36)}`.slice(0, 28)
+		email = `${name}@example.test`
+		const held = await fetch(`${checkout}/api/names/hold`, {
+			method: 'POST',
+			headers: {
+				'content-type': 'application/json',
+				origin: checkoutBrowser,
+				'x-proof-of-work': await proofOfWork('secure-name')
+			},
+			body: JSON.stringify({ name, email, tier: 'aven-name' })
 		})
-	})
-	expect(actorStart.status).toBe(202)
-	const actorHandle = (await actorStart.json()) as { runId: string }
-	let actorRecord: { state: string; security: { access: { tenantId?: string } } } | undefined
-	for (let attempt = 0; attempt < 50; attempt += 1) {
-		const response = await fetch(`${actorBase}/${actorHandle.runId}`, {
-			headers: authorizedHeaders
-		})
-		expect(response.status).toBe(200)
-		actorRecord = await response.json()
-		if (actorRecord.state === 'succeeded') break
-		await new Promise((resolve) => setTimeout(resolve, 50))
-	}
-	expect(actorRecord).toMatchObject({
-		state: 'succeeded',
-		security: { access: { tenantId: environment.id } }
-	})
+		if (held.status !== 201)
+			throw new Error(`name hold failed: ${held.status} ${await held.text()}`)
 
-	const admin = new pg.Pool({ connectionString: databaseUrl, max: 1 })
-	try {
-		const customerDatabase = databaseNameForEnvironment(environment.id)
-		const secondCustomerDatabase = databaseNameForEnvironment(secondEnvironment.id)
-		expect(secondCustomerDatabase).not.toBe(customerDatabase)
+		const claimMail = await waitForMail(new RegExp(`Checkout link for ${name}`))
+		const claimUrl = linkFrom(claimMail, new URL(checkoutBrowser).host)
+		await page.goto(claimUrl)
+		await expect(page.getByText(`${name}.aven.ceo`)).toBeVisible()
+		await page.getByRole('button', { name: 'Pay' }).click()
+		await expect(page).toHaveURL(/\/purchase\/success/)
+
+		const setupMail = await waitForMail(new RegExp(`Login for ${name}`))
+		let setupUrl = linkFrom(setupMail, new URL(identityBrowser).host)
+		await page.goto(setupUrl)
+		await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible()
+		await expect(page).toHaveURL(`${identityBrowser}/dashboard`)
+		// Pending onboarding remains cross-device, but neither browser receives normal service access.
+		const pendingContext = await browser.newContext()
+		const pendingPage = await pendingContext.newPage()
+		await pendingPage.goto(setupUrl)
+		await expect(pendingPage.getByRole('heading', { name: 'Your account' })).toBeVisible()
+		expect((await pendingContext.request.get(`${identityBrowser}/api/auth/token`)).status()).toBe(
+			403
+		)
+		expect((await context.request.get(`${identityBrowser}/api/auth/token`)).status()).toBe(403)
+		const useNotice = await waitForMail(/Your aven.id account security/, /setup link was opened/)
+		expect(useNotice.text).not.toContain('token=')
+		// Exercise the public replacement action and its real per-account cooldown. No
+		// test-only clock, privileged account edit, or direct database replacement is used.
+		await expect(async () => {
+			await page.getByRole('button', { name: 'Email a replacement setup link' }).click()
+			await expect(page.getByRole('status')).toContainText('A replacement link is queued', {
+				timeout: 1000
+			})
+		}).toPass({ timeout: 70_000, intervals: [10_000] })
+		expect((await pendingContext.request.get(setupUrl)).status()).toBe(401)
+		const replacement = await waitForMail(
+			/Your aven.id account security/,
+			/requested a replacement setup link/
+		)
+		setupUrl = linkFrom(replacement, new URL(identityBrowser).host)
+		await page.goto(setupUrl)
+		await pendingPage.goto(setupUrl)
+		await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible()
+		expect((await pendingContext.request.get(`${identityBrowser}/api/auth/token`)).status()).toBe(
+			403
+		)
+		await expect(page.getByLabel('Name for your new passkey')).toHaveValue(
+			new RegExp(`^aven\\.id-${email}-`)
+		)
+		const firstPasskeyName = `aven.id-${email}-My phone`
+		await page.getByLabel('Name for your new passkey').fill(firstPasskeyName)
+		await recordPasskeyCreation(page)
 		expect(
 			(
-				await admin.query("SELECT has_database_privilege('aven_backup',$1,'CONNECT') AS allowed", [
-					customerDatabase
-				])
-			).rows[0].allowed
-		).toBe(true)
+				await context.request.get(`${identityBrowser}/api/auth/passkey/generate-register-options`, {
+					params: { name: 'x'.repeat(129) }
+				})
+			).status()
+		).toBe(400)
+		await page.getByRole('button', { name: 'Add passkey' }).click()
+		await expect(page.getByRole('list', { name: 'Passkeys' }).getByRole('listitem')).toHaveCount(1)
+		await expect(page.getByRole('list', { name: 'Passkeys' })).toContainText(firstPasskeyName)
+		expect(await page.evaluate(() => Reflect.get(globalThis, '__passkeyCreationLabels'))).toEqual({
+			name: firstPasskeyName,
+			displayName: firstPasskeyName,
+			rpId: 'localhost'
+		})
+		await page.getByRole('button', { name: /^Rename / }).click()
+		await expect(page.getByLabel('Passkey name', { exact: true })).toHaveClass('field-control')
+		await page.getByLabel('Passkey name', { exact: true }).fill('My everyday passkey')
+		await page.getByRole('button', { name: 'Save name' }).click()
+		await expect(
+			page.getByRole('button', { name: 'Rename My everyday passkey', exact: true })
+		).toBeVisible()
+		await page.reload()
+		await expect(page.getByRole('list', { name: 'Passkeys' })).toContainText('My everyday passkey')
 		expect(
-			(
-				await admin.query(
-					"SELECT rolcanlogin,rolinherit,pg_has_role('aven_backup','pg_read_all_data','MEMBER') AS reader FROM pg_roles WHERE rolname='aven_backup'"
-				)
-			).rows[0]
-		).toEqual({ rolcanlogin: true, rolinherit: true, reader: true })
-		const backupDatabaseUrl = new URL(databaseUrl)
-		backupDatabaseUrl.username = 'aven_backup'
-		backupDatabaseUrl.password = 'platform-backup-e2e'
-		backupDatabaseUrl.pathname = `/${customerDatabase}`
-		const backupDatabase = new pg.Pool({ connectionString: backupDatabaseUrl.toString(), max: 1 })
-		try {
+			await (await pendingContext.request.get(`${identityBrowser}/api/auth/get-session`)).json()
+		).toBeNull()
+		expect((await pendingContext.request.get(setupUrl)).status()).toBe(401)
+		await pendingContext.close()
+		const enrollmentNotice = await waitForMail(
+			/Your aven.id account security/,
+			/first passkey was registered/
+		)
+		expect(enrollmentNotice.text).not.toContain('token=')
+		const [firstCredential] = await context.credentials.get({ rpId: 'localhost' })
+		expect(firstCredential).toBeDefined()
+
+		// A second passkey represents another authenticator/device. A conforming authenticator
+		// refuses to enroll itself twice for the same account, so preserve the session in a new
+		// browser context with a separate virtual authenticator.
+		secondContext = await browser.newContext({ storageState: await context.storageState() })
+		await secondContext.credentials.install()
+		secondPage = await secondContext.newPage()
+		// Account and passkey-list fetches finish independently. A late account must
+		// never replace a name the user has already typed or intentionally cleared.
+		for (const earlyName of ['My early choice', '']) {
+			let releaseAccount = () => {}
+			const accountGate = new Promise<void>((resolve) => {
+				releaseAccount = resolve
+			})
+			await secondPage.route('**/api/auth/get-session**', async (route) => {
+				await accountGate
+				await route.continue()
+			})
+			try {
+				await secondPage.goto(`${identityBrowser}/dashboard`)
+				await expect(
+					secondPage.getByRole('list', { name: 'Passkeys' }).getByRole('listitem')
+				).toHaveCount(1)
+				await expect(secondPage.locator('.flow-card-description')).toHaveText('Loading…')
+				await secondPage.getByLabel('Name for your new passkey').fill('Temporary input')
+				await secondPage.getByLabel('Name for your new passkey').fill(earlyName)
+				releaseAccount()
+				await expect(secondPage.locator('.flow-card-description')).toHaveText(email)
+				await expect(secondPage.getByLabel('Name for your new passkey')).toHaveValue(earlyName)
+			} finally {
+				releaseAccount()
+				await secondPage.unroute('**/api/auth/get-session**')
+			}
+		}
+		await expect(secondPage.getByRole('button', { name: 'Add another passkey' })).toBeDisabled()
+		await secondPage.getByLabel('Name for your new passkey').fill('Spare security key')
+		await recordPasskeyCreation(secondPage)
+		await secondPage.getByRole('button', { name: 'Add another passkey' }).click()
+		await expect(
+			secondPage.getByRole('list', { name: 'Passkeys' }).getByRole('listitem')
+		).toHaveCount(2)
+		expect(
+			await secondPage.evaluate(() => Reflect.get(globalThis, '__passkeyCreationLabels'))
+		).toEqual({
+			name: 'Spare security key',
+			displayName: 'Spare security key',
+			rpId: 'localhost'
+		})
+		const [secondCredential] = await secondContext.credentials.get({ rpId: 'localhost' })
+		await expect(secondPage.getByRole('list', { name: 'Passkeys' })).toContainText(
+			'Spare security key'
+		)
+		expect(secondCredential).toBeDefined()
+		expect(secondCredential.id).not.toBe(firstCredential.id)
+		for (const width of [375, 1280]) {
+			await secondPage.setViewportSize({ width, height: 900 })
 			expect(
-				(await backupDatabase.query('SELECT count(*)::int AS count FROM aven_intents.intents'))
-					.rows[0].count
-			).toBeGreaterThan(0)
-			await expect(backupDatabase.query('DELETE FROM aven_intents.intents')).rejects.toThrow(
-				/permission denied/
+				await secondPage
+					.getByLabel('Name for your new passkey')
+					.evaluate((input) => input.getBoundingClientRect().height)
+			).toBeGreaterThanOrEqual(44)
+			expect(await secondPage.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
+			await secondPage.screenshot({
+				path: test.info().outputPath(`passkey-dashboard-${width}.png`),
+				fullPage: true
+			})
+		}
+
+		await secondPage.getByRole('button', { name: 'Sign out' }).click()
+		await expect(secondPage).toHaveURL(`${identityBrowser}/login`)
+		await secondPage.getByRole('button', { name: 'Continue with passkey' }).click()
+		await expect(secondPage.getByRole('heading', { name: 'Your account' })).toBeVisible()
+
+		sessionToken = await deviceSession(secondPage)
+		const tokenBody = (await json(
+			await fetch(`${identity}/api/auth/token`, {
+				headers: { authorization: `Bearer ${sessionToken}` }
+			})
+		)) as { token: string }
+		claims = JSON.parse(Buffer.from(tokenBody.token.split('.')[1], 'base64url').toString()) as {
+			sub: string
+			iss: string
+			aud: string
+			amr: string[]
+			scope: string
+			exp: number
+			iat: number
+		}
+		expect(claims.iss).toBe(identityBrowser)
+		expect(claims.aud).toBe('aven-services')
+		expect(claims.amr).toContain('passkey')
+		expect(claims.scope.split(' ')).toContain('services:access')
+		expect(claims.exp - claims.iat).toBeLessThanOrEqual(300)
+
+		authorizedHeaders = {
+			authorization: `Bearer ${tokenBody.token}`,
+			origin: checkoutBrowser
+		}
+		const llmModels = await fetch(`${api}/api/llm/models`, { headers: authorizedHeaders })
+		expect(llmModels.status).toBe(200)
+		const maxParallelism = Number(process.env.E2E_LLM_MAX_PARALLELISM || '5')
+		expect(await llmModels.json()).toEqual({
+			models: [
+				{
+					id: 'deepseek/deepseek-v4-flash-0731',
+					label: 'E2E Chat',
+					capabilities: ['streaming', 'structured-output', 'text-generation', 'tool-calling'],
+					maxParallelism
+				},
+				{
+					id: 'e2e/document',
+					label: 'E2E Documents',
+					capabilities: ['structured-output', 'text-generation', 'vision'],
+					maxParallelism
+				}
+			]
+		})
+		const llmCompletion = await fetch(`${api}/api/llm/v1/chat/completions`, {
+			method: 'POST',
+			headers: { ...authorizedHeaders, 'content-type': 'application/json' },
+			body: JSON.stringify({
+				model: 'deepseek/deepseek-v4-flash-0731',
+				messages: [
+					{
+						role: 'user',
+						content: liveChat
+							? 'Reply with one short greeting for a fictional craft workshop.'
+							: 'Prove the deterministic local LLM route.'
+					}
+				],
+				stream: false
+			})
+		})
+		expect(llmCompletion.status).toBe(200)
+		const completion = await llmCompletion.json()
+		expect(completion).toMatchObject({
+			model: 'deepseek/deepseek-v4-flash-0731',
+			choices: [
+				{
+					message: { role: 'assistant', content: liveChat ? expect.any(String) : 'E2E chat reply.' }
+				}
+			],
+			aven: {
+				modelId: 'deepseek/deepseek-v4-flash-0731',
+				providerReportedModel: liveChat ? process.env.TEST_DOCUMENT_PROVIDER_MODEL : 'e2e-chat'
+			}
+		})
+		const billing = await fetch(`${api}/api/billing/me`, { headers: authorizedHeaders })
+		await expect(billing.status).toBe(200)
+		await expect(billing.headers.get('access-control-allow-origin')).toBe(checkoutBrowser)
+		await expect(await billing.json()).toEqual({ subscriptions: [] })
+
+		const forged = await fetch(`${api}/api/billing/me`, {
+			headers: { ...authorizedHeaders, 'x-aven-subject': 'forged', 'x-aven-role': 'admin' }
+		})
+		await expect(forged.status).toBe(200)
+		const facadeOnly = await fetch(`${checkout}/api/billing/me`, {
+			headers: { authorization: 'Bearer checkout-facade-token-for-e2e-only' }
+		})
+		await expect(facadeOnly.status).toBe(401)
+
+		const environmentDeadline = Date.now() + 60_000
+		while (Date.now() < environmentDeadline) {
+			const response = await fetch(`${api}/api/environments`, { headers: authorizedHeaders })
+			expect(response.status).toBe(200)
+			const body = (await response.json()) as { environments: (typeof environment)[] }
+			const ready = body.environments.find(
+				(candidate) =>
+					candidate.observedState === 'ready' &&
+					candidate.components.every((component) => component.observedState === 'ready')
+			)
+			if (ready) {
+				environment = ready
+				break
+			}
+			await new Promise((resolve) => setTimeout(resolve, 250))
+		}
+		if (!environment) throw new Error('customer environment did not reconcile')
+	})
+
+	test('native text import, source lookup, chat, and duplex voice', async () => {
+		test.skip(
+			liveChat,
+			'Controlled wiring journey; the live lane uses real Qwen interaction cases.'
+		)
+		tauri = await tauriAcceptance(secondPage, environment.id, authorizedHeaders)
+	})
+
+	for (const phase of ['pdf', 'csv'] as const) {
+		test(`native ${phase} documents and physical reconciliation decisions`, async () => {
+			test.skip(liveChat, 'Controlled document expectations are not live-model acceptance.')
+			const session = await TauriSession.launch(tauriApplication, tauriDriver)
+			try {
+				await authorizeTauri(session, secondPage)
+				const dashboard = new URL(await session.url())
+				dashboard.pathname = '/dashboard'
+				const candidate = await tauriReconciliation(
+					session,
+					dashboard,
+					`${api}/api/environments/${environment.id}/artifacts`,
+					authorizedHeaders,
+					phase
+				)
+				if (phase === 'pdf') remoteReconciliationCandidateId = candidate
+			} finally {
+				await session.close()
+			}
+		})
+	}
+
+	test('native Studio authoring from historical written and spoken cases', async () => {
+		test.skip(liveChat, 'The controlled authoring script is not live-model acceptance.')
+		test.setTimeout(180_000)
+		const session = await TauriSession.launch(tauriApplication, tauriDriver)
+		try {
+			await authorizeTauri(session, secondPage)
+			const dashboard = new URL(await session.url())
+			dashboard.pathname = '/dashboard'
+			dashboard.searchParams.set('e2eFixture', tauriFixture)
+			await session.navigate(dashboard.toString())
+			await studioAgentJourney(
+				session,
+				`${api}/api/environments/${environment.id}/intents`,
+				authorizedHeaders
 			)
 		} finally {
-			await backupDatabase.end()
+			await session.close()
 		}
-		const apiDatabase = new pg.Pool({
+	})
+
+	test('real Qwen native feedback, navigation and source continuity', async () => {
+		test.skip(!liveChat || backgroundChat, 'Requires the explicit real-Qwen native lane.')
+		test.setTimeout(900_000)
+		const session = await TauriSession.launch(tauriApplication, tauriDriver)
+		try {
+			await authorizeTauri(session, secondPage)
+			const dashboard = new URL(await session.url())
+			dashboard.pathname = '/dashboard'
+			dashboard.searchParams.set('e2eFixture', tauriFixture)
+			await session.navigate(dashboard.toString())
+			await liveNativeConversationJourney(session, {
+				dashboard: dashboard.toString(),
+				evidencePath: test.info().outputPath('real-qwen-native-evidence.json')
+			})
+		} finally {
+			await session.close()
+		}
+	})
+
+	test('real Qwen background process loss, durable queue and recovery', async () => {
+		test.skip(!backgroundChat, 'Requires the explicit real-Qwen background lane.')
+		test.setTimeout(900_000)
+		// Match the desktop's bounded token reuse instead of exchanging identity on
+		// every status poll. Scope this cache to this one authorized test session.
+		let token: { headers: Record<string, string>; until: number } | undefined
+		let refreshing: Promise<Record<string, string>> | undefined
+		const headers = (): Promise<Record<string, string>> => {
+			if (token && token.until > Date.now()) return Promise.resolve(token.headers)
+			refreshing ??= (async () => {
+				const body = await json(
+					await fetch(`${identity}/api/auth/token`, {
+						headers: { authorization: `Bearer ${sessionToken}` }
+					})
+				)
+				const payload = JSON.parse(Buffer.from(body.token.split('.')[1], 'base64url').toString())
+				expect(Number.isFinite(payload.exp)).toBe(true)
+				const result = { authorization: `Bearer ${body.token}`, origin: checkoutBrowser }
+				token = {
+					headers: result,
+					until: Math.min(Date.now() + 60_000, payload.exp * 1000 - 15_000)
+				}
+				return result
+			})().finally(() => {
+				refreshing = undefined
+			})
+			return refreshing
+		}
+		let session: TauriSession | undefined
+		const native = nativeIntentWork(() => {
+			if (!session) throw Error('Native client is closed.')
+			return session
+		})
+		const reopenClient = async () => {
+			const previous = session
+			session = undefined
+			if (previous) await previous.close()
+			session = await TauriSession.launch(tauriApplication, tauriDriver)
+			await authorizeTauri(session, secondPage)
+			const dashboard = new URL(await session.url())
+			dashboard.pathname = '/dashboard'
+			dashboard.searchParams.set('e2eFixture', tauriFixture)
+			await session.navigate(dashboard.toString())
+			await native.connect()
+		}
+		try {
+			await reopenClient()
+			await liveBackgroundProcessJourney({
+				api,
+				environmentId: environment.id,
+				owner: claims.sub,
+				databaseUrl,
+				project: process.env.E2E_PROJECT_NAME!,
+				evidencePath: test.info().outputPath('real-qwen-background-process-evidence.json'),
+				headers,
+				work: native.work,
+				progress: native.progress,
+				reopenClient
+			})
+		} finally {
+			await session?.close()
+		}
+	})
+
+	test('environment switching, customer isolation, persistence, and managed hosting', async () => {
+		test.skip(liveChat, 'Requires the controlled import fixture from the wiring lane.')
+		const secondName = `${name}-other`.slice(0, 28)
+		const secondNameHold = await fetch(`${checkout}/api/names/hold`, {
+			method: 'POST',
+			headers: {
+				'content-type': 'application/json',
+				origin: checkoutBrowser,
+				'x-proof-of-work': await proofOfWork('secure-name')
+			},
+			body: JSON.stringify({ name: secondName, email, tier: 'aven-name' })
+		})
+		expect(secondNameHold.status).toBe(201)
+		const secondClaimMail = await waitForMail(new RegExp(`Checkout link for ${secondName}`))
+		await page.goto(linkFrom(secondClaimMail, new URL(checkoutBrowser).host))
+		await expect(page.getByText(`${secondName}.aven.ceo`)).toBeVisible()
+		await page.getByRole('button', { name: 'Pay' }).click()
+		await expect(page).toHaveURL(/\/purchase\/success/)
+		let secondEnvironment: typeof environment | undefined
+		const secondEnvironmentDeadline = Date.now() + 60_000
+		while (Date.now() < secondEnvironmentDeadline) {
+			const body = (await json(
+				await fetch(`${api}/api/environments`, { headers: authorizedHeaders })
+			)) as { environments: (typeof environment)[] }
+			secondEnvironment = body.environments.find(
+				(candidate) =>
+					candidate.id !== environment.id &&
+					candidate.observedState === 'ready' &&
+					candidate.components.every((component) => component.observedState === 'ready')
+			)
+			if (secondEnvironment) break
+			await new Promise((resolve) => setTimeout(resolve, 250))
+		}
+		if (!secondEnvironment) throw new Error('second customer environment did not reconcile')
+		await tauriEnvironmentSwitchAcceptance(
+			secondPage,
+			{
+				id: environment.id,
+				priorSources: [tauri.sourceArtifactId, tauri.serverSourceArtifactId]
+			},
+			{ id: secondEnvironment.id },
+			authorizedHeaders
+		)
+
+		const intentBase = `${api}/api/environments/${environment.id}/intents`
+		const targetIntentId = crypto.randomUUID()
+		const sourceIntentId = crypto.randomUUID()
+		for (const [id, title] of [
+			[targetIntentId, 'Target conversation'],
+			[sourceIntentId, 'Source conversation']
+		] as const) {
+			const response = await fetch(intentBase, {
+				method: 'POST',
+				headers: { ...authorizedHeaders, 'content-type': 'application/json' },
+				body: JSON.stringify({ id, title })
+			})
+			expect(response.status).toBe(201)
+		}
+		const secondIntentId = crypto.randomUUID()
+		expect(
+			(
+				await fetch(`${api}/api/environments/${secondEnvironment.id}/intents`, {
+					method: 'POST',
+					headers: { ...authorizedHeaders, 'content-type': 'application/json' },
+					body: JSON.stringify({ id: secondIntentId, title: 'Second customer only' })
+				})
+			).status
+		).toBe(201)
+		const firstList = (
+			await json(await fetch(`${intentBase}/search`, { headers: authorizedHeaders }))
+		).intents as {
+			id: string
+		}[]
+		expect(firstList.map((intent) => intent.id)).not.toContain(secondIntentId)
+		// The same still-valid identity token must obey the current owner-only WIP policy.
+		const membershipDatabase = new pg.Pool({
 			connectionString: databaseUrl.replace(/\/postgres$/, '/aven_api'),
 			max: 1
 		})
 		try {
+			await membershipDatabase.query(
+				'UPDATE customer_environment_memberships SET role=$1 WHERE environment_id=$2 AND subject_id=$3',
+				['member', environment.id, claims.sub]
+			)
+			expect((await fetch(`${intentBase}/search`, { headers: authorizedHeaders })).status).toBe(404)
 			expect(
-				(await apiDatabase.query("SELECT to_regnamespace('aven_intents') AS schema")).rows[0].schema
-			).toBeNull()
+				(
+					await fetch(`${intentBase}/${targetIntentId}`, {
+						method: 'DELETE',
+						headers: authorizedHeaders
+					})
+				).status
+			).toBe(404)
+			expect(
+				(await fetch(`${intentBase}/${targetIntentId}`, { headers: authorizedHeaders })).status
+			).toBe(404)
+			await membershipDatabase.query(
+				'DELETE FROM customer_environment_memberships WHERE environment_id=$1 AND subject_id=$2',
+				[environment.id, claims.sub]
+			)
+			expect((await fetch(`${intentBase}/search`, { headers: authorizedHeaders })).status).toBe(404)
+			// Membership in the other environment is unaffected.
+			expect(
+				(
+					await fetch(`${api}/api/environments/${secondEnvironment.id}/intents/search`, {
+						headers: authorizedHeaders
+					})
+				).status
+			).toBe(200)
 		} finally {
-			await apiDatabase.end()
+			await membershipDatabase.query(
+				`INSERT INTO customer_environment_memberships(environment_id,subject_id,role)
+			VALUES($1,$2,'owner') ON CONFLICT(environment_id,subject_id) DO UPDATE SET role='owner'`,
+				[environment.id, claims.sub]
+			)
+			await membershipDatabase.end()
 		}
-		const checkoutDatabase = new pg.Pool({
-			connectionString: databaseUrl.replace(/\/postgres$/, '/aven_checkout'),
-			max: 1
-		})
-		try {
-			const heartbeat = (
-				await checkoutDatabase.query(
-					"SELECT metadata FROM worker_heartbeats WHERE worker_name='email-worker'"
-				)
-			).rows[0]?.metadata
-			expect(heartbeat.providerHealth.code).toBe('SMTP_PROVIDER_NOT_OBSERVABLE')
-			expect(heartbeat.providerHealth.healthy).toBe(false)
-			expect(Date.now() - heartbeat.providerHealth.checkedAt).toBeLessThan(180_000)
-			expect(Object.keys(heartbeat.providerHealth).sort()).toEqual(['checkedAt', 'code', 'healthy'])
-			const delivery = (
-				await checkoutDatabase.query(
-					`SELECT event_type,payload,state,attempt_count
-					 FROM polar_webhook_deliveries WHERE delivery_id=$1`,
-					[ignoredDeliveryId]
-				)
-			).rows[0]
-			expect(delivery).toEqual({
-				event_type: 'future.feature.created',
-				payload: JSON.parse(ignoredWebhookBody),
-				state: 'processed',
-				attempt_count: 1
+		expect((await fetch(`${intentBase}/search`, { headers: authorizedHeaders })).status).toBe(200)
+		const voiceFixture = silentVoiceFixture()
+		const anonymousSpeaker = {
+			session_id: voiceFixture.session_id,
+			speaker_id: voiceFixture.speaker_id,
+			confidence: voiceFixture.confidence
+		}
+		const contribution = {
+			id: crypto.randomUUID(),
+			contributorKind: 'human',
+			kind: 'message',
+			text: voiceFixture.text,
+			payload: { anonymousSpeaker }
+		}
+		for (let attempt = 0; attempt < 2; attempt += 1) {
+			const response = await fetch(`${intentBase}/${targetIntentId}`, {
+				method: 'POST',
+				headers: { ...authorizedHeaders, 'content-type': 'application/json' },
+				body: JSON.stringify(contribution)
 			})
-		} finally {
-			await checkoutDatabase.end()
+			expect(response.status).toBe(201)
 		}
-		const customer = new pg.Pool({
-			connectionString: databaseUrl.replace(/\/postgres$/, `/${customerDatabase}`),
-			max: 1
+		const targetDetail = (await json(
+			await fetch(`${intentBase}/${targetIntentId}`, { headers: authorizedHeaders })
+		)) as { version: number; contributions: Array<Record<string, unknown>> }
+		expect(targetDetail.version).toBe(2)
+		expect(targetDetail.contributions).toHaveLength(2)
+		expect(targetDetail.contributions[1]).toMatchObject({
+			text: voiceFixture.text,
+			payload: { anonymousSpeaker }
 		})
+		const sourceDetail = (await json(
+			await fetch(`${intentBase}/${sourceIntentId}`, { headers: authorizedHeaders })
+		)) as { version: number }
+		const mergeCommand = {
+			id: targetIntentId,
+			commandId: crypto.randomUUID(),
+			expectedVersion: targetDetail.version,
+			sources: [{ id: sourceIntentId, expectedVersion: sourceDetail.version }]
+		}
+		for (let attempt = 0; attempt < 2; attempt += 1) {
+			const response = await fetch(`${intentBase}/${targetIntentId}/merge`, {
+				method: 'POST',
+				headers: { ...authorizedHeaders, 'content-type': 'application/json' },
+				body: JSON.stringify(mergeCommand)
+			})
+			expect(response.status).toBe(200)
+		}
+
+		const actorBase = `${api}/api/environments/${environment.id}/actor-runs`
+		const actorStart = await fetch(actorBase, {
+			method: 'POST',
+			headers: {
+				...authorizedHeaders,
+				'content-type': 'application/json',
+				'x-aven-tenant-grant': 'forged-caller-grant'
+			},
+			body: JSON.stringify({
+				protocol: ACTOR_RUN_PROTOCOL,
+				requestId: crypto.randomUUID(),
+				idempotencyKey: crypto.randomUUID(),
+				requestedAt: new Date().toISOString(),
+				skillRef: 'ceo.aven:skill:e2e:already-satisfied@1',
+				executionEnvironment: 'server',
+				ingredients: [{ predicate: 'ceo.aven.e2e.done(test)' }],
+				goals: ['ceo.aven.e2e.done(test)'],
+				parameters: {}
+			})
+		})
+		expect(actorStart.status).toBe(202)
+		const actorHandle = (await actorStart.json()) as { runId: string }
+		let actorRecord: { state: string; security: { access: { tenantId?: string } } } | undefined
+		for (let attempt = 0; attempt < 50; attempt += 1) {
+			const response = await fetch(`${actorBase}/${actorHandle.runId}`, {
+				headers: authorizedHeaders
+			})
+			expect(response.status).toBe(200)
+			actorRecord = await response.json()
+			if (actorRecord?.state === 'succeeded') break
+			await new Promise((resolve) => setTimeout(resolve, 50))
+		}
+		expect(actorRecord).toMatchObject({
+			state: 'succeeded',
+			security: { access: { tenantId: environment.id } }
+		})
+
+		const admin = new pg.Pool({ connectionString: databaseUrl, max: 1 })
 		try {
-			const duplex = silentDuplexFixture()
-			expect(
-				(await customer.query('SELECT count(*)::int AS count FROM aven_intents.intents')).rows[0]
-					.count
-			).toBe(14)
+			const customerDatabase = databaseNameForEnvironment(environment.id)
+			const secondCustomerDatabase = databaseNameForEnvironment(secondEnvironment.id)
+			expect(secondCustomerDatabase).not.toBe(customerDatabase)
 			expect(
 				(
-					await customer.query(
-						`SELECT count(*)::int AS count FROM aven_intents.contributions
-						 WHERE intent_id=$1
-						   AND (text = ANY($2::text[]) OR text LIKE 'E2E narration begins.%')`,
-						[
-							tauri.intentId,
-							[
-								'Hello from Tauri E2E',
-								'E2E chat reply.',
-								'Start E2E narrated answer',
-								duplex.interrupted.text,
-								duplex.follow_up.text
-							]
-						]
+					await admin.query(
+						"SELECT has_database_privilege('aven_backup',$1,'CONNECT') AS allowed",
+						[customerDatabase]
 					)
-				).rows[0].count
-			).toBe(8)
-			expect(
-				(
-					await customer.query(
-						`SELECT count(*)::int AS count FROM artifact_store.artifact_records
-						 WHERE id = ANY($1::uuid[])`,
-						[
-							[
-								tauri.sourceArtifactId,
-								tauri.extractedTextArtifactId,
-								tauri.serverSourceArtifactId,
-								tauri.serverExtractedTextArtifactId
-							]
-						]
-					)
-				).rows[0].count
-			).toBe(4)
-			const retainedRuns = (
-				await customer.query('SELECT record FROM aven_actor_runs.runs')
-			).rows.map((row) => row.record)
-			const documentRuns = retainedRuns.filter(
-				(run) => run.skillRef === 'ceo.aven:skill:docs.ingest:document-ingest@1'
-			)
-			// Three original document runs, two remote CSV detections, and the
-			// accepted CSV's new observation after its human confirmation, plus
-			// the invoice imported to prove its separate relationship decision.
-			expect(documentRuns).toHaveLength(7)
-			expect(documentRuns.every((run) => run.state === 'succeeded')).toBe(true)
-			const reconciliationRuns = retainedRuns.filter(
-				(run) => run.skillRef === 'ceo.aven:skill:bookkeeping:invoice-reconciliation@2'
-			)
-			// Restoring a file can trigger an additional read-only reconciliation. Prove
-			// the required financial runs and exact remote candidate, not a timing-dependent total.
-			expect(reconciliationRuns.length).toBeGreaterThanOrEqual(2)
-			expect(
-				reconciliationRuns.some(
-					(run) =>
-						run.state === 'succeeded' &&
-						run.checkpoints.some((checkpoint: { artifactIds: string[] }) =>
-							checkpoint.artifactIds.includes(tauri.remoteReconciliationCandidateId)
-						)
-				)
+				).rows[0].allowed
 			).toBe(true)
 			expect(
-				retainedRuns.filter((run) => run.skillRef === 'ceo.aven:skill:e2e:already-satisfied@1')
-			).toHaveLength(1)
-			const documentRun = (
-				await customer.query(
-					`SELECT record FROM aven_actor_runs.runs
+				(
+					await admin.query(
+						"SELECT rolcanlogin,rolinherit,pg_has_role('aven_backup','pg_read_all_data','MEMBER') AS reader FROM pg_roles WHERE rolname='aven_backup'"
+					)
+				).rows[0]
+			).toEqual({ rolcanlogin: true, rolinherit: true, reader: true })
+			const backupDatabaseUrl = new URL(databaseUrl)
+			backupDatabaseUrl.username = 'aven_backup'
+			backupDatabaseUrl.password = 'platform-backup-e2e'
+			backupDatabaseUrl.pathname = `/${customerDatabase}`
+			const backupDatabase = new pg.Pool({
+				connectionString: backupDatabaseUrl.toString(),
+				max: 1
+			})
+			try {
+				expect(
+					(await backupDatabase.query('SELECT count(*)::int AS count FROM aven_intents.intents'))
+						.rows[0].count
+				).toBeGreaterThan(0)
+				await expect(backupDatabase.query('DELETE FROM aven_intents.intents')).rejects.toThrow(
+					/permission denied/
+				)
+			} finally {
+				await backupDatabase.end()
+			}
+			const apiDatabase = new pg.Pool({
+				connectionString: databaseUrl.replace(/\/postgres$/, '/aven_api'),
+				max: 1
+			})
+			try {
+				expect(
+					(await apiDatabase.query("SELECT to_regnamespace('aven_intents') AS schema")).rows[0]
+						.schema
+				).toBeNull()
+			} finally {
+				await apiDatabase.end()
+			}
+			const checkoutDatabase = new pg.Pool({
+				connectionString: databaseUrl.replace(/\/postgres$/, '/aven_checkout'),
+				max: 1
+			})
+			try {
+				const heartbeat = (
+					await checkoutDatabase.query(
+						"SELECT metadata FROM worker_heartbeats WHERE worker_name='email-worker'"
+					)
+				).rows[0]?.metadata
+				expect(heartbeat.providerHealth.code).toBe('SMTP_PROVIDER_NOT_OBSERVABLE')
+				expect(heartbeat.providerHealth.healthy).toBe(false)
+				expect(Date.now() - heartbeat.providerHealth.checkedAt).toBeLessThan(180_000)
+				expect(Object.keys(heartbeat.providerHealth).sort()).toEqual([
+					'checkedAt',
+					'code',
+					'healthy'
+				])
+				const delivery = (
+					await checkoutDatabase.query(
+						`SELECT event_type,payload,state,attempt_count
+					 FROM polar_webhook_deliveries WHERE delivery_id=$1`,
+						[ignoredDeliveryId]
+					)
+				).rows[0]
+				expect(delivery).toEqual({
+					event_type: 'future.feature.created',
+					payload: JSON.parse(ignoredWebhookBody),
+					state: 'processed',
+					attempt_count: 1
+				})
+			} finally {
+				await checkoutDatabase.end()
+			}
+			const customer = new pg.Pool({
+				connectionString: databaseUrl.replace(/\/postgres$/, `/${customerDatabase}`),
+				max: 1
+			})
+			try {
+				const duplex = silentDuplexFixture()
+				expect(
+					(await customer.query('SELECT count(*)::int AS count FROM aven_intents.intents')).rows[0]
+						.count
+				).toBe(14 + studioHistoryIntentCount)
+				expect(
+					(
+						await customer.query(
+							`SELECT count(*)::int AS count FROM aven_intents.contributions
+						 WHERE intent_id=$1
+						   AND (text = ANY($2::text[]) OR text LIKE 'E2E narration begins.%')`,
+							[
+								tauri.intentId,
+								[
+									'Hello from Tauri E2E',
+									'E2E chat reply.',
+									'Start E2E narrated answer',
+									duplex.interrupted.text,
+									duplex.follow_up.text
+								]
+							]
+						)
+					).rows[0].count
+				).toBe(8)
+				expect(
+					(
+						await customer.query(
+							`SELECT count(*)::int AS count FROM artifact_store.artifact_records
+						 WHERE id = ANY($1::uuid[])`,
+							[
+								[
+									tauri.sourceArtifactId,
+									tauri.extractedTextArtifactId,
+									tauri.serverSourceArtifactId,
+									tauri.serverExtractedTextArtifactId
+								]
+							]
+						)
+					).rows[0].count
+				).toBe(4)
+				const retainedRuns = (
+					await customer.query('SELECT record FROM aven_actor_runs.runs')
+				).rows.map((row) => row.record)
+				const documentRuns = retainedRuns.filter(
+					(run) => run.skillRef === 'ceo.aven:skill:docs.ingest:document-ingest@1'
+				)
+				// Three original document runs, two remote CSV detections, and the
+				// accepted CSV's new observation after its human confirmation, plus
+				// the invoice imported to prove its separate relationship decision.
+				expect(documentRuns).toHaveLength(7)
+				expect(documentRuns.every((run) => run.state === 'succeeded')).toBe(true)
+				const reconciliationRuns = retainedRuns.filter(
+					(run) => run.skillRef === 'ceo.aven:skill:bookkeeping:invoice-reconciliation@2'
+				)
+				// Restoring a file can trigger an additional read-only reconciliation. Prove
+				// the required financial runs and exact remote candidate, not a timing-dependent total.
+				expect(reconciliationRuns.length).toBeGreaterThanOrEqual(2)
+				expect(
+					reconciliationRuns.some(
+						(run) =>
+							run.state === 'succeeded' &&
+							run.checkpoints.some((checkpoint: { artifactIds: string[] }) =>
+								checkpoint.artifactIds.includes(remoteReconciliationCandidateId)
+							)
+					)
+				).toBe(true)
+				expect(
+					retainedRuns.filter((run) => run.skillRef === 'ceo.aven:skill:e2e:already-satisfied@1')
+				).toHaveLength(1)
+				const documentRun = (
+					await customer.query(
+						`SELECT record FROM aven_actor_runs.runs
 					 WHERE record->>'skillRef'='ceo.aven:skill:docs.ingest:document-ingest@1'
 					 AND record->'parameters'->'source'->>'artifactId'=$1`,
-					[tauri.serverSourceArtifactId]
-				)
-			).rows[0]?.record as
-				| {
-						state: string
-						checkpoints: Array<{
-							artifactIds: string[]
-							output?: { presentation?: { metadata?: Record<string, unknown> } }
-						}>
-				  }
-				| undefined
-			expect(documentRun).toMatchObject({
-				state: 'succeeded',
-				checkpoints: [
-					{
-						output: {
-							presentation: {
-								metadata: {
-									executionEnvironment: 'server',
-									runtimeHost: 'actor-runner'
+						[tauri.serverSourceArtifactId]
+					)
+				).rows[0]?.record as
+					| {
+							state: string
+							checkpoints: Array<{
+								artifactIds: string[]
+								output?: { presentation?: { metadata?: Record<string, unknown> } }
+							}>
+					  }
+					| undefined
+				expect(documentRun).toMatchObject({
+					state: 'succeeded',
+					checkpoints: [
+						{
+							output: {
+								presentation: {
+									metadata: {
+										executionEnvironment: 'server',
+										runtimeHost: 'actor-runner'
+									}
 								}
 							}
 						}
-					}
-				]
-			})
-			expect(documentRun?.checkpoints[0]?.artifactIds).toContain(
-				tauri.serverExtractedTextArtifactId
-			)
-			const intentRole = databaseRoleName(environment.id, 'int_api')
-			const actorRole = databaseRoleName(environment.id, 'act_api')
-			const artifactRole = databaseRoleName(environment.id, 'art_api')
-			const privileges = (
-				await customer.query(
-					`SELECT has_table_privilege($1,'aven_intents.intents','SELECT') AS intent_read,
+					]
+				})
+				expect(documentRun?.checkpoints[0]?.artifactIds).toContain(
+					tauri.serverExtractedTextArtifactId
+				)
+				const intentRole = databaseRoleName(environment.id, 'int_api')
+				const actorRole = databaseRoleName(environment.id, 'act_api')
+				const artifactRole = databaseRoleName(environment.id, 'art_api')
+				const privileges = (
+					await customer.query(
+						`SELECT has_table_privilege($1,'aven_intents.intents','SELECT') AS intent_read,
 					 has_table_privilege($1,'aven_actor_runs.runs','SELECT') AS actor_read,
 					 has_table_privilege($2,'aven_actor_runs.runs','SELECT') AS actor_own,
 					 has_table_privilege($2,'aven_intents.intents','SELECT') AS intent_cross,
 					 has_table_privilege($3,'artifact_store.artifact_records','SELECT') AS artifact_own,
 					 has_table_privilege($3,'aven_intents.intents','SELECT') AS artifact_cross,
 					 has_table_privilege($1,'artifact_store.artifact_records','SELECT') AS intent_artifact_cross`,
-					[intentRole, actorRole, artifactRole]
-				)
-			).rows[0]
-			expect(privileges).toEqual({
-				intent_read: true,
-				actor_read: false,
-				actor_own: true,
-				intent_cross: false,
-				artifact_own: true,
-				artifact_cross: false,
-				intent_artifact_cross: false
+						[intentRole, actorRole, artifactRole]
+					)
+				).rows[0]
+				expect(privileges).toEqual({
+					intent_read: true,
+					actor_read: false,
+					actor_own: true,
+					intent_cross: false,
+					artifact_own: true,
+					artifact_cross: false,
+					intent_artifact_cross: false
+				})
+			} finally {
+				await customer.end()
+			}
+			const secondCustomer = new pg.Pool({
+				connectionString: databaseUrl.replace(/\/postgres$/, `/${secondCustomerDatabase}`),
+				max: 1
 			})
-		} finally {
-			await customer.end()
-		}
-		const secondCustomer = new pg.Pool({
-			connectionString: databaseUrl.replace(/\/postgres$/, `/${secondCustomerDatabase}`),
-			max: 1
-		})
-		try {
-			expect(
-				(await secondCustomer.query('SELECT count(*)::int AS count FROM aven_intents.intents'))
-					.rows[0].count
-			).toBe(2)
-		} finally {
-			await secondCustomer.end()
-		}
-		const crossDatabaseUrl = new URL(databaseUrl)
-		crossDatabaseUrl.username = databaseRoleName(environment.id, 'int_api')
-		crossDatabaseUrl.password = deriveDatabasePassword({
-			root: 'intent-root-00000000000000000000000000000001',
-			environmentId: environment.id,
-			routingGeneration: environment.routingGeneration,
-			roleKind: 'ceo.aven:db-role:intents:api@1'
-		})
-		crossDatabaseUrl.pathname = `/${secondCustomerDatabase}`
-		const crossDatabase = new pg.Pool({ connectionString: crossDatabaseUrl.toString(), max: 1 })
-		try {
-			await expect(crossDatabase.query('SELECT 1')).rejects.toThrow(/permission denied/)
-		} finally {
-			await crossDatabase.end()
-		}
-	} finally {
-		await admin.end()
-	}
-
-	const created = await fetch(`${api}/api/sites`, {
-		method: 'POST',
-		headers: { ...authorizedHeaders, 'content-type': 'application/json' },
-		body: JSON.stringify({
-			hostname: `${name}.example.test`,
-			repository: 'myavenceo/aven-brands',
-			sourceBranch: 'production',
-			deploymentBranch: `deploy/${name}`
-		})
-	})
-	if (created.status !== 201)
-		throw new Error(`site creation failed: ${created.status} ${await created.text()}`)
-	const createdSite = (await created.json()) as { site: { id: string }; dns: { txtName: string } }
-	expect(createdSite.dns.txtName).toBe(`_aven-site.${name}.example.test`)
-	await expect(
-		(
-			await fetch(`${api}/api/sites/${createdSite.site.id}`, {
-				method: 'DELETE',
-				headers: authorizedHeaders
+			try {
+				expect(
+					(await secondCustomer.query('SELECT count(*)::int AS count FROM aven_intents.intents'))
+						.rows[0].count
+				).toBe(2)
+			} finally {
+				await secondCustomer.end()
+			}
+			const crossDatabaseUrl = new URL(databaseUrl)
+			crossDatabaseUrl.username = databaseRoleName(environment.id, 'int_api')
+			crossDatabaseUrl.password = deriveDatabasePassword({
+				root: 'intent-root-00000000000000000000000000000001',
+				environmentId: environment.id,
+				routingGeneration: environment.routingGeneration,
+				roleKind: 'ceo.aven:db-role:intents:api@1'
 			})
-		).status
-	).toBe(200)
+			crossDatabaseUrl.pathname = `/${secondCustomerDatabase}`
+			const crossDatabase = new pg.Pool({ connectionString: crossDatabaseUrl.toString(), max: 1 })
+			try {
+				await expect(crossDatabase.query('SELECT 1')).rejects.toThrow(/permission denied/)
+			} finally {
+				await crossDatabase.end()
+			}
+		} finally {
+			await admin.end()
+		}
 
-	await expect(
-		(
+		const created = await fetch(`${api}/api/sites`, {
+			method: 'POST',
+			headers: { ...authorizedHeaders, 'content-type': 'application/json' },
+			body: JSON.stringify({
+				hostname: `${name}.example.test`,
+				repository: 'myavenceo/aven-brands',
+				sourceBranch: 'production',
+				deploymentBranch: `deploy/${name}`
+			})
+		})
+		if (created.status !== 201)
+			throw new Error(`site creation failed: ${created.status} ${await created.text()}`)
+		const createdSite = (await created.json()) as {
+			site: { id: string }
+			dns: { txtName: string }
+		}
+		expect(createdSite.dns.txtName).toBe(`_aven-site.${name}.example.test`)
+		await expect(
+			(
+				await fetch(`${api}/api/sites/${createdSite.site.id}`, {
+					method: 'DELETE',
+					headers: authorizedHeaders
+				})
+			).status
+		).toBe(200)
+
+		await expect(
+			(
+				await fetch(`${api}/internal/v1/static-sites/bindings`, {
+					headers: { authorization: 'Bearer wrong' }
+				})
+			).status
+		).toBe(404)
+		const directory = (await json(
 			await fetch(`${api}/internal/v1/static-sites/bindings`, {
-				headers: { authorization: 'Bearer wrong' }
+				headers: { authorization: `Bearer ${directorySecret}` }
 			})
-		).status
-	).toBe(404)
-	const directory = (await json(
-		await fetch(`${api}/internal/v1/static-sites/bindings`, {
-			headers: { authorization: `Bearer ${directorySecret}` }
-		})
-	)) as { bindings: { hostname: string; verification_mode: string; owner_is_admin: boolean }[] }
-	expect(directory.bindings).toContainEqual(
-		expect.objectContaining({
-			hostname: 'aven.ceo',
-			verification_mode: 'operator',
-			owner_is_admin: true
-		})
-	)
+		)) as { bindings: { hostname: string; verification_mode: string; owner_is_admin: boolean }[] }
+		expect(directory.bindings).toContainEqual(
+			expect.objectContaining({
+				hostname: 'aven.ceo',
+				verification_mode: 'operator',
+				owner_is_admin: true
+			})
+		)
 
-	const staticDeadline = Date.now() + 90_000
-	let hosted: Awaited<ReturnType<typeof hostedDocument>> | null = null
-	while (Date.now() < staticDeadline) {
-		hosted = await hostedDocument(staticHost, 'aven.ceo')
-		if (hosted.ok) break
-		await new Promise((resolve) => setTimeout(resolve, 1_000))
-	}
-	if (!hosted?.ok) throw new Error(`aven.ceo managed release was not served (${hosted?.status})`)
-	expect(hosted.text.toLowerCase()).toContain('aven')
+		const staticDeadline = Date.now() + 90_000
+		let hosted: Awaited<ReturnType<typeof hostedDocument>> | null = null
+		while (Date.now() < staticDeadline) {
+			hosted = await hostedDocument(staticHost, 'aven.ceo')
+			if (hosted.ok) break
+			await new Promise((resolve) => setTimeout(resolve, 1_000))
+		}
+		if (!hosted?.ok) throw new Error(`aven.ceo managed release was not served (${hosted?.status})`)
+		expect(hosted.text.toLowerCase()).toContain('aven')
 
-	const secondProvision = await fetch(`${identity}/internal/v1/accounts`, {
-		method: 'POST',
-		headers: {
-			authorization: `Bearer ${productionProvisioningSecret}`,
-			'content-type': 'application/json'
-		},
-		body: JSON.stringify({ email, source: 'e2e-idempotence' })
+		const secondProvision = await fetch(`${identity}/internal/v1/accounts`, {
+			method: 'POST',
+			headers: {
+				authorization: `Bearer ${productionProvisioningSecret}`,
+				'content-type': 'application/json'
+			},
+			body: JSON.stringify({ email, source: 'e2e-idempotence' })
+		})
+		await expect(secondProvision.status).toBe(200)
+		await expect((await secondProvision.json()).setupUrl).toBeNull()
 	})
-	await expect(secondProvision.status).toBe(200)
-	await expect((await secondProvision.json()).setupUrl).toBeNull()
-
-	await secondContext.close()
-	await context.close()
 })

@@ -9,6 +9,32 @@ import type { TrustedActorInstallation } from '../installations'
 import type { ActorRegistrySnapshot, ExecutionEnvironment, RegisteredCapability } from '../registry'
 import { parseStudioPublicParametersSchema } from './v2'
 
+export const STUDIO_CATALOG_REFRESH_REQUIRED =
+	'CATALOG_REFRESH_REQUIRED: Start a fresh search without viewToken or cursor. Reuse a view token only for subsequent pages of the same unchanged search and filters.'
+
+/** Search human phrases without requiring their words to be adjacent in a manifest. */
+function catalogSearch<T>(rows: T[], query: string, fields: (row: T) => string[]): T[] {
+	if (!query) return rows
+	const indexed = rows.map((row, index) => {
+		const values = fields(row).map((value) => value.toLowerCase())
+		return { row, index, label: values[0] ?? '', text: values.join('\n') }
+	})
+	const exact = indexed.filter((item) => item.text.includes(query))
+	if (exact.length) return exact.map((item) => item.row)
+	const terms = [...new Set(query.match(/[\p{L}\p{N}]{3,}/gu) ?? [])].slice(0, 12)
+	return indexed
+		.map((item) => ({
+			...item,
+			score: terms.reduce(
+				(score, term) => score + (item.label.includes(term) ? 3 : item.text.includes(term) ? 1 : 0),
+				0
+			)
+		}))
+		.filter((item) => item.score > 0)
+		.sort((a, b) => b.score - a.score || a.index - b.index)
+		.map((item) => item.row)
+}
+
 export type StudioReadiness =
 	| 'ready'
 	| 'needs-input'
@@ -38,7 +64,8 @@ export interface StudioCatalogEntry {
 	reasonCodes: string[]
 	canAuthor: boolean
 	canPlan: boolean
-	canInvokeNow: boolean
+	/** Discovery is not an invocation attempt; exact inputs and authority are checked at run time. */
+	invocationStatus: 'not-evaluated'
 }
 
 /** Public port projection. A complete non-secret port always has an exact Store type. */
@@ -50,6 +77,7 @@ export interface StudioCatalogPort {
 	cardinality: CapabilitySlot['cardinality']
 	sensitive: boolean
 	type?: { key: string; version: number }
+	mediaTypes?: string[]
 }
 
 export interface StudioCatalogActor {
@@ -123,7 +151,7 @@ export class StudioCatalog {
 		let token = request.viewToken
 		let captured: CapturedView | undefined
 		if (request.cursor || token) {
-			if (!token) throw new Error('CATALOG_REFRESH_REQUIRED')
+			if (!token) throw new Error(STUDIO_CATALOG_REFRESH_REQUIRED)
 			captured = this.#views.get(token)
 			if (
 				!captured ||
@@ -132,14 +160,14 @@ export class StudioCatalog {
 				captured.readyOnly !== readyOnly ||
 				captured.expiresAt <= this.now().toISOString()
 			)
-				throw new Error('CATALOG_REFRESH_REQUIRED')
+				throw new Error(STUDIO_CATALOG_REFRESH_REQUIRED)
 			// Pagination is a presentation snapshot, not a renewable discover grant.
 			// A changed policy/placement/contract invalidates it before any stale entry is returned.
 			if (
 				canonical(await projectCatalog(request)) !==
 				canonical({ actors: captured.actors, entries: captured.entries })
 			)
-				throw new Error('CATALOG_REFRESH_REQUIRED')
+				throw new Error(STUDIO_CATALOG_REFRESH_REQUIRED)
 		} else {
 			const projection = await projectCatalog(request)
 			const capturedAt = this.now().toISOString()
@@ -159,26 +187,23 @@ export class StudioCatalog {
 				if (oldest) this.#views.delete(oldest)
 			}
 		}
-		const matching = needle
-			? captured.entries.filter((entry) =>
-					[entry.label, entry.description, entry.actorId, entry.capabilityId, ...entry.tags]
-						.join('\n')
-						.toLowerCase()
-						.includes(needle)
-				)
-			: captured.entries
+		const matching = catalogSearch(captured.entries, needle, (entry) => [
+			entry.label,
+			entry.description,
+			entry.actorId,
+			entry.capabilityId,
+			...entry.tags
+		])
 		const entries = readyOnly ? matching.filter((entry) => entry.readiness === 'ready') : matching
-		const actors = needle
-			? captured.actors.filter((actor) =>
-					[actor.label, actor.description, actor.actorId, ...actor.tags]
-						.join('\n')
-						.toLowerCase()
-						.includes(needle)
-				)
-			: captured.actors
+		const actors = catalogSearch(captured.actors, needle, (actor) => [
+			actor.label,
+			actor.description,
+			actor.actorId,
+			...actor.tags
+		])
 		const offset = request.cursor ? Number(request.cursor) : 0
 		if (!Number.isSafeInteger(offset) || offset < 0 || offset > entries.length)
-			throw new Error('CATALOG_REFRESH_REQUIRED')
+			throw new Error(STUDIO_CATALOG_REFRESH_REQUIRED)
 		const next = offset + limit
 		return {
 			contractVersion: 1,
@@ -274,6 +299,7 @@ function projectedPorts(
 			...(slot.role && { role: slot.role }),
 			cardinality: slot.cardinality,
 			sensitive: slot.sensitive === true,
+			...(slot.mediaTypes && { mediaTypes: [...slot.mediaTypes] }),
 			...(store && { type: { key: store.typeKey, version: store.typeVersion } })
 		}
 	})
@@ -386,7 +412,7 @@ async function projectCatalog(request: StudioCatalogRequest): Promise<{
 				canAuthor: !reasons.length,
 				canPlan: !reasons.length && runtimeSupported && placements.size > 0,
 				// Discovery has no exact inputs or fresh invocation authority.
-				canInvokeNow: false
+				invocationStatus: 'not-evaluated'
 			})
 		}
 	}

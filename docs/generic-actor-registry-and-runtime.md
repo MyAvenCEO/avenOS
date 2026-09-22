@@ -87,9 +87,29 @@ implementation nor permission to run it.
 
 The proposed [shared Studio runtime specification](skill-studio-shared-runtime.md)
 defines generic bindings, execution and review boundaries, artifact-library previews,
-clean cutover, and independent-package acceptance tests. The current Studio still
-has a fixed two-operation catalog and dedicated dispatch. The generic server host
-remains unconfigured; these requirements are new implementation work.
+clean cutover, and independent-package acceptance tests. Studio v2 consumes installed
+Actor/schema descriptions for finite compositions, including nested Skills. Protected
+HTTP/IMAP installation and production unattended execution remain separate gates;
+neither catalog visibility nor a planning preview supplies their authority.
+
+### Customer selection is not execution authority
+
+The native customer selector chooses the interactive route. Each admission still
+requires live membership and exact environment/generation scope. A switch invalidates
+held interactive reviews, query selections and connection handles from the previous
+environment; late results must not populate the new environment. Durable work stays
+with its admitted environment and does not acquire another environment's permissions.
+These rules also apply to the proposed credential and protocol executors.
+
+### Artifact library and exact source bindings
+
+Selecting a source or derived representation binds that exact occurrence/version.
+Opening a preview is read-only and cannot start a new remote acquisition. A derived
+file retains its inputs and is not republished as a root upload for convenience.
+Bounded list projections may omit lineage details: retrieve authoritative producer
+and evidence records before treating a displayed list as a complete provenance graph.
+The [semantic collection design](semantic-artifact-collections.md) owns latest/history
+selection; it must not silently replace an exact input already bound to a plan or review.
 
 ## Begin with one document
 

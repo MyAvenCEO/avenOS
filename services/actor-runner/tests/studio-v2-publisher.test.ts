@@ -1,6 +1,8 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { TrustedActorInstallations } from '@avenos/actors'
 import type { ArtifactStoreClient } from '@avenos/artifact-store'
+import { canonicalArtifactJson } from '@avenos/artifact-store'
 import { describe, expect, test, vi } from 'vitest'
 import { type StudioArtifact, StudioArtifacts } from '../src/studio-artifacts'
 import {
@@ -23,6 +25,24 @@ const policy = {
 	maxConcurrentChildren: 2,
 	allowModel: false
 }
+
+test('pinned Skill type digest matches the source-controlled case-aware schema', () => {
+	const schema = JSON.parse(
+		readFileSync(
+			new URL(
+				'../../artifact-store/conformance/fixtures/protocol/studio.skill.v3.json',
+				import.meta.url
+			),
+			'utf8'
+		)
+	)
+	expect(
+		createHash('sha256')
+			.update('artifact-store/type-definition/v1\0')
+			.update(canonicalArtifactJson(schema))
+			.digest('hex')
+	).toBe(STUDIO_SKILL_V2_TYPE_DIGEST)
+})
 function skill() {
 	return {
 		version: 2,
@@ -44,7 +64,7 @@ function fixture() {
 		scopeId: scope,
 		artifactSha256: '0'.repeat(64),
 		typeKey: 'studio.skill',
-		typeVersion: 2,
+		typeVersion: 3,
 		payload: skill(),
 		scopeSequence: 1,
 		publicationId: randomUUID(),
@@ -66,7 +86,7 @@ function fixture() {
 				scopeId: scope,
 				artifactSha256: '1'.repeat(64),
 				typeKey: 'studio.skill',
-				typeVersion: 2,
+				typeVersion: 3,
 				payload: submission.intent.artifacts[0].payload,
 				scopeSequence: 2,
 				publicationId: id,
@@ -81,7 +101,7 @@ function fixture() {
 		context: async () => ({ storeEpoch: randomUUID() }),
 		type: async () => ({
 			typeKey: 'studio.skill',
-			version: 2,
+			version: 3,
 			typeDefinitionSha256: installedDigest
 		}),
 		artifact: async (_scope: string, id: string) => {
@@ -89,7 +109,13 @@ function fixture() {
 			if (!found) throw new Error('RESOURCE_UNAVAILABLE')
 			return { ...found, scopeId: scope }
 		},
-		publish
+		publish,
+		publication: async (_scope: string, id: string) => {
+			const receipt = publications.get(id)
+			return receipt
+				? { publication: { artifacts: [{ artifactId: receipt.artifact.artifactId }] } }
+				: null
+		}
 	} as unknown as ArtifactStoreClient
 	const artifacts = new StudioArtifacts(client, scope)
 	const publisher = new StudioV2SkillPublisher(artifacts, new TrustedActorInstallations())
@@ -135,12 +161,78 @@ function fixture() {
 }
 
 describe('v2 Skill artifact publication seam', () => {
+	test('recovers an exact publication without another write and binds subject and revision', async () => {
+		const f = fixture()
+		const published = await f.publisher.publish(f.draft, f.authority)
+		f.publish.mockClear()
+		expect(await f.publisher.recover(f.draft.id, f.draft.revision, f.authority)).toEqual(published)
+		expect(await f.publisher.recover(f.draft.id, f.draft.revision + 1, f.authority)).toBeNull()
+		expect(
+			await f.publisher.recover(f.draft.id, f.draft.revision, {
+				...f.authority,
+				principal: { ...f.authority.principal, subjectId: randomUUID() }
+			})
+		).toBeNull()
+		expect(f.publish).not.toHaveBeenCalled()
+		const record = f.records.get(published.artifactId)!
+		record.publicationId = randomUUID()
+		await expect(f.publisher.recover(f.draft.id, f.draft.revision, f.authority)).rejects.toThrow(
+			'MISMATCH'
+		)
+	})
+
+	test('retains the exact confirmed case in Skill provenance and refuses a proposed case', async () => {
+		const f = fixture(),
+			id = randomUUID()
+		const c = {
+			...f.records.get(f.childId)!,
+			artifactId: id,
+			typeKey: 'studio.case',
+			typeVersion: 1,
+			payload: {
+				status: 'proposed',
+				predecessorArtifactId: null,
+				recordedBy: f.authority.principal.subjectId,
+				case: {
+					title: 'Real case',
+					situation: 'An email arrived',
+					outcome: 'Brief prepared',
+					evidence: [
+						{
+							id: 'e',
+							kind: 'recollection',
+							sourceId: 'user',
+							locator: '',
+							quote: 'I prepared a brief from that email.',
+							interpretation: ''
+						}
+					],
+					steps: [],
+					uncertainties: []
+				}
+			}
+		}
+		f.records.set(id, c)
+		const draft = { ...f.draft, definition: { ...f.draft.definition, caseArtifactId: id } }
+		await expect(f.publisher.publish(draft, f.authority)).rejects.toThrow('Confirm the case')
+		expect(f.publish).not.toHaveBeenCalled()
+		c.payload.status = 'confirmed'
+		await f.publisher.publish(draft, f.authority)
+		const intent = [...f.publications.values()][0]!.intent as any
+		expect(intent.run.inputs).toContainEqual({ role: 'case', ordinal: 0, artifactId: id })
+		expect(intent.artifacts[0].references).toContainEqual({
+			role: 'case',
+			ordinal: 0,
+			target: { kind: 'existing', artifactId: id },
+			attributes: {}
+		})
+	})
 	test('publishes exact child references and causal inputs, and replays the same draft', async () => {
 		const f = fixture()
 		const first = await f.publisher.publish(f.draft, f.authority)
 		const second = await f.publisher.publish(f.draft, f.authority)
 		expect(first.artifactId).toBe(second.artifactId)
-		expect(first.typeVersion).toBe(2)
+		expect(first.typeVersion).toBe(3)
 		expect(f.canPublish).toHaveBeenCalledTimes(2)
 		expect(f.resolveReadableSkill).toHaveBeenCalledWith(f.childId)
 		const intent = [...f.publications.values()][0]!.intent as any

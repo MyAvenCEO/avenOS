@@ -66,6 +66,42 @@ export class ArtifactHandler {
 	): Promise<Response> {
 		try {
 			const segments = suffix.replace(/^\//, '').replace(/\/$/, '').split('/').filter(Boolean)
+			if (segments[0] === 'inbox' && segments.length === 1 && request.method === 'GET') {
+				const after = uuid
+					.optional()
+					.parse(new URL(request.url).searchParams.get('after') ?? undefined)
+				return json(
+					200,
+					await this.service.inbox(
+						tenant.databaseName,
+						tenant.environmentId,
+						after,
+						tenant.routingGeneration
+					)
+				)
+			}
+			if (
+				segments[0] === 'inbox' &&
+				segments.length === 3 &&
+				segments[2] === 'promote' &&
+				request.method === 'POST'
+			) {
+				const artifactId = uuid.parse(segments[1])
+				return await requestMemory.json(request, 4096, async (body) => {
+					const choice = z.object({ intentId: uuid, executionEnvironment }).strict().parse(body)
+					return json(
+						200,
+						await this.service.promoteUpload({
+							databaseName: tenant.databaseName,
+							scopeId: tenant.environmentId,
+							routingGeneration: tenant.routingGeneration,
+							userId: identity.sub,
+							artifactId,
+							...choice
+						})
+					)
+				})
+			}
 			if (segments.length === 1 && segments[0] === 'inventory' && request.method === 'GET') {
 				const cursor = z
 					.string()
@@ -111,6 +147,11 @@ export class ArtifactHandler {
 							])
 							.optional(),
 						search: z.string().max(512).optional(),
+						where: z.string().max(4096).optional(),
+						view: z.enum(['schema', 'rows', 'summary']).optional(),
+						measure: z.string().max(64).optional(),
+						snapshotSequence: z.coerce.number().int().nonnegative().optional(),
+						storeEpoch: uuid.optional(),
 						sourceId: uuid.optional(),
 						sort: z.string().min(1).max(64).optional(),
 						direction: z.enum(['asc', 'desc']).optional(),
@@ -174,7 +215,9 @@ export class ArtifactHandler {
 						scopeId: tenant.environmentId,
 						routingGeneration: tenant.routingGeneration,
 						publicationId,
-						intentId: uuid.parse(required(request, 'x-aven-intent-id')),
+						intentId: request.headers.get('x-aven-intent-id')
+							? uuid.parse(request.headers.get('x-aven-intent-id'))
+							: null,
 						observedAt: observedAt.parse(required(request, 'x-aven-observed-at')),
 						originalName: originalName(request),
 						mediaType: required(request, 'content-type'),
@@ -273,6 +316,14 @@ export class ArtifactHandler {
 		} catch (error) {
 			if (error instanceof ArtifactStoreProblem && error.status === 404)
 				return json(404, { code: 'ARTIFACT_NOT_FOUND', message: 'Artifact not found.' })
+			if (error instanceof ArtifactStoreProblem && error.status >= 400 && error.status < 500)
+				return json(error.status, {
+					code: error.code,
+					message:
+						error.status === 409
+							? 'This action conflicts with an existing result, or the workspace changed. Refresh before trying again.'
+							: error.message
+				})
 			if (error instanceof BodyLimitError) return bodyLimitResponse(error)
 			if (error instanceof AppError)
 				return json(error.status, { code: error.code, message: error.message })

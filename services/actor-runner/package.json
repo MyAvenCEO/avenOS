@@ -6,12 +6,17 @@
 	"scripts": {
 		"dev": "bun --watch src/index.ts",
 		"start": "bun src/index.ts",
-		"build": "bun build src/index.ts --target=bun --outdir=build",
+		"build": "bun build src/index.ts --target=bun --define AVEN_BUNDLED=true --outdir=build",
 		"check": "tsc --noEmit",
 		"test": "vitest run",
 		"test:e2e:persistence": "vitest run --no-file-parallelism tests/sql-runner.persistence.e2e.test.ts tests/split-architecture.e2e.test.ts tests/artifact-store-port.persistence.e2e.test.ts tests/reconciliation.persistence.e2e.test.ts tests/chunking.persistence.e2e.test.ts tests/studio.persistence.e2e.test.ts"
 	},
 	"dependencies": {
+		"@avenos/http-resources": "workspace:*",
+		"@avenos/mail": "workspace:*",
+		"@avenos/chat-engine": "workspace:*",
+		"@avenos/intents": "workspace:*",
+		"@avenos/productivity": "workspace:*",
 		"@avenos/http-boundary": "workspace:*",
 		"@avenos/actors": "workspace:*",
 		"@avenos/artifact-store": "workspace:*",
@@ -20,7 +25,7 @@
 		"@avenos/aven-customer-contracts": "workspace:*",
 		"@avenos/aven-customer-runtime": "workspace:*",
 		"@avenos/aven-identity": "workspace:*",
-		"jose": "6.2.9",
+		"jose": "6.2.10",
 		"pg": "8.16.3",
 		"zod": "4.4.3"
 	},

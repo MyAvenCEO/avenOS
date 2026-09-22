@@ -20,10 +20,10 @@ This slice does not automatically merge suppliers, accounts, addresses, or conta
 into entity rows. It also does not generate or publish thumbnails when the library is
 opened. The original is read only after a person opens a preview; a PDF preview renders
 one page at a time. The full source file is still transferred for that preview.
-Current Skill Studio artifacts remain accessible through **Herkunft & Details**, which
-also retains the exact-artifact handoff to Studio. A visual Skill program preview and
-the proposed `studio.skill@2` catalog are future Studio work; this library does not
-reinterpret current Skill JSON as a new program format.
+Skill Studio artifacts have a visual program preview and an exact-artifact handoff
+to Studio, alongside **Herkunft & Details**. The preview reads the current
+`studio.skill@3` Store type and its version-2 program grammar. Unsupported artifact
+versions remain inspectable as records; they are not reinterpreted as executable programs.
 
 ## Read boundary and paging
 

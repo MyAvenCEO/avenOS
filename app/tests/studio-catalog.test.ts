@@ -1,6 +1,10 @@
 import type { StudioCatalogEntry, StudioCatalogPage } from '@avenos/actors'
 import { describe, expect, test } from 'vitest'
-import { combinedStudioCatalog, resetCombinedStudioCatalog } from '../src/lib/skills/studio-catalog'
+import {
+	combinedStudioCatalog,
+	mergeEntries,
+	resetCombinedStudioCatalog
+} from '../src/lib/skills/studio-catalog'
 
 const entry = (suffix: string): StudioCatalogEntry => ({
 	actorId: `ceo.aven:actor:fixture.actor-${suffix}@1`,
@@ -20,10 +24,42 @@ const entry = (suffix: string): StudioCatalogEntry => ({
 	reasonCodes: [],
 	canAuthor: true,
 	canPlan: true,
-	canInvokeNow: false
+	invocationStatus: 'not-evaluated'
 })
 
 describe('combined native/server Studio catalog', () => {
+	test('merges a shared manifest with host-specific Store bindings without inventing a local installation', () => {
+		const server = entry('shared')
+		server.installationDigest = 'trusted-server'
+		server.inputs = [
+			{
+				name: 'source',
+				schema: 'file@1',
+				predicate: 'file(F)',
+				role: 'source',
+				cardinality: 'one',
+				sensitive: false,
+				type: { key: 'core.file', version: 1 }
+			}
+		]
+		const native = structuredClone(server)
+		delete native.installationDigest
+		delete native.inputs[0]!.type
+		native.placements = []
+		native.canAuthor = native.canPlan = false
+		native.readiness = 'contract-incomplete'
+		native.parametersSchema = { additionalProperties: false, properties: {}, type: 'object' }
+		const merged = mergeEntries([server], [native])[0]!
+		expect(merged.canAuthor).toBe(true)
+		expect(merged.placements).toEqual(['server'])
+		expect(merged.inputs[0]!.type).toEqual({ key: 'core.file', version: 1 })
+		expect(mergeEntries([native], [server])[0]!.inputs).toEqual(merged.inputs)
+		native.inputs[0]!.type = { key: 'different.file', version: 1 }
+		expect(() => mergeEntries([server], [native])).toThrow('CATALOG_IDENTITY_CONFLICT')
+		delete native.inputs[0]!.type
+		native.inputs[0]!.cardinality = 'many'
+		expect(() => mergeEntries([server], [native])).toThrow('CATALOG_IDENTITY_CONFLICT')
+	})
 	test('never reuses an environment-A page token after the authority changes to B', async () => {
 		resetCombinedStudioCatalog()
 		let authorityContext = 'environment-a-session-a'

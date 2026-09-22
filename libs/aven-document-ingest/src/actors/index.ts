@@ -1,4 +1,5 @@
 export * from './content-aggregator'
+export * from './csv-statement-mapper'
 export * from './document-assembler'
 export * from './document-decomposer'
 export * from './document-inspector'

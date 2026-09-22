@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import {
 	ActorRegistry,
 	definitionFromManifest,
+	parseStudioPublicParametersSchema,
+	parseStudioSkillParameters,
 	parseStudioSkillV2,
 	presentSkillArtifact,
 	StudioSkillV2Error,
@@ -16,6 +18,49 @@ const source = {
 	role: 'source',
 	cardinality: 'one' as const
 }
+
+test('invalid structured values identify the field and bound without echoing contents', () => {
+	const definition = {
+		parametersSchema: {
+			type: 'object',
+			additionalProperties: false,
+			required: ['rows'],
+			properties: {
+				rows: {
+					type: 'array',
+					maxItems: 3,
+					items: {
+						type: 'object',
+						additionalProperties: false,
+						required: ['reason'],
+						properties: { reason: { type: 'string', maxLength: 12 } }
+					}
+				}
+			}
+		}
+	}
+	expect(() =>
+		parseStudioSkillParameters(definition, {
+			rows: [{ reason: 'Fictional confidential source wording' }]
+		})
+	).toThrow('/rows/0/reason must satisfy {"type":"string","maxLength":12}')
+	try {
+		parseStudioSkillParameters(definition, {
+			rows: [{ reason: 'Fictional confidential source wording' }]
+		})
+	} catch (error) {
+		expect(String(error)).not.toContain('confidential source wording')
+	}
+	expect(() => parseStudioSkillParameters(definition, { rows: [{}] })).toThrow(
+		'/rows/0/reason is required'
+	)
+	expect(() =>
+		parseStudioSkillParameters(definition, { rows: [{ reason: 'ok', extra: true }] })
+	).toThrow('/rows/0/extra is not an allowed field')
+	expect(parseStudioSkillParameters(definition, { rows: [{ reason: 'ok' }] })).toEqual({
+		rows: [{ reason: 'ok' }]
+	})
+})
 const summary = {
 	schema: 'fixture:summary@1',
 	type: { key: 'fixture.summary', version: 1 },
@@ -63,7 +108,7 @@ function program() {
 	}
 }
 
-function registry() {
+function registry(inputCardinality: 'one' | 'optional' | 'many' = 'one') {
 	const actors = new ActorRegistry()
 	actors.registerDefinition(
 		definitionFromManifest({
@@ -89,7 +134,7 @@ function registry() {
 							predicate: source.predicate,
 							schema: source.schema,
 							role: source.role,
-							cardinality: 'one'
+							cardinality: inputCardinality
 						}
 					],
 					outputSlots: [
@@ -116,11 +161,111 @@ function registry() {
 }
 
 describe('v2 Skill contract and pure presentation', () => {
+	test('optional results compose into collections, but never into a required singleton', () => {
+		const value = parseStudioSkillV2({
+			...program(),
+			inputs: { source: { ...source, cardinality: 'optional' } }
+		})
+		expect(validateStudioSkillCapabilities(value, registry('many'))).toEqual([])
+		expect(validateStudioSkillCapabilities(value, registry('one'))).toContainEqual(
+			expect.objectContaining({ code: 'INPUT_CONTRACT_MISMATCH' })
+		)
+		const forwarded = {
+			...value,
+			steps: [],
+			outputs: {
+				source: { ...source, cardinality: 'many', from: { kind: 'input', port: 'source' } }
+			}
+		}
+		expect(parseStudioSkillV2(forwarded).outputs.source?.cardinality).toBe('many')
+		expect(() =>
+			parseStudioSkillV2({
+				...forwarded,
+				outputs: { source: { ...forwarded.outputs.source, cardinality: 'one' } }
+			})
+		).toThrow('Output interface does not match')
+		const childId = 'f10a3e20-942b-4cda-81f1-a9f6b0c516e2'
+		const child = parseStudioSkillV2({
+			...value,
+			inputs: { source: { ...source, cardinality: 'many' } }
+		})
+		const parent = parseStudioSkillV2({
+			...value,
+			steps: [
+				{
+					id: 'inspect',
+					kind: 'skill',
+					label: 'Nested collection',
+					skillArtifactId: childId,
+					skillVersion: 2,
+					inputs: { source: { kind: 'input', port: 'source' } },
+					parameters: {},
+					outputs: { summary, details }
+				}
+			]
+		})
+		expect(validateStudioSkillChildren(parent, new Map([[childId, child]]))).toEqual([])
+		expect(
+			validateStudioSkillChildren(parent, new Map([[childId, parseStudioSkillV2(program())]]))
+		).toContainEqual(expect.objectContaining({ code: 'CHILD_INPUT_MISMATCH' }))
+	})
+	test('bounded field descriptions survive parsing but do not change parameter compatibility', () => {
+		const schema = (description: string, maxLength = 64) => ({
+			type: 'object',
+			additionalProperties: false,
+			description,
+			properties: {
+				entry: {
+					type: 'object',
+					additionalProperties: false,
+					description,
+					properties: { description: { type: 'string', maxLength, description } },
+					required: ['description']
+				}
+			},
+			required: ['entry']
+		})
+		const installed = schema('Describe the observed item.'),
+			publicForm = schema('Beschreibe den beobachteten Eintrag.')
+		const actors = new ActorRegistry(),
+			manifest = registry().definitions[0]!.manifest
+		actors.registerDefinition(
+			definitionFromManifest({
+				...manifest,
+				methods: [{ ...manifest.methods[0]!, parameters: installed }]
+			})
+		)
+		const raw = program()
+		raw.parametersSchema = publicForm
+		raw.steps[0].parameters = { entry: { kind: 'parameter', name: 'entry' } } as never
+		const definition = parseStudioSkillV2(raw)
+		expect(definition.parametersSchema.description).toBe(publicForm.description)
+		expect(validateStudioSkillCapabilities(definition, actors.snapshot())).toEqual([])
+		expect(
+			parseStudioSkillParameters(definition, { entry: { description: 'A violet tile' } })
+		).toEqual({ entry: { description: 'A violet tile' } })
+		expect(() => parseStudioSkillParameters(definition, { entry: { description: 12 } })).toThrow(
+			'/entry/description must satisfy'
+		)
+		// A data property actually named description must remain part of the contract.
+		raw.parametersSchema = schema('Same wording is not equivalent constraints.', 32)
+		expect(
+			validateStudioSkillCapabilities(parseStudioSkillV2(raw), actors.snapshot()).some(
+				(issue) => issue.code === 'PARAMETER_TYPE_MISMATCH'
+			)
+		).toBe(true)
+		for (const description of ['', ' '.repeat(5), 'x'.repeat(1025), 7, { text: 'not text' }])
+			expect(() => parseStudioPublicParametersSchema({ ...installed, description })).toThrow()
+		expect(() =>
+			parseStudioPublicParametersSchema({ ...installed, $ref: 'https://example.test/unchecked' })
+		).toThrow('Unknown field')
+	})
+
 	test('preserves named multiple outputs and checks the installed method', () => {
 		const definition = parseStudioSkillV2(program())
 		expect(Object.keys(definition.outputs)).toEqual(['summary', 'details'])
 		expect(validateStudioSkillCapabilities(definition, registry())).toEqual([])
-		const card = presentSkillArtifact('skill-id', 'digest', 2, program())
+		const card = presentSkillArtifact('skill-id', 'digest', 3, program())
 		expect(card.status).toBe('valid')
 		expect(card.outputs.map((output) => output.name)).toEqual(['summary', 'details'])
 		expect(card.effectCoverage).toBe('unknown')
@@ -131,7 +276,7 @@ describe('v2 Skill contract and pure presentation', () => {
 			required: ['tone'],
 			additionalProperties: false
 		}
-		expect(presentSkillArtifact('skill-id', 'digest', 2, configured).parameters).toEqual([
+		expect(presentSkillArtifact('skill-id', 'digest', 3, configured).parameters).toEqual([
 			{ name: 'tone', type: 'choice', required: true, choices: ['brief', 'full'] }
 		])
 	})
@@ -218,7 +363,13 @@ describe('v2 Skill contract and pure presentation', () => {
 				id: 'route',
 				kind: 'when',
 				label: 'Route by observation',
-				condition: { kind: 'observation', from: { kind: 'input', port: 'source' }, caseId: 'yes' },
+				condition: {
+					kind: 'observation',
+					from: { kind: 'input', port: 'source' },
+					path: '/outcome',
+					equals: 'yes',
+					caseId: 'yes'
+				},
 				branches: { yes: branch(first), otherwise: branch(second) },
 				outputs: { summary, details }
 			}
@@ -309,9 +460,35 @@ describe('v2 Skill contract and pure presentation', () => {
 	})
 
 	test('shows a bounded unsupported card for another immutable version', () => {
-		const card = presentSkillArtifact('skill-id', 'digest', 3, { version: 3, name: 'Future' })
+		const card = presentSkillArtifact('skill-id', 'digest', 99, { version: 99, name: 'Future' })
 		expect(card.status).toBe('unsupported-version')
 		expect(card.steps).toEqual([])
+	})
+
+	test('allows bounded camelCase data fields without accepting prototype or graph identifiers', () => {
+		const p = program()
+		const nested = (key: string) => ({
+			type: 'object',
+			additionalProperties: false,
+			maxProperties: 1,
+			properties: { [key]: { type: 'string', maxLength: 20 } }
+		})
+		p.parametersSchema = {
+			type: 'object',
+			additionalProperties: false,
+			properties: { mapping: nested('bookingDate') }
+		}
+		expect(() => parseStudioSkillV2(p)).not.toThrow()
+		for (const key of ['constructor', 'prototype', '__proto__']) {
+			p.parametersSchema = {
+				type: 'object',
+				additionalProperties: false,
+				properties: { mapping: nested(key) }
+			}
+			expect(() => parseStudioSkillV2(p)).toThrow()
+		}
+		p.parametersSchema = nested('TopLevel')
+		expect(() => parseStudioSkillV2(p)).toThrow()
 	})
 
 	test('rejects unbounded or executable public parameter schemas and dangling bindings', () => {
@@ -377,7 +554,7 @@ describe('v2 Skill contract and pure presentation', () => {
 			outputs: { answer: { ...optional, from: { kind: 'step', stepId: 'route', port: 'answer' } } }
 		}
 		expect(parseStudioSkillV2(branched).steps[0]?.kind).toBe('when')
-		const presentation = presentSkillArtifact('skill-id', 'digest', 2, branched)
+		const presentation = presentSkillArtifact('skill-id', 'digest', 3, branched)
 		expect(presentation.steps).toHaveLength(2)
 		expect(presentation.steps[1]).toMatchObject({
 			id: 'review-present',
@@ -387,7 +564,9 @@ describe('v2 Skill contract and pure presentation', () => {
 		expect(presentation.structure).toMatchObject({ branches: 1, reviews: 1 })
 		const leaked = structuredClone(branched)
 		leaked.outputs.answer.from.stepId = 'inner'
-		expect(() => parseStudioSkillV2(leaked)).toThrow('Bind to a preceding step')
+		expect(() => parseStudioSkillV2(leaked)).toThrow(
+			'Bound producer "inner" is missing or does not precede'
+		)
 		const missing = structuredClone(branched)
 		missing.steps[0].branches.absent.outputs = {} as never
 		expect(() => parseStudioSkillV2(missing)).toThrow('Every branch must bind')

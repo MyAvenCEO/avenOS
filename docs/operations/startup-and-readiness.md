@@ -27,6 +27,18 @@ the stronger states. Long-running services depend on successful one-shot jobs or
 healthy services. A failed one-shot job blocks its dependants and keeps traffic
 closed.
 
+The API facade, Intent Service and Actor Runner images set
+`BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS=5`. Container addresses can change while their
+service names remain the same. The default thirty-second cache caused authenticated
+reads to hang or reach an old peer after a restart in the native recovery journey.
+The shorter cache is not a readiness check or permission to retry a mutation. Keep
+service names, require a health observation from the current process, and verify an
+authenticated read through the facade before declaring recovery complete.
+[Bun's DNS contract](https://bun.sh/docs/runtime/networking/dns) describes the cache;
+[Docker's networking contract](https://docs.docker.com/compose/how-tos/networking/)
+describes service names and changing addresses. The fresh native restart gate must
+still pass; local process health alone does not qualify the change.
+
 ## Identity host
 
 ```text
@@ -104,6 +116,13 @@ remain separate.
 The Actor Runner depends on both its customer-specific run repository and the tenant
 Artifact Store route. The Intent Service depends only on its customer-specific Intent
 schema. Neither service receives a cluster-wide customer login.
+
+The current Actor run component requires schema version 6, including execution
+journals, durable Studio draft receipts and an owned-turn progress index. The Intent component requires version 4,
+including admission, supervision and input replacement. The checked component
+catalog also pins each migration-set digest. Reconcile existing customer environments
+before admitting matching services; creating a new environment applies the same
+migration chain. Do not reset artifacts, conversations or identity to bypass this gate.
 
 ## Initial deployment
 

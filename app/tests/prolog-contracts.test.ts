@@ -5,7 +5,7 @@ import listenerMachineSource from '../src/lib/actors/listener-machine.pl?raw'
 import { contractsOf, loadMachine, parseProgram } from '../src/lib/actors/machine'
 import speakerMachineSource from '../src/lib/actors/speaker-machine.pl?raw'
 import { unifiable } from '../src/lib/actors/term'
-import { todoConfig } from '../src/lib/actors/todo.config'
+import { todoConfig } from './fixtures/sandbox-tasks/config'
 
 const TEST_MANIFEST_IDENTITY = {
 	authority: 'ceo.aven',
@@ -60,13 +60,16 @@ describe('contracts live in the .pl', () => {
 })
 
 describe('the voice trio machines — full lifecycle with the failure edges', () => {
-	test('chat: a turn machine; interrupt escapes every busy state', () => {
+	test('chat: narration interruption preserves work; explicit stop cancels it', () => {
 		const m = loadMachine(chatMachineSource)
 		expect(m.states.sort()).toEqual(['idle', 'replying', 'thinking'])
 		expect(m.legal('utterance', 'idle', 'thinking')).toBe(true)
 		expect(m.legal('tool_round', 'replying', 'thinking')).toBe(true)
-		expect(m.legal('interrupt', 'thinking', 'idle')).toBe(true)
-		expect(m.legal('interrupt', 'replying', 'idle')).toBe(true)
+		for (const state of ['thinking', 'replying']) {
+			expect(m.legal('interrupt', state, state)).toBe(true)
+			expect(m.legal('interrupt', state, 'idle')).toBe(false)
+			expect(m.legal('stop', state, 'idle')).toBe(true)
+		}
 		// a reply cannot appear out of thin air
 		expect(m.legal('delta', 'idle', 'replying')).toBe(false)
 	})

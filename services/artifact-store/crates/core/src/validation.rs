@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use aven_artifact_store_contract::{
     type_definition_digest, BlobPolicy, CanonicalError, CanonicalValue, DigestError,
@@ -53,7 +54,9 @@ pub enum CoreError {
 
 #[derive(Clone, Default)]
 pub struct TypeCatalog {
-    types: BTreeMap<(TypeKey, u32), RegisteredTypeDefinition>,
+    // The catalog is immutable after construction. HTTP state clones must share
+    // its schemas rather than copying every definition for every request.
+    types: Arc<BTreeMap<(TypeKey, u32), RegisteredTypeDefinition>>,
 }
 
 impl TypeCatalog {
@@ -85,7 +88,9 @@ impl TypeCatalog {
                 },
             );
         }
-        Ok(Self { types })
+        Ok(Self {
+            types: Arc::new(types),
+        })
     }
 
     #[must_use]
@@ -251,4 +256,27 @@ fn reject_forbidden_schema_features(value: &CanonicalValue) -> Result<(), CoreEr
         _ => {}
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn immutable_catalog_clones_share_definitions_and_survive_owner_drop() {
+        let catalog =
+            TypeCatalog::from_definitions(crate::builtin_type_definitions().unwrap()).unwrap();
+        let clone = catalog.clone();
+        assert!(Arc::ptr_eq(&catalog.types, &clone.types));
+        let expected = catalog.definitions().count();
+        let first = catalog.definitions().next().unwrap();
+        assert!(std::ptr::eq(
+            first,
+            clone
+                .get(&first.definition.type_key, first.definition.version)
+                .unwrap()
+        ));
+        drop(catalog);
+        assert_eq!(clone.definitions().count(), expected);
+    }
 }

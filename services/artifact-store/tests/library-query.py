@@ -50,10 +50,12 @@ def artifact(kind, payload, source=None, inputs=None, scope=SCOPE, publication=N
     statements.append(f"INSERT INTO artifact_store.artifact_contents VALUES ({literal(ident)},{literal(scope)},{literal(kind)},1,'{('b'*64)}',{literal(json.dumps(payload))},NULL,NULL,'{('c'*64)}');")
     return ident
 
-def query(collection='documents', category='all', search='', after=None, sort='date', direction='desc', scope=SCOPE, snapshot=None, source=None, limit=50):
-    source_sql = STORE/'crates/postgres/src'/'library.sql'
-    params=[scope,snapshot if snapshot is not None else sequence,collection,category,search,source,sort,direction,json.dumps(after[0]) if after else None,after[1] if after else None,limit]
-    result=sql('PREPARE library(uuid,bigint,text,text,text,uuid,text,text,jsonb,text,bigint) AS '+source_sql.read_text()+';\nEXECUTE library('+','.join(literal(p) for p in params)+');')
+def query(collection='documents', category='all', search='', after=None, sort='date', direction='desc', scope=SCOPE, snapshot=None, source=None, limit=50, where=None, measure=None, summary=False):
+    directory = STORE/'crates/postgres/src'
+    source_sql = (directory/'library.sql').read_text() + (directory/('knowledge-summary.sql' if summary else 'library-page.sql')).read_text()
+    params=[scope,snapshot if snapshot is not None else sequence,collection,category,search,source,sort,direction,json.dumps(after[0]) if after else None,after[1] if after else None,-1 if summary else limit,json.dumps(where or []),measure]
+    result=sql('PREPARE library(uuid,bigint,text,text,text,uuid,text,text,jsonb,text,bigint,jsonb,text) AS '+source_sql+';\nEXECUTE library('+','.join(literal(p) for p in params)+');')
+    if summary: return [json.loads(line) for line in result.splitlines() if line.startswith('{')]
     return [(json.loads(parts[0]),json.loads(parts[1]),parts[2]) for line in result.splitlines() if len(parts:=line.split('\t'))==3]
 
 try:
@@ -116,6 +118,15 @@ try:
     sql('BEGIN;'+''.join(statements)+'COMMIT;');statements=[]
     invoice_rows=query('invoices')
     assert len(invoice_rows)==2 and {item[0]['source']['artifactId'] for item in invoice_rows}=={source,second_source}
+    unknown_source=artifact('core.file',{'originalName':'Unreadable supplier.pdf'})
+    unknown_candidate=artifact('bookkeeping.invoice-candidate',{'supplier':None,'grossMinor':None,'currency':'EUR'},unknown_source)
+    artifact('bookkeeping.invoice-validation',{'status':'inconsistent'},unknown_source,[unknown_candidate])
+    sql('BEGIN;'+''.join(statements)+'COMMIT;');statements=[]
+    assert not query('invoices',where=[{'field':'supplier','op':'not-in','values':['Corrected supplier']}])
+    assert len(query('invoices',where=[{'field':'grossMinor','op':'present','values':[]}]))==2
+    total=query('invoices',summary=True,measure='grossMinor')
+    assert len(total)==1 and total[0]['sumMinor']=='1750' and total[0]['unknownAmountCount']=='1'
+    assert total[0]['checkedCount']=='2' and total[0]['reviewCount']=='1'
     # Sources beyond the old 2,000-artifact tail remain searchable. No blob reads.
     for n in range(5000): artifact('core.file',{'originalName':f'Synthetic scale {n:05}.txt','declaredMediaType':'text/plain'})
     sql('BEGIN;'+''.join(statements)+'COMMIT;');statements=[]
@@ -124,6 +135,8 @@ try:
     assert len(batch)==50
     assert len(query(search='Synthetic scale 00001'))==1
     assert len(query(search='Synthetic hosting'))==1
-    print(json.dumps({'passed':True,'syntheticDocuments':5000+9,'pageSize':len(batch),'firstPageSeconds':round(elapsed,3),'tenantIsolation':True,'validatedRevisionSelection':True}))
+    document_count=sum(int(group['count']) for group in query(summary=True))
+    assert document_count==5006
+    print(json.dumps({'passed':True,'syntheticDocuments':document_count,'pageSize':len(batch),'firstPageSeconds':round(elapsed,3),'tenantIsolation':True,'validatedRevisionSelection':True,'unknownAwarePredicates':True,'exactSummary':True}))
 finally:
     subprocess.run(['docker','rm','-f',NAME],capture_output=True)

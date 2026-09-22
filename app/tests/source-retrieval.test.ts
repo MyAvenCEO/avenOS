@@ -121,20 +121,27 @@ test('stored PDF text uses assembled document and preserves incomplete extractio
 		calls.push(`${command}:${args.artifactId}`)
 		if (command === 'artifact_get')
 			return {
+				typeKey: args.artifactId === 'pdf' ? 'core.file' : 'docs.extracted-text',
+				blob: { length: 100 },
 				payload:
 					args.artifactId === 'pdf' ? { declaredMediaType: 'application/pdf' } : { complete: false }
 			} as T
-		if (command === 'artifact_processing_status')
-			return {
-				presentation: {
-					derivedArtifacts: [
-						{ artifactId: 'text', typeKey: 'docs.extracted-text', stageKey: 'assemble-document' }
-					]
-				}
-			} as T
 		return { mediaType: 'text/plain', base64: btoa('Invoice 150 EUR pending.') } as T
 	}
-	expect(await readStoredSource('pdf', invoke)).toEqual({
+	expect(
+		await readStoredSource('pdf', invoke, {
+			state: 'succeeded',
+			metadata: { pageCount: 1 },
+			derivedArtifacts: [
+				{
+					artifactId: 'text',
+					typeKey: 'docs.extracted-text',
+					stageKey: 'assemble-document',
+					typeVersion: 1
+				}
+			]
+		})
+	).toEqual({
 		content: 'Invoice 150 EUR pending.',
 		complete: false,
 		textArtifactId: 'text'
@@ -251,8 +258,11 @@ test('rate limiting pauses the background queue and retries without marking sour
 	)
 	for (let i = 0; i < 6; i++)
 		c.register({ artifactId: `f${i}`, intentId: 'work', title: 'File', kind: 'text' })
-	await new Promise((r) => setTimeout(r, 10))
-	expect(attempts).toBe(2)
+	const deadline = Date.now() + 1000
+	while (attempts === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 1))
+	// A first 429 can pause the queue before the second reader starts.
+	expect(attempts).toBeGreaterThan(0)
+	expect(attempts).toBeLessThanOrEqual(2)
 	expect(c.coverage().pending).toBe(6)
 	expect(c.coverage().unavailable).toBe(0)
 	while (c.coverage().pending) await new Promise((r) => setTimeout(r, 2))
@@ -272,4 +282,73 @@ test('an unavailable disk cache does not block authenticated direct source reads
 	c.register(e, 'v1', false)
 	expect((await readSource(c, { artifact: 'source' })).content).toBe('original source text')
 	c.close()
+})
+
+test('a successful direct read repairs stale unavailable coverage', async () => {
+	let ready = false
+	const c = new SourceCatalog(async () => {
+		if (!ready) throw Error('Document processing not restored yet')
+		return { content: 'Synthetic archive entry', complete: true }
+	})
+	try {
+		const entry = {
+			artifactId: 'synthetic-recovered',
+			intentId: 'work',
+			title: 'Archive',
+			kind: 'text'
+		}
+		c.inventoryComplete = true
+		c.register(entry)
+		while (c.coverage().pending) await new Promise((r) => setTimeout(r, 1))
+		expect(c.coverage().unavailable).toBe(1)
+		ready = true
+		await c.read(entry)
+		expect(c.coverage().unavailable).toBe(0)
+		expect((await searchSources(c, { query: 'archive' })).coverage).toBe('indexed')
+	} finally {
+		c.close()
+	}
+})
+
+test('unavailable documents outside the requested scope do not taint coverage', async () => {
+	const c = new SourceCatalog(async (entry) => ({
+		content: 'fictional record',
+		complete: entry.intentId === 'open'
+	}))
+	try {
+		c.inventoryComplete = true
+		c.register({ artifactId: 'a', title: 'Open', kind: 'text', intentId: 'open' })
+		c.register({
+			artifactId: 'b',
+			title: 'Other',
+			kind: 'text',
+			intentId: 'closed',
+			createdAt: '2035-01-01'
+		})
+		while (c.coverage().pending) await new Promise((r) => setTimeout(r, 1))
+		expect((await searchSources(c, {})).coverage).toBe('partial')
+		for (const scope of [{ intent: 'open' }, { before: '2034-01-01' }]) {
+			const result = await searchSources(c, scope)
+			expect(result.coverage).toBe('indexed')
+			expect(result.totalSources).toBe(1)
+		}
+	} finally {
+		c.close()
+	}
+})
+
+test('multiword search requires every term and never returns the same source on another token page', async () => {
+	const s = setup()
+	await s.add('partial', 'maintenance without the other query term')
+	for (let n = 0; n < 23; n++) await s.add(`full-${n}`, 'maintenance checklist')
+	const ids: string[] = []
+	let cursor: unknown
+	do {
+		const result = await s.index.search({ query: 'maintenance checklist', cursor })
+		ids.push(...(result.files ?? []).map((row) => row.artifactId))
+		cursor = result.nextCursor
+	} while (cursor)
+	expect(ids).toHaveLength(23)
+	expect(new Set(ids).size).toBe(23)
+	expect(ids).not.toContain('partial')
 })

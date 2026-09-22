@@ -25,7 +25,12 @@ export const VISUAL_PAGE_ANALYZER_MANIFEST = manifest(
 	'Visual page analyzer',
 	'Transcribes, describes, and classifies one rendered page with the configured vision model.',
 	'document_analyze_page',
-	['ceo.aven.docs.file(F)', 'ceo.aven.docs.page(F, P)', 'ceo.aven.docs.extracted_text(F, P, T)'],
+	[
+		'ceo.aven.docs.file(F)',
+		'ceo.aven.docs.page(F, P)',
+		'ceo.aven.docs.extracted_text(F, P, T)',
+		'ceo.aven.docs.text_layout(F, P, L)'
+	],
 	[
 		'ceo.aven.docs.extracted_text(F, P, T)',
 		'ceo.aven.docs.text_layout(F, P, L)',
@@ -48,10 +53,21 @@ export function createVisualPageAnalyzerActor(
 					true
 				)
 				const native = payload.extracted as unknown as ExtractedPage
-				const completed = await model.complete(
-					modelRequest('analyze-page', page.image ? [pageImage(page)] : [], native.text)
-				)
-				const structured = completed.structured
+				// Text sources already have authoritative bytes and offsets. Vision may
+				// replace native PDF text only when there is an actual rendered page.
+				const completed = page.image
+					? await model.complete(modelRequest('analyze-page', [pageImage(page)], native.text))
+					: undefined
+				const structured = completed?.structured ?? {
+					text: native.text,
+					language: 'und',
+					complete: native.complete,
+					blocks: [],
+					primaryKind: /\S/u.test(native.text) ? 'text' : 'blank',
+					facets: ['native-text'],
+					confidenceBps: native.complete ? 10_000 : 0,
+					reason: 'The source contains native text without a rendered page.'
+				}
 				const suppliedText = stringValue(structured.text, 'OCR text')
 				if (utf8Length(suppliedText) > 200_000) throw new Error('OCR text is too large')
 				if (!Array.isArray(structured.blocks)) throw new Error('OCR blocks are absent')
@@ -106,6 +122,10 @@ export function createVisualPageAnalyzerActor(
 						offset += length + 1
 					}
 				}
+				if (!page.image) {
+					text = native.text
+					spans = native.spans
+				}
 				const complete = booleanValue(structured.complete, 'page completeness') && ordered
 				const bytes = new TextEncoder().encode(text)
 				const artifacts = [
@@ -113,7 +133,7 @@ export function createVisualPageAnalyzerActor(
 						'text',
 						'docs.extracted-text',
 						{
-							method: 'ocr',
+							method: page.image ? 'ocr' : 'native',
 							language: stringValue(structured.language, 'OCR language'),
 							pageCount: 1,
 							characterCount: [...text].length,
@@ -138,25 +158,29 @@ export function createVisualPageAnalyzerActor(
 							facets: stringArray(structured.facets, 'page facets'),
 							confidenceBps: integer(structured.confidenceBps, 'page confidence', 0, 10_000),
 							reason: stringValue(structured.reason, 'page reason'),
-							resolutionMode: 'model',
+							resolutionMode: page.image ? 'model' : 'rule',
 							complete: booleanValue(structured.complete, 'page completeness')
 						},
 						'classification'
 					),
-					artifact(
-						'description',
-						'core.content-description',
-						{
-							summary: stringValue(structured.summary, 'page summary'),
-							topics: stringArray(structured.topics, 'page topics')
-						},
-						'description'
-					)
+					...(completed
+						? [
+								artifact(
+									'description',
+									'core.content-description',
+									{
+										summary: stringValue(structured.summary, 'page summary'),
+										topics: stringArray(structured.topics, 'page topics')
+									},
+									'description'
+								)
+							]
+						: [])
 				]
 				return success(
 					{
 						ok: true,
-						procedureKey: 'client.analyze-page-model',
+						procedureKey: completed ? 'client.analyze-page-model' : 'client.preserve-text-page',
 						artifacts,
 						evidence: artifacts.map((output, ordinal) => ({
 							ordinal,
@@ -169,9 +193,9 @@ export function createVisualPageAnalyzerActor(
 									? { kind: 'byte-range' as const, ...page.textRange }
 									: wholePage(page.page)
 						})),
-						modelReceipt: completed.receipt
+						...(completed && { modelReceipt: completed.receipt })
 					},
-					`Visually analyzed page ${page.page}.`
+					`Processed page ${page.page}.`
 				)
 			} catch (error) {
 				return failure(error)

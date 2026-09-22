@@ -1,3 +1,4 @@
+import { IncompleteModelStream } from '@avenos/chat-engine/stream-errors'
 import type {
 	LlmCompletionRequest,
 	LlmCompletionResponse,
@@ -44,14 +45,17 @@ export async function* streamOpenAiChat(
 	const requestId = crypto.randomUUID()
 	const chunks: string[] = []
 	let settled = false
+	let ended = false
+	let deliveryTimer: ReturnType<typeof setTimeout> | undefined
 	let failure: unknown
 	let wake: (() => void) | undefined
 	const notify = () => {
 		wake?.()
 		wake = undefined
 	}
-	const channel = new Channel<string>((chunk) => {
-		chunks.push(chunk)
+	const channel = new Channel<string | null>((chunk) => {
+		if (chunk === null) ended = true
+		else chunks.push(chunk)
 		notify()
 	})
 	const completion = invoke<void>('llm_openai_stream', {
@@ -61,30 +65,55 @@ export async function* streamOpenAiChat(
 	})
 		.catch((error) => {
 			failure = error
+			try {
+				const detail = typeof error === 'string' ? JSON.parse(error) : error
+				if (detail?.code === 'LLM_STREAM_INTERRUPTED')
+					failure = new IncompleteModelStream(detail.message, {
+						cause: {
+							receivedBytes: detail.receivedBytes,
+							elapsedMs: detail.elapsedMs,
+							quietForMs: detail.quietForMs
+						}
+					})
+			} catch {
+				/* Other native errors retain their original meaning. */
+			}
 		})
 		.finally(() => {
 			settled = true
+			// Native command completion can overtake the final channel messages.
+			// Drain through the ordered EOF marker, with a bounded IPC-delivery failure.
+			if (!ended && failure === undefined)
+				deliveryTimer = setTimeout(() => {
+					failure = new IncompleteModelStream('The native model stream did not finish delivery.')
+					notify()
+				}, 5000)
 			notify()
 		})
 	const cancel = () => {
+		ended = true
+		notify()
 		void invoke('llm_openai_stream_cancel', { requestId }).catch(() => {})
 	}
 	if (signal?.aborted) cancel()
 	else signal?.addEventListener('abort', cancel, { once: true })
 	try {
-		while (!settled || chunks.length > 0) {
+		while (!ended || chunks.length > 0) {
+			if (signal?.aborted) break
 			const chunk = chunks.shift()
 			if (chunk !== undefined) {
 				yield chunk
 				continue
 			}
+			if (settled && failure !== undefined) break
 			await new Promise<void>((resolve) => {
 				wake = resolve
 			})
 		}
-		await completion
+		if (!signal?.aborted) await completion
 		if (failure !== undefined && !signal?.aborted) throw failure
 	} finally {
+		clearTimeout(deliveryTimer)
 		signal?.removeEventListener('abort', cancel)
 		if (!settled) cancel()
 	}

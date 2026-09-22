@@ -1,2 +1,5 @@
 export * from './admission.js'
 export * from './pools.js'
+export * from './work-client.js'
+export * from './work-guard.js'
+export * from './worker-placement.js'

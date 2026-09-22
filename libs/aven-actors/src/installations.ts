@@ -171,7 +171,7 @@ function validateDescriptor(
 			]) ||
 			!known.has(binding.capabilityId) ||
 			procedures.has(binding.capabilityId) ||
-			!binding.procedureKey ||
+			!typeKey(binding.procedureKey) ||
 			!binding.procedureVersion ||
 			!hexDigest(binding.implementationDigest) ||
 			!hexDigest(binding.evidenceRuleDigest) ||
@@ -233,7 +233,11 @@ function hexDigest(value: string): boolean {
 }
 
 function typeKey(value: string): boolean {
-	return typeof value === 'string' && /^[a-z][a-z0-9.-]{0,127}$/.test(value)
+	return (
+		typeof value === 'string' &&
+		value.length <= 128 &&
+		/^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/.test(value)
+	)
 }
 
 async function sha256(value: string): Promise<string> {

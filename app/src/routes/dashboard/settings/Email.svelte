@@ -1,11 +1,11 @@
 <script lang="ts">
+import { transportError } from '@avenos/chat-engine/transport-error'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { onDestroy } from 'svelte'
 import { emailDocumentProcessing } from '$lib/artifacts/document-import-queue.svelte'
 import type { EmailRequest, EmailResult } from '$lib/artifacts/email-job'
 import { emailJob, emailJobState as job } from '$lib/artifacts/email-job.svelte'
 import { documentExecutionPreference } from '$lib/artifacts/ingest.svelte'
-import { transportError } from '$lib/artifacts/transport-error'
 
 let host = $state('')
 let port = $state(993)

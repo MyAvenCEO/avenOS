@@ -495,6 +495,76 @@ async function runFixture(executionEnvironment: 'local' | 'server') {
 }
 
 describe('deterministic actor runtime conformance slice', () => {
+	test('host admission brackets dispatch, cannot dispatch twice or after returning', async () => {
+		const setup = await prepareFixture('server')
+		let escaped: (() => Promise<unknown>) | undefined
+		const seen: string[] = []
+		await executePhysicalProgram({
+			runId: 'admitted-run',
+			program: setup.planned,
+			registry: setup.snapshot,
+			principal: setup.principal,
+			access: setup.access,
+			authorizer: setup.authorizer,
+			factories: new FactoryMap(setup.factories),
+			artifacts: setup.artifacts,
+			invocationHost: {
+				invoke: async (admitted, dispatch) => {
+					expect(setup.authorizationCalls.at(-1)?.action).toBe('invoke')
+					expect(
+						admitted.payload.inputs.source?.artifactId ?? admitted.payload.inputs.fields?.artifactId
+					).toBeTruthy()
+					seen.push(admitted.payload.stepId)
+					escaped = dispatch
+					const result = await dispatch()
+					await expect(dispatch()).rejects.toThrow('ACTOR_INVOCATION_ALREADY_DISPATCHED')
+					return result
+				}
+			}
+		})
+		expect(seen).toEqual(['step-1', 'step-2', 'step-3'])
+		await expect(escaped!()).rejects.toThrow('ACTOR_INVOCATION_ALREADY_DISPATCHED')
+		expect(setup.factories.reduce((n, f) => n + f.released, 0)).toBe(3)
+	})
+
+	test.each(['denied', 'review', 'cancelled'] as const)(
+		'host boundary fails closed on %s',
+		async (mode) => {
+			const setup = await prepareFixture('server', mode === 'denied' ? 'invoke' : undefined)
+			const abort = new AbortController()
+			let entered = false
+			const pending = executePhysicalProgram({
+				runId: 'blocked-run',
+				program: setup.planned,
+				registry: setup.snapshot,
+				principal: setup.principal,
+				access: setup.access,
+				authorizer: setup.authorizer,
+				factories: new FactoryMap(setup.factories),
+				artifacts: setup.artifacts,
+				signal: abort.signal,
+				invocationHost: {
+					invoke: async (_admitted, dispatch) => {
+						entered = true
+						if (mode === 'review') throw Error('REVIEW_REQUIRED')
+						abort.abort(Error('cancelled-before-dispatch'))
+						return dispatch()
+					}
+				}
+			})
+			await expect(pending).rejects.toThrow(
+				mode === 'denied'
+					? 'invoke denied'
+					: mode === 'review'
+						? 'REVIEW_REQUIRED'
+						: 'cancelled-before-dispatch'
+			)
+			expect(entered).toBe(mode !== 'denied')
+			expect(setup.artifacts.publications).toHaveLength(0)
+			expect(setup.factories.reduce((n, f) => n + f.released, 0)).toBe(1)
+		}
+	)
+
 	test('plans, dynamically admits, executes, publishes, and releases the local fixture skill', async () => {
 		const run = await runFixture('local')
 

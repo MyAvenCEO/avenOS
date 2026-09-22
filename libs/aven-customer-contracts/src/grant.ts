@@ -2,7 +2,26 @@ import { importPKCS8, importSPKI, jwtVerify, SignJWT } from 'jose'
 import { z } from 'zod'
 import { membershipAllows } from './authorization.js'
 import { componentRefSchema } from './manifest.js'
-import { databaseNameSchema, environmentIdSchema } from './roles.js'
+import { databaseNameForEnvironment, databaseNameSchema, environmentIdSchema } from './roles.js'
+
+export const executionBindingSchema = z
+	.object({
+		workId: z.uuid(),
+		turnId: z.uuid(),
+		runId: z.uuid(),
+		leaseOwnerId: z.uuid()
+	})
+	.strict()
+export type ExecutionBinding = z.infer<typeof executionBindingSchema>
+/** Admission can precede a runner lease, but authorizes only this claimed turn. */
+export const turnDispatchBindingSchema = z
+	.object({
+		workId: z.uuid(),
+		turnId: z.uuid(),
+		dispatchToken: z.uuid()
+	})
+	.strict()
+export type TurnDispatchBinding = z.infer<typeof turnDispatchBindingSchema>
 
 export const tenantGrantClaimsSchema = z
 	.object({
@@ -17,10 +36,38 @@ export const tenantGrantClaimsSchema = z
 		routingGeneration: z.number().int().positive(),
 		componentRef: componentRefSchema,
 		actions: z.array(z.string().regex(/^[a-z][a-z0-9:-]{0,80}$/)).min(1),
+		/** Present only after a live delegated-turn/lease check, never on a login grant. */
+		execution: executionBindingSchema.optional(),
+		dispatch: turnDispatchBindingSchema.optional(),
 		iat: z.number().int().positive(),
 		exp: z.number().int().positive()
 	})
 	.strict()
+	.superRefine((claims, context) => {
+		if (claims.exp <= claims.iat || claims.exp - claims.iat > 60)
+			context.addIssue({ code: 'custom', message: 'Invalid tenant grant lifetime.' })
+		if (
+			claims.aud !== claims.componentRef ||
+			claims.databaseName !== databaseNameForEnvironment(claims.environmentId)
+		)
+			context.addIssue({ code: 'custom', message: 'Invalid tenant grant destination.' })
+		if (
+			claims.dispatch &&
+			(claims.execution ||
+				!(
+					(claims.componentRef === 'ceo.aven:component:data:intents@1' &&
+						claims.actions.length === 1 &&
+						claims.actions[0] === 'intents:read') ||
+					(claims.componentRef === 'os.aven:component:actors:run-repository@1' &&
+						claims.actions.length === 1 &&
+						claims.actions[0] === 'actor-runs:write')
+				))
+		)
+			context.addIssue({
+				code: 'custom',
+				message: 'Dispatch authority cannot execute work or access another component.'
+			})
+	})
 
 export type TenantGrantClaims = z.infer<typeof tenantGrantClaimsSchema>
 export type TenantGrantKey = Awaited<ReturnType<typeof importPKCS8>>
@@ -56,7 +103,9 @@ export async function signTenantGrant(
 		databaseName: validated.databaseName,
 		routingGeneration: validated.routingGeneration,
 		componentRef: validated.componentRef,
-		actions: validated.actions
+		actions: validated.actions,
+		...(validated.execution && { execution: validated.execution }),
+		...(validated.dispatch && { dispatch: validated.dispatch })
 	})
 		.setProtectedHeader({ alg: 'EdDSA', typ: 'JWT' })
 		.setIssuer(validated.iss)

@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test'
 import inboxMachineSource from '../src/lib/actors/inbox-machine.pl?raw'
 import { contractsOf, parseProgram } from '../src/lib/actors/machine'
 import { unifiable } from '../src/lib/actors/term'
-import todoMachineSource from '../src/lib/actors/todo-machine.pl?raw'
 import { layoutWorkflow, workflowDoors } from '../src/lib/skills/flow-layout'
 import { inboxSkill } from '../src/lib/skills/inbox.skill'
 import { skills } from '../src/lib/skills/registry'
 import { crossSkillEdges, skillInterface, workflowEdges } from '../src/lib/skills/skill'
 import { todosSkill } from '../src/lib/skills/todos.skill'
+import todoMachineSource from './fixtures/sandbox-tasks/machine.pl?raw'
 
 /**
  * The skills platform (0153): skill = collection of composable workflows,
@@ -42,8 +42,16 @@ describe('workflow wiring is derived, never stored', () => {
 			to: 'create',
 			predicate: 'todo_intent(I)'
 		})
-		expect(edges).toContainEqual({ from: 'create', to: 'list-view', predicate: 'todo(T)' })
-		expect(edges).toContainEqual({ from: 'create', to: 'board-view', predicate: 'todo(T)' })
+		expect(edges).toContainEqual({
+			from: 'create',
+			to: 'list-view',
+			predicate: 'ceo.aven.productivity.task_result(R)'
+		})
+		expect(edges).toContainEqual({
+			from: 'create',
+			to: 'board-view',
+			predicate: 'ceo.aven.productivity.task_result(R)'
+		})
 	})
 
 	test('layout places triggers first, columns by depth', () => {
@@ -65,7 +73,7 @@ describe('skills compose: recipe edges across boundaries', () => {
 		)
 	})
 
-	test('the inbox→todos edge unifies from the .pl contracts ALONE', () => {
+	test('synthetic sandbox contract edges unify from the .pl contracts alone', () => {
 		const inbox = contractsOf(parseProgram(inboxMachineSource))
 		const todos = contractsOf(parseProgram(todoMachineSource))
 		expect(inbox.produces.some((p) => todos.requires.some((r) => unifiable(p, r)))).toBe(true)

@@ -1,13 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { Actor } from '../src/lib/actors/actor'
 import { summarizeRecord } from '../src/lib/actors/summarize'
-import { SPARKS, todoConfig } from '../src/lib/actors/todo.config'
+import { SPARKS, todoConfig } from './fixtures/sandbox-tasks/config'
 
 /**
- * Manifest-as-data (0143): the todo actor is DATA + a generic actor, not a
- * subclass. `todoConfig` carries the whole surface, and a bare `new Actor()`
- * over it is the running todo actor. The record→activity summary is generic
- * too (keyed on the record shape, no domain code).
+ * A synthetic task-shaped fixture exercises manifest-as-data and the generic
+ * sandbox. Production Tasks use the shared persisted domain Actor instead.
  */
 
 describe('todo as a pure-data config', () => {

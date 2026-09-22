@@ -73,12 +73,29 @@ const RECONCILIATION_DECISION_JSON: &[u8] =
 pub fn builtin_type_definitions() -> Result<Vec<TypeDefinition>, crate::CoreError> {
     [
         CORE_FILE_JSON,
+        include_bytes!("../../../conformance/fixtures/protocol/connections.catalog.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/web.http-request.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/web.http-response.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/web.http-response-inspection.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/mail.imap-query.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/mail.imap-query-result.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/mail.imap-message-request.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/mail.imap-message-result.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/mail.message.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/mail.message-parts.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/intake.upload.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/ai.completion.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/values.calculation.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/values.calculation.v2.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/knowledge.result.v1.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/intent.attachment.v1.json"),
         include_bytes!("../../../conformance/fixtures/protocol/actors.port-result.v1.json"),
         include_bytes!("../../../conformance/fixtures/protocol/actors.execution-receipt.v1.json"),
-        include_bytes!("../../../conformance/fixtures/protocol/studio.skill.v2.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.skill.v3.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.case.v1.json"),
         include_bytes!("../../../conformance/fixtures/protocol/studio.activation.v2.json"),
         include_bytes!("../../../conformance/fixtures/protocol/studio.source.v1.json"),
-        include_bytes!("../../../conformance/fixtures/protocol/studio.subscription.v2.json"),
+        include_bytes!("../../../conformance/fixtures/protocol/studio.subscription.v4.json"),
         include_bytes!("../../../conformance/fixtures/protocol/studio.email.v1.json"),
         include_bytes!("../../../conformance/fixtures/protocol/studio.understanding.v1.json"),
         include_bytes!("../../../conformance/fixtures/protocol/studio.brief.v1.json"),
@@ -192,11 +209,11 @@ mod tests {
             .expect("built-ins should register");
         let key = TypeKey::new("studio.skill").unwrap();
         let registered = catalog
-            .get(&key, 2)
+            .get(&key, 3)
             .expect("v2 Skill type must be installed");
         assert_eq!(
             registered.type_definition_sha256,
-            "19eceedc0b9ed8e5694d39c14d559340ad835ec42dc35d6cd426d54dc5568512",
+            "fcd28e1714f2709841484a62519917f2fe3d1076f64e9dc471614790f92db2b7",
             "the Studio publisher must pin the exact source-controlled v2 type"
         );
         let sample = br#"{"version":2,"name":"Inspect record","inputs":{"source":{"schema":"fixture:input@1","type":{"key":"fixture.input","version":1},"predicate":"fixture.input(X)","role":"source","cardinality":"one"}},"parametersSchema":{"type":"object","properties":{},"required":[],"additionalProperties":false},"steps":[{"id":"inspect","label":"Inspect","kind":"invoke","capabilityId":"ceo.aven:capability:fixture:inspect@1","inputs":{"source":{"kind":"input","port":"source"}},"parameters":{},"outputs":{"summary":{"schema":"fixture:summary@1","type":{"key":"fixture.summary","version":1},"predicate":"fixture.summary(X)","role":"summary","cardinality":"one"}}}],"outputs":{"summary":{"schema":"fixture:summary@1","type":{"key":"fixture.summary","version":1},"predicate":"fixture.summary(X)","role":"summary","cardinality":"one","from":{"kind":"step","stepId":"inspect","port":"summary"}}},"policy":{"maxInvocations":16,"maxDepth":4,"maxMembers":32,"maxConcurrentChildren":2,"allowModel":false}}"#;
@@ -211,7 +228,7 @@ mod tests {
     }
 
     #[test]
-    fn studio_v2_activation_and_subscription_accept_settings_and_exact_skill_reference() {
+    fn studio_activation_and_subscription_accept_settings_and_exact_skill_reference() {
         let catalog = crate::TypeCatalog::from_definitions(builtin_type_definitions().unwrap())
             .expect("built-ins should register");
         let activation = catalog
@@ -227,16 +244,16 @@ mod tests {
             .expect("v2 activation retains validated public settings");
 
         let subscription = catalog
-            .get(&TypeKey::new("studio.subscription").unwrap(), 2)
-            .expect("v2 subscription must be installed");
+            .get(&TypeKey::new("studio.subscription").unwrap(), 4)
+            .expect("current subscription must be installed");
         let subscription_payload = parse_canonical(
-            br#"{"contractVersion":2,"subscriptionId":"44444444-4444-4444-8444-444444444444","name":"Email brief","skillArtifactId":"22222222-2222-4222-8222-222222222222","sourceArtifactId":null,"inputType":{"key":"studio.email","version":1},"inputPort":"email","fixedInputs":{},"parameters":{"tone":"brief"},"generation":"55555555-5555-4555-8555-555555555555"}"#,
+            br#"{"contractVersion":3,"subscriptionId":"44444444-4444-4444-8444-444444444444","name":"Email brief","skillArtifactId":"22222222-2222-4222-8222-222222222222","sourceArtifactId":null,"inputType":{"key":"studio.email","version":1},"inputPort":"email","fixedInputs":{},"parameters":{"tone":"brief"},"collection":{"mode":"each","initial":[]},"origin":null,"generation":"55555555-5555-4555-8555-555555555555"}"#,
             true,
         )
         .unwrap();
         catalog
             .validate_payload(subscription, &subscription_payload)
-            .expect("v2 subscription retains validated public settings");
+            .expect("subscription retains validated public settings and collection semantics");
         let rule = subscription
             .definition
             .reference_rules
@@ -246,7 +263,7 @@ mod tests {
         assert_eq!(rule.minimum, 1);
         let allowed = serde_json::to_string(&rule.allowed_target_types).unwrap();
         assert!(allowed.contains("studio.skill"));
-        assert!(allowed.contains('2'));
+        assert!(allowed.contains('3'));
     }
 
     #[test]

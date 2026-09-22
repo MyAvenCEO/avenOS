@@ -32,6 +32,9 @@
 		"vite": "^8.0.7"
 	},
 	"dependencies": {
+		"@avenos/intents": "workspace:*",
+		"@avenos/productivity": "workspace:*",
+		"@avenos/chat-engine": "workspace:*",
 		"@avenos/actors": "workspace:*",
 		"@avenos/artifact-store": "workspace:*",
 		"@avenos/document-ingest": "workspace:*",
@@ -40,6 +43,8 @@
 		"@tauri-apps/api": "^2",
 		"@tauri-apps/plugin-opener": "^2.5.4",
 		"@xyflow/svelte": "^1.6.2",
+		"dompurify": "^3.3.3",
+		"marked": "^15.0.12",
 		"pdfjs-dist": "^6.2.108",
 		"three": "^0.185.1"
 	}

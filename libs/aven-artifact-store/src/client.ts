@@ -1,5 +1,5 @@
 import { type ArtifactJson, canonicalArtifactJson, parseArtifactJson } from './canonical'
-import type { ClientArtifactDraft, CommittedClientRun } from './client-runs'
+import { type ClientArtifactDraft, type CommittedClientRun, clientRunIdentity } from './client-runs'
 
 export type ArtifactStoreFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -50,6 +50,34 @@ export class ArtifactStoreClient {
 
 	type(typeKey: string, version: number): Promise<ArtifactJson> {
 		return this.#json(`/v1/types/${encodeURIComponent(typeKey)}/versions/${version}`)
+	}
+
+	/** One reservation per publication output, including interrupted/concurrent retries.
+	 * An expired/consumed reservation may only succeed through publication replay;
+	 * publish still verifies the original publisher and exact immutable intent.
+	 */
+	async stagePublicationBlob(
+		scopeId: string,
+		publicationId: string,
+		localKey: string,
+		declaration: UploadDeclaration,
+		body: BodyInit
+	): Promise<string> {
+		const claimId = await clientRunIdentity(
+			JSON.stringify(['upload-claim', scopeId, publicationId, localKey])
+		)
+		try {
+			const result = artifactObject(await this.uploadBody(scopeId, claimId, declaration, body))
+			if (result.sha256 !== declaration.sha256 || result.length !== declaration.length)
+				throw new ArtifactStoreProblem(
+					502,
+					'ARTIFACT_STORE_INVALID_RESPONSE',
+					'Artifact Store confirmed different upload bytes.'
+				)
+		} catch (error) {
+			if (!(error instanceof ArtifactStoreProblem) || error.code !== 'UPLOAD_EXPIRED') throw error
+		}
+		return claimId
 	}
 
 	async upload(
@@ -103,6 +131,17 @@ export class ArtifactStoreClient {
 		return this.#json(`/v1/scopes/${scopeId}/artifacts/${artifactId}`)
 	}
 
+	inbox(scopeId: string, after?: string): Promise<ArtifactJson> {
+		return this.#json(
+			`/v1/scopes/${scopeId}/inbox${after ? '?after=' + encodeURIComponent(after) : ''}`
+		)
+	}
+
+	/** Read sealed membership edges, separately from the artifact envelope. */
+	references(scopeId: string, artifactId: string): Promise<ArtifactJson> {
+		return this.#json(`/v1/scopes/${scopeId}/artifacts/${artifactId}/references`)
+	}
+
 	async publication(scopeId: string, publicationId: string): Promise<ArtifactJson> {
 		try {
 			return await this.#json(`/v1/scopes/${scopeId}/publications/${publicationId}`)
@@ -119,7 +158,12 @@ export class ArtifactStoreClient {
 
 	queryArtifacts(
 		scopeId: string,
-		query: { typeKey: string; snapshotSequence?: number; after?: string; limit?: number }
+		query: {
+			typeKey: string
+			snapshotSequence?: number
+			after?: string
+			limit?: number
+		}
 	): Promise<ArtifactJson> {
 		const parameters = new URLSearchParams({ typeKey: query.typeKey })
 		if (query.snapshotSequence !== undefined)
@@ -263,7 +307,10 @@ export class ArtifactStoreClient {
 		let code = 'UNKNOWN'
 		let detail = `Artifact Store request failed with HTTP ${response.status}`
 		try {
-			const problem = (await response.json()) as { code?: string; detail?: string }
+			const problem = (await response.json()) as {
+				code?: string
+				detail?: string
+			}
 			code = problem.code ?? code
 			detail = problem.detail ?? detail
 		} catch {

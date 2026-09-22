@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { ArtifactStoreClient } from '@avenos/artifact-store'
 
 /** Deterministic wire fixture, not the durable-store proof (see studio.persistence.e2e). */
@@ -7,6 +7,7 @@ export function studioStoreFixture(scope = randomUUID()) {
 	let epoch = randomUUID()
 	let failAfterProcedure: string | null = null
 	const artifacts = new Map<string, any>()
+	const references = new Map<string, any[]>()
 	const publications = new Map<string, any>()
 	const uploads = new Map<string, ArrayBuffer>()
 	const bytes = new Map<string, ArrayBuffer>()
@@ -23,8 +24,12 @@ export function studioStoreFixture(scope = randomUUID()) {
 			if (parts[3] !== scope)
 				return json({ code: 'RESOURCE_UNAVAILABLE', message: 'Unavailable' }, 404)
 			if (parts[4] === 'uploads') {
-				uploads.set(parts[5]!, await request.arrayBuffer())
-				return json({ staged: true })
+				const body = await request.arrayBuffer()
+				uploads.set(parts[5]!, body)
+				return json({
+					sha256: createHash('sha256').update(new Uint8Array(body)).digest('hex'),
+					length: body.byteLength
+				})
 			}
 			if (parts[4] === 'publications' && request.method === 'PUT') {
 				if (
@@ -51,6 +56,16 @@ export function studioStoreFixture(scope = randomUUID()) {
 					if (!artifacts.has(input.artifactId))
 						throw new Error('Missing causal artifact ' + input.artifactId)
 				const outputs = intent.artifacts.map((a: any) => ({ ...a, artifactId: randomUUID() }))
+				for (const output of outputs)
+					output.references = output.references.map((r: any) => ({
+						role: r.role,
+						ordinal: r.ordinal,
+						attributes: r.attributes,
+						artifactId:
+							r.target.kind === 'local'
+								? outputs.find((a: any) => a.localKey === r.target.localKey)!.artifactId
+								: r.target.artifactId
+					}))
 				const publication = {
 					publicationId: parts[5],
 					scopeId: scope,
@@ -60,8 +75,11 @@ export function studioStoreFixture(scope = randomUUID()) {
 					committedAt: new Date().toISOString()
 				}
 				for (const a of outputs) {
+					const { references: edges, ...fields } = a
+					references.set(a.artifactId, edges)
 					const envelope = {
-						...a,
+						...fields,
+						artifactSha256: createHash('sha256').update(JSON.stringify(a)).digest('hex'),
 						scopeId: scope,
 						publicationId: parts[5],
 						scopeSequence: sequence,
@@ -106,6 +124,8 @@ export function studioStoreFixture(scope = randomUUID()) {
 			const a = artifacts.get(parts[5]!)
 			if (!a) return json({ code: 'RESOURCE_UNAVAILABLE', message: 'Unavailable' }, 404)
 			if (parts[6] === 'content') return new Response(bytes.get(a.artifactId))
+			if (parts[6] === 'references')
+				return json({ artifactId: a.artifactId, references: references.get(a.artifactId) ?? [] })
 			if (parts[6] === 'producer-inputs')
 				return json({
 					artifactId: a.artifactId,

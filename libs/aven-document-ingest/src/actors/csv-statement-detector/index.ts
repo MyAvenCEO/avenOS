@@ -15,7 +15,8 @@ export const CSV_STATEMENT_DETECTOR_MANIFEST = manifest(
 	'Checks a known CSV layout without admitting bookings for reconciliation.',
 	'document_detect_csv_statement',
 	['ceo.aven.docs.file(F)'],
-	['ceo.aven.banking.csv_detection(F, D)']
+	['ceo.aven.banking.csv_detection(F, D)'],
+	['text/csv', 'application/csv', 'application/vnd.ms-excel']
 )
 
 export function createCsvStatementDetectorActor(): Actor {

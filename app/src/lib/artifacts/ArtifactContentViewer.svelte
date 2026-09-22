@@ -1,17 +1,38 @@
 <script lang="ts">
+import { decodeCsvText } from '@avenos/document-ingest/csv'
 import { type ArtifactLocator, splitUtf8Range } from './artifact-view'
 import { base64ToBytes, loadPdf, renderPageToCanvas } from './pdf'
 
 let {
 	mediaType,
 	base64,
-	locator = null
-}: { mediaType: string; base64: string; locator?: ArtifactLocator | null } = $props()
+	locator = null,
+	focusRange = false
+}: {
+	mediaType: string
+	base64: string
+	locator?: ArtifactLocator | null
+	focusRange?: boolean
+} = $props()
 
 const bytes = $derived(base64ToBytes(base64))
+const invalidRange = $derived(
+	locator?.kind === 'byte-range' &&
+		(!Number.isSafeInteger(locator.start) ||
+			!Number.isSafeInteger(locator.endExclusive) ||
+			locator.start < 0 ||
+			locator.endExclusive <= locator.start ||
+			locator.endExclusive > bytes.length)
+)
 const text = $derived.by(() => {
-	if (!(mediaType.startsWith('text/') || mediaType.includes('json'))) return null
-	const decoded = new TextDecoder().decode(bytes)
+	if (!(mediaType.startsWith('text/') || mediaType.includes('json') || mediaType.includes('csv')))
+		return null
+	let decoded: string
+	try {
+		decoded = mediaType.includes('csv') ? decodeCsvText(bytes) : new TextDecoder().decode(bytes)
+	} catch {
+		return 'This text encoding could not be decoded safely. The original file is preserved.'
+	}
 	if (!mediaType.includes('json')) return decoded
 	try {
 		return JSON.stringify(JSON.parse(decoded), null, 2)
@@ -99,10 +120,14 @@ $effect(() => {
 })
 </script>
 
-{#if text !== null}
+{#if invalidRange}
+	<p role="alert" class="p-4 text-error-ink text-xs">
+		Die gespeicherte Fundstelle liegt außerhalb des Originals.
+	</p>
+{:else if text !== null}
 	<pre
 		class="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-relaxed"
-	>{#if rangedText}{rangedText.before}<mark class="rounded bg-info/45 px-0.5 text-inherit ring-1 ring-info/60">{rangedText.marked}</mark>{rangedText.after}{:else}{text}{/if}</pre>
+	>{#if rangedText && focusRange}{rangedText.marked}{:else if rangedText}{rangedText.before}<mark class="rounded bg-info/45 px-0.5 text-inherit ring-1 ring-info/60">{rangedText.marked}</mark>{rangedText.after}{:else}{text}{/if}</pre>
 {:else if imageUrl}
 	<div class="flex min-h-0 flex-1 items-start justify-center overflow-auto p-4">
 		<div class="relative inline-block max-w-full">

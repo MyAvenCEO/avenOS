@@ -18,17 +18,20 @@ export interface StudioDraft {
 	publishedArtifactId: string | null
 	publishedRevision: number | null
 	updatedAt: string
+	originArtifactId?: string | null
 }
 export interface StudioConnection {
 	id: string
 	revision: number
 	enabled: boolean
 	last_error: string | null
+	blocked_run?: { runId: string; state: string } | null
 	record: {
 		name: string
 		skillArtifactId: string
 		sourceArtifactId: string | null
 		inputType: { key: string; version: number }
+		collection: { mode: 'each' | 'accumulate'; initial: string[] }
 	}
 }
 export interface StudioSnapshot {
@@ -41,7 +44,12 @@ export interface StudioSnapshot {
 	skills: StudioArtifact[]
 	sources: StudioArtifact[]
 	artifacts: StudioArtifact[]
-	deliveries: Array<{ id: string; last_error: string | null; run_id: string | null }>
+	deliveries: Array<{
+		id: string
+		connection_id: string
+		last_error: string | null
+		run_id: string | null
+	}>
 	dispatchMode: 'authorized-session'
 }
 export interface StudioPreview {
@@ -54,6 +62,7 @@ export interface StudioPreview {
 }
 export interface StudioOpportunity {
 	label: string
+	description?: string
 	definition: StudioSkillV2
 	conditional: boolean
 	steps: Array<{ id: string; label: string }>
@@ -61,11 +70,25 @@ export interface StudioOpportunity {
 export interface StudioExploration {
 	source: StudioArtifact
 	opportunities: StudioOpportunity[]
+	directions: Array<{
+		id: string
+		label: string
+		description: string
+		request: string
+		mode: 'agent-assisted'
+	}>
 	next: string
 }
 export const studioName = (a: StudioArtifact) =>
 	String(
-		a.payload.name ?? a.payload.originalName ?? a.payload.title ?? a.payload.subject ?? a.typeKey
+		a.payload.name ??
+			a.payload.originalName ??
+			a.payload.title ??
+			a.payload.subject ??
+			(a.typeKey === 'studio.case'
+				? (a.payload.case as { title?: string } | undefined)?.title
+				: undefined) ??
+			a.typeKey
 	)
 
 /** UI and agent use exactly the same customer-scoped native boundary. No browser-local program store. */
@@ -74,13 +97,17 @@ export const studio = $state({
 	requestedArtifactId: null as string | null,
 	requestedSkillId: null as string | null,
 	requestedSkillAction: 'open' as 'open' | 'use' | 'prepare',
-	refreshVersion: 0
+	requestedTab: null as 'activity' | null,
+	refreshVersion: 0,
+	synchronizationError: null as string | null
 })
 let studioEnvironmentEpoch = 0
 let refreshSequence = 0
+let projectedCompletedRuns = ''
 
 export function resetStudioForEnvironment(): void {
 	studioEnvironmentEpoch++
+	projectedCompletedRuns = ''
 	catalogContextKey = ''
 	resetCombinedStudioCatalog()
 	refreshSequence++
@@ -88,7 +115,9 @@ export function resetStudioForEnvironment(): void {
 	studio.requestedArtifactId = null
 	studio.requestedSkillId = null
 	studio.requestedSkillAction = 'open'
+	studio.requestedTab = null
 	studio.refreshVersion = 0
+	studio.synchronizationError = null
 }
 
 export async function studioRequest<T = unknown>(
@@ -100,7 +129,18 @@ export async function studioRequest<T = unknown>(
 	if (epoch !== studioEnvironmentEpoch)
 		throw new Error('Studio environment changed during the request.')
 	if (
-		!['state', 'inspect', 'explore', 'preview', 'compare', 'catalog', 'present'].includes(operation)
+		![
+			'state',
+			'items',
+			'inspect',
+			'explore',
+			'preview',
+			'compare',
+			'catalog',
+			'present',
+			'case-what-if',
+			'run-status'
+		].includes(operation)
 	)
 		studio.refreshVersion++
 	return result
@@ -116,6 +156,20 @@ export async function refreshStudio() {
 			resetCombinedStudioCatalog()
 		}
 		studio.snapshot = snapshot
+		const completed = snapshot.runs
+			.filter((run) => run.state === 'succeeded')
+			.map((run) => run.runId)
+			.sort()
+			.join(',')
+		if (completed && completed !== projectedCompletedRuns) {
+			const { refreshIntentArtifactLinks } = await import('../artifacts/ingest.svelte')
+			if (
+				sequence === refreshSequence &&
+				(await refreshIntentArtifactLinks()) &&
+				sequence === refreshSequence
+			)
+				projectedCompletedRuns = completed
+		}
 	}
 	return snapshot
 }
@@ -124,19 +178,19 @@ let activeSynchronization: Promise<void> | null = null
 /** Session-bound, bounded delivery pass. Polling state alone cannot start subscriptions. */
 export function synchronizeStudio(): Promise<void> {
 	if (activeSynchronization) return activeSynchronization
-	const current = studio.snapshot
+	const epoch = studioEnvironmentEpoch
 	activeSynchronization = (async () => {
 		await authorizedStudioRequest('sync')
-		if (
-			current &&
-			studio.snapshot &&
-			(current.scopeId !== studio.snapshot.scopeId ||
-				current.subjectId !== studio.snapshot.subjectId)
-		)
-			return
+		if (epoch !== studioEnvironmentEpoch) return
 		await refreshStudio()
-	})().finally(() => {
-		activeSynchronization = null
-	})
+		if (epoch === studioEnvironmentEpoch) studio.synchronizationError = null
+	})()
+		.catch((cause) => {
+			if (epoch === studioEnvironmentEpoch) studio.synchronizationError = String(cause)
+			throw cause
+		})
+		.finally(() => {
+			activeSynchronization = null
+		})
 	return activeSynchronization
 }

@@ -5,7 +5,7 @@ import { normalizeStatement } from '../statement-normalizer'
 export const STATEMENT_TRANSACTION_FANOUT_MANIFEST = manifest(
 	'statement-transaction-fanout',
 	'Statement transaction fan-out',
-	'Publishes one bounded batch of statement rows as first-class transactions.',
+	'Publishes at most 64 statement rows from the explicit zero-based offset. For more than 64 rows, compose successive batches at offsets 0, 64, 128, and so on; one call does not publish the whole statement.',
 	'document_fanout_statement_transactions',
 	[
 		'ceo.aven.bookkeeping.statement_candidate(F, S)',

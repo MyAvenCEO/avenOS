@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import {
-	anonymousSpeaker,
-	anonymousSpeakerFromPayload,
-	anonymousSpeakerPayload,
-	anonymousSpeakerTone
-} from '../src/lib/chat/anonymous-speaker'
+import { anonymousSpeakerFromPayload, anonymousSpeakerPayload } from '@avenos/chat-engine/speaker'
+import { anonymousSpeaker, anonymousSpeakerTone } from '../src/lib/chat/anonymous-speaker'
 
 describe('anonymous speaker contribution metadata', () => {
 	test('keeps the diarization label scoped to its native voice session', () => {

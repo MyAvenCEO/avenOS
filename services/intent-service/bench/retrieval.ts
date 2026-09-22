@@ -1,5 +1,5 @@
 /** Disposable real-PostgreSQL scale proof; no customer data. */
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import pg from 'pg'
 import { IntentStore } from '../src/store'
@@ -27,18 +27,25 @@ try {
 				'utf8'
 			)
 		)
+	// SQL UUID storage accepts arbitrary bits; public retrieval correctly requires
+	// RFC UUIDs. Keep deterministic fixture IDs within that same public contract.
+	await pool.query(`CREATE FUNCTION fixture_id(value text) RETURNS uuid
+		LANGUAGE sql IMMUTABLE AS $$
+		SELECT overlay(overlay(md5(value) placing '4' from 13 for 1) placing '8' from 17 for 1)::uuid $$`)
+	const scopedIntent = (await pool.query("SELECT fixture_id('intent-1') AS id")).rows[0].id
+	const engine = (await pool.query('SHOW server_version')).rows[0].server_version
 	let previous = 0
 	for (const count of [10000, 100000, 1000000]) {
 		const started = performance.now()
 		await pool.query(
 			`INSERT INTO intents(id,owner_subject_id,trigger_kind,title,routing_summary)
-   SELECT md5('intent-'||n)::uuid,$1,'human','Routine task '||n,'Supplier invoices travel and family'
+   SELECT fixture_id('intent-'||n),$1,'human','Routine task '||n,'Supplier invoices travel and family'
    FROM generate_series($2::int,$3::int) n ON CONFLICT DO NOTHING`,
 			[owner, Math.floor(previous / 100) + 1, Math.ceil(count / 100)]
 		)
 		await pool.query(
 			`INSERT INTO contributions(id,intent_id,sequence,contributor_kind,kind,text,idempotency_key)
-   SELECT md5('message-'||n)::uuid,md5('intent-'||(1+(n-1)/100))::uuid,1+(n-1)%100,'human','message',
+   SELECT fixture_id('message-'||n),fixture_id('intent-'||(1+(n-1)/100)),1+(n-1)%100,'human','message',
     'Invoice travel refund booking common evidence '||n||' '||CASE WHEN n%997=0 THEN 'rarebeacon ' ELSE '' END||repeat('Synthetic ordinary conversation about an ongoing task. ',8), 'seed-'||n
    FROM generate_series($1::int,$2::int) n`,
 			[previous + 1, count]
@@ -55,11 +62,19 @@ try {
 				missing: () => store.messages(owner, { query: 'nonexistentbeacon', limit: 20 }),
 				scoped: () =>
 					store.messages(owner, {
-						intent: createHash('md5')
-							.update('intent-1')
-							.digest('hex')
-							.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5'),
+						intent: scopedIntent,
 						query: 'common',
+						limit: 20
+					}),
+				oldestUser: () =>
+					store.messages(owner, { intent: scopedIntent, role: 'user', order: 'oldest', limit: 20 }),
+				newestUser: () =>
+					store.messages(owner, { intent: scopedIntent, role: 'user', order: 'newest', limit: 20 }),
+				absentSpeaker: () =>
+					store.messages(owner, {
+						intent: scopedIntent,
+						role: 'assistant',
+						order: 'oldest',
 						limit: 20
 					})
 			})) {
@@ -68,11 +83,15 @@ try {
 					elapsed = performance.now() - t
 				if ('messages' in result && result.messages.length > 20) throw Error('Unbounded messages')
 				if (
-					['rare', 'common', 'scoped'].includes(kind) &&
+					['rare', 'common', 'scoped', 'oldestUser', 'newestUser'].includes(kind) &&
 					'messages' in result &&
 					!result.messages.length
 				)
 					throw Error('Target was not found')
+				if (kind === 'absentSpeaker' && 'messages' in result && result.messages.length)
+					throw Error('Speaker filter included another role')
+				if (kind === 'oldestUser' && 'messages' in result && result.messages[0]?.sequence !== 1)
+					throw Error('Oldest message was not first')
 				measurements[kind] ??= []
 				measurements[kind].push(elapsed)
 			}
@@ -91,7 +110,7 @@ try {
 		console.log(JSON.stringify({ count, buildMs, stats }))
 		await writeFile(
 			process.env.INTENT_RETRIEVAL_EVIDENCE_PATH ?? '/tmp/intent-retrieval-scale.json',
-			JSON.stringify({ engine: 'PostgreSQL 17', evidence }, null, 2)
+			JSON.stringify({ engine: `PostgreSQL ${engine}`, evidence }, null, 2)
 		)
 		previous = count
 	}

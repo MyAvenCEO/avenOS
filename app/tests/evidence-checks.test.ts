@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { checkEvidence, evidenceCheckSpecs } from '../src/lib/chat/evidence-checks'
+import { checkEvidence, evidenceCheckSpecs } from '@avenos/chat-engine/evidence-checks'
 
 const evidence = { sourceId: 'read-document', quote: 'Confirmed dates and posted amounts' }
 const quoted = (c: typeof evidence) =>
@@ -63,7 +63,7 @@ const entry = (
 ) => ({ transactionId, amountMinor, kind, status, reference, account, evidence })
 const reconcile = (entries: ReturnType<typeof entry>[]) =>
 	checkEvidence(
-		'calculate',
+		'reconcile_ledger',
 		{ currency: 'EUR', reference: 'ORDER-A', account: 'VISA-12', entries },
 		quoted
 	)

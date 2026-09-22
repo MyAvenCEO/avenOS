@@ -1,12 +1,11 @@
 <script lang="ts">
 /**
- * CHAT DEBUG — the model's exact last request, live from the chat core.
+ * CHAT DEBUG — the latest answer request prepared by the chat core.
  *
  * `chat.lastRequest` is captured in `Chat.#round` at send time (system
- * prompt + live context, full message history, tool set), so this renders
- * byte-for-byte what the model saw — never a reconstruction. Open it while
- * the app is running, then send a message: the view updates per request
- * round, tool rounds included.
+ * prompt + live context, bounded message history, tool set). This is not
+ * a reconstruction, but excludes gateway/provider transformations and separate
+ * verification requests. The view updates per answer round, including tool rounds.
  */
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import type { ChatMessage } from './redpill'
@@ -41,10 +40,14 @@ function toolCallsOf(message: ChatMessage) {
 
 	{#if !request}
 		<p class="text-foreground/65 text-sm">
-			No request captured yet. Send a message — this view then shows the exact next request: the
-			system prompt with its live context, the message history, and the tool set, per round.
+			No answer request captured yet. Send a message to inspect the prepared system context,
+			included messages and available tools.
 		</p>
 	{:else}
+		<p class="text-foreground/65 text-sm">
+			Latest answer round only: included context and tools, not the entire saved conversation.
+			Separate verification requests and provider-specific transformations are not shown here.
+		</p>
 		<!-- SYSTEM: prompt + live context, the part you cannot see anywhere else. -->
 		{@const system = request.messages[0]}
 		{#if system}
@@ -68,8 +71,8 @@ function toolCallsOf(message: ChatMessage) {
 				messages · {request.messages.length - 1}
 			</p>
 			<div class="flex flex-col gap-2">
-				{#each request.messages.slice(1) as message (`${message.role}:${message.content?.slice(0, 32)}:${message.tool_call_id ?? ''}`)}
-					<div class="surface surface--sunken">
+				{#each request.messages.slice(1) as message, index (index)}
+					<div class="surface surface--sunken" data-request-message-index={index}>
 						<div class="flex flex-wrap items-center gap-2">
 							<span
 								class="rounded-full px-2 py-0.5 font-mono text-[length:var(--fs-nano)] {ROLE_TONE[message.role] ?? 'bg-foreground/8 text-foreground'}"

@@ -5,6 +5,7 @@ import {
 	ActorRegistry,
 	type CapabilityId,
 	parseStudioSkillV2,
+	STUDIO_SKILL_ARTIFACT_VERSION,
 	type StudioSkillV2,
 	type StudioSkillV2Issue,
 	studioSkillChildReferences,
@@ -64,6 +65,15 @@ export class StudioV2SkillValidator {
 		const inventory = new Map(
 			this.installations.inventory().map((entry) => [entry.capabilityId, entry])
 		)
+		const modelCapabilities = new Set(
+			this.installations
+				.list()
+				.flatMap((installation) =>
+					installation.descriptor.procedures
+						.filter((procedure) => procedure.requiredFeatures.includes('model'))
+						.map((procedure) => procedure.capabilityId)
+				)
+		)
 		const storeTypes = new Map(
 			this.installations
 				.list()
@@ -78,6 +88,15 @@ export class StudioV2SkillValidator {
 			['definition', definition] as const,
 			...[...children.entries()].map(([id, child]) => [`children.${id}`, child] as const)
 		]) {
+			if (!body.policy.allowModel) {
+				const requirement = modelRequirement(body, children, modelCapabilities)
+				if (requirement)
+					issues.push({
+						path: `${bodyPath}.policy.allowModel`,
+						code: 'MODEL_POLICY_REQUIRED',
+						message: `Skill "${body.name}" disables model access, but "${requirement.skill}" uses ${requirement.capability}. Enable allowModel on every containing Skill, or replace that operation with a deterministic one. No model was run.`
+					})
+			}
 			issues.push(...prefix(validateRuntimeSurface(body), bodyPath))
 			issues.push(...prefix(validateInstalledStoreTypes(body, storeTypes), bodyPath))
 			issues.push(...prefix(validateStudioSkillCapabilities(body, snapshot), bodyPath))
@@ -113,6 +132,25 @@ export class StudioV2SkillValidator {
 	}
 }
 
+/** Policies intersect at runtime: a permissive child cannot override its parent. */
+function modelRequirement(
+	body: StudioSkillV2,
+	children: ReadonlyMap<string, StudioSkillV2>,
+	modelCapabilities: ReadonlySet<string>,
+	seen = new Set<string>()
+): { skill: string; capability: string } | undefined {
+	const capability = invokedCapabilities(body).find((id) => modelCapabilities.has(id))
+	if (capability) return { skill: body.name, capability }
+	for (const id of studioSkillChildReferences(body)) {
+		if (seen.has(id)) continue
+		seen.add(id)
+		const child = children.get(id)
+		if (!child) continue
+		const requirement = modelRequirement(child, children, modelCapabilities, seen)
+		if (requirement) return requirement
+	}
+}
+
 function validateRuntimeSurface(definition: StudioSkillV2): StudioSkillV2Issue[] {
 	const issues: StudioSkillV2Issue[] = []
 	const walk = (steps: StudioSkillV2['steps'], path: string) => {
@@ -120,9 +158,8 @@ function validateRuntimeSurface(definition: StudioSkillV2): StudioSkillV2Issue[]
 			const at = `${path}.${index}`
 			if (
 				step.kind === 'achieve' ||
-				step.kind === 'review' ||
-				step.kind === 'forEach' ||
-				(step.kind === 'when' && step.condition.kind === 'observation')
+				(step.kind === 'review' && Object.keys(step.outputs).length > 0) ||
+				(step.kind === 'forEach' && step.failureMode !== 'fail-fast')
 			)
 				issues.push({
 					path: at,
@@ -179,7 +216,7 @@ export function assertExactV2Skill(
 		artifact.artifactId !== expectedId ||
 		artifact.scopeId !== scope ||
 		artifact.typeKey !== 'studio.skill' ||
-		artifact.typeVersion !== 2 ||
+		artifact.typeVersion !== STUDIO_SKILL_ARTIFACT_VERSION ||
 		!/^[0-9a-f]{64}$/.test(artifact.artifactSha256)
 	)
 		throw new Error('EXACT_SKILL_UNAVAILABLE')

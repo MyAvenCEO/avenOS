@@ -5,6 +5,7 @@ import {
 	importTenantGrantPublicKey,
 	signTenantGrant
 } from '@avenos/aven-customer-contracts'
+import { intentHistoryPreview } from '@avenos/intents/retrieval'
 import { describe, expect, test, vi } from 'vitest'
 import { createIntentHandler } from '../src/handler.js'
 import type { ContributionInput, IntentDetail } from '../src/store.js'
@@ -57,6 +58,8 @@ const detail: IntentDetail = {
 function store() {
 	return {
 		ready: vi.fn(async () => {}),
+		admit: vi.fn(),
+		admission: vi.fn(),
 		page: vi.fn(async () => ({
 			intents: [detail],
 			hasMore: false,
@@ -68,12 +71,16 @@ function store() {
 			hasMore: false,
 			nextCursor: null,
 			matchMode: 'recent',
+			ordering: 'newest',
+			role: 'all',
 			notice: ''
 		})),
 		message: vi.fn(async () => ({
 			id: contributionId,
 			intentId,
 			createdAt: '2026-06-11T10:00:00Z',
+			feedback: null,
+			feedbackCheckComplete: false,
 			role: 'user',
 			content: 'hello',
 			offset: 0,
@@ -81,6 +88,20 @@ function store() {
 			nextOffset: null
 		})),
 		detail: vi.fn(async () => detail),
+		preview: vi.fn(async () => intentHistoryPreview(detail)),
+		turns: vi.fn(async () => ({
+			turns: [],
+			hasMore: false,
+			nextCursor: null,
+			observedAt: new Date().toISOString()
+		})),
+		stopTurn: vi.fn(async () => ({
+			turnId: contributionId,
+			intentId,
+			controlRevision: 2,
+			disposition: 'cancelled' as const,
+			stopRequestedAt: new Date().toISOString()
+		})),
 		create: vi.fn(async () => detail),
 		append: vi.fn(async (_subject: string, _intent: string, input: ContributionInput) => ({
 			...input,
@@ -138,6 +159,25 @@ function handler(repository = store()) {
 }
 
 describe('Intent Service split boundary', () => {
+	test('turn status uses authenticated ownership and rejects ambiguous or expanded queries', async () => {
+		const { fetch, repository } = handler()
+		const response = await fetch(
+			new Request(`http://intent/api/intents/${intentId}/turns?limit=5`, {
+				headers: await headers()
+			})
+		)
+		expect(response.status).toBe(200)
+		expect(repository.turns).toHaveBeenCalledWith(subject, intentId, 1, { limit: 5 })
+		for (const query of ['limit=51', 'limit=1&limit=2', 'subject=someone', 'cursor=', 'limit=-1']) {
+			const invalid = await fetch(
+				new Request(`http://intent/api/intents/${intentId}/turns?${query}`, {
+					headers: await headers()
+				})
+			)
+			expect(invalid.status).toBe(400)
+		}
+		expect(repository.turns).toHaveBeenCalledTimes(1)
+	})
 	test('requires the private facade credential before touching storage', async () => {
 		const { fetch, repository } = handler()
 		const response = await fetch(new Request('http://intent/api/intents/search'))

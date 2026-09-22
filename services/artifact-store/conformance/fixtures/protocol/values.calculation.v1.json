@@ -1,0 +1,27 @@
+{
+  "typeKey": "values.calculation",
+  "version": 1,
+  "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "additionalProperties": false,
+    "$defs": {
+      "value": {"type":"object", "additionalProperties":false, "required":["value","unit"], "properties": {
+        "value":{"type":"string","minLength":1,"maxLength":163,"pattern":"^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+        "unit":{"type":"string","minLength":1,"maxLength":64,"pattern":"^(1|currency:[A-Z]{3}|quantity:[A-Za-z][A-Za-z0-9._-]{0,47})$"}
+      }}
+    },
+    "required": ["operation", "operands", "result", "exact", "text"],
+    "properties": {
+      "operation":{"enum":["add","subtract","multiply","divide","compare","round"]},
+      "operands":{"type":"array","minItems":1,"maxItems":64,"items":{"$ref":"#/$defs/value"}},
+      "result":{"$ref":"#/$defs/value"},
+      "exact":{"type":"boolean"},
+      "text":{"type":"string","maxLength":16384},
+      "decimal_places":{"type":"integer","minimum":0,"maximum":32},
+      "rounding":{"enum":["half-even","half-up","toward-zero","floor","ceiling"]}
+    },
+    "dependentRequired":{"decimal_places":["rounding"],"rounding":["decimal_places"]}
+  },
+  "blobPolicy":"forbidden", "referenceRules":[]
+}

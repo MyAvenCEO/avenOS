@@ -12,6 +12,8 @@ mod artifacts;
 mod asr;
 mod assets;
 mod auth;
+mod input_drafts;
+mod intent_work;
 mod imap;
 mod service_token;
 mod tts;
@@ -180,6 +182,9 @@ pub fn run() {
 			artifacts::studio_request,
 			artifacts::actor_run_status,
 			artifacts::actor_run_control,
+			artifacts::actor_review_request,
+			artifacts::credential_context,
+			artifacts::credential_request,
 			artifacts::artifact_upload,
 			artifacts::artifact_processing_status,
 			artifacts::artifact_client_run_publish,
@@ -188,10 +193,19 @@ pub fn run() {
 			artifacts::llm_model_list,
 			artifacts::llm_complete,
 			artifacts::llm_openai_complete,
+			artifacts::input_decision,
+			input_drafts::input_drafts_load,
+			input_drafts::input_drafts_save,
+			intent_work::intent_work_context,
+			intent_work::intent_work_request,
+			intent_work::intent_work_progress,
 			artifacts::llm_openai_stream,
 			artifacts::llm_openai_stream_cancel,
             artifacts::intent_search,
+            artifacts::task_context,
+            artifacts::task_request,
             artifacts::intent_message_get,
+            artifacts::intent_preview,
 			artifacts::intent_get,
 			artifacts::intent_append_contribution,
 			artifacts::intent_create,
@@ -204,7 +218,9 @@ pub fn run() {
 			artifacts::artifact_evidence_get,
 			artifacts::artifact_store_list,
             artifacts::artifact_inventory_page,
-			artifacts::artifact_library,
+            artifacts::artifact_library,
+            artifacts::artifact_inbox,
+            artifacts::artifact_inbox_promote,
 			auth::auth_status,
 			auth::auth_environments,
 			auth::auth_environment_select,

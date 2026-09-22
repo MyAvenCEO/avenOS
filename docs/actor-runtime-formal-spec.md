@@ -112,7 +112,7 @@ The current portable runner protocol is:
 os.aven:protocol:actors:plan-runner@2
 ```
 
-Version 1 remains accepted during rollout for exact-goal commands only.
+Only this protocol is accepted; there is no older-command compatibility path.
 
 The document skill adapter is:
 

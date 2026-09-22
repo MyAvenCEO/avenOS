@@ -12,6 +12,10 @@ import uuid
 from urllib.parse import urlsplit
 import prepare
 
+# Each prepared bundle declares its own isolated project. The outer platform
+# harness may also name its Compose project; never inspect or tear down that one.
+os.environ.pop('COMPOSE_PROJECT_NAME', None)
+
 repository = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('fixture', Path(__file__).with_name('prepare-test.py'))
 fixture = importlib.util.module_from_spec(spec)
@@ -144,7 +148,17 @@ try:
             '--mount', 'type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock',
             '--mount', f'type=bind,source={repository},target={repository},readonly',
             '--mount', f'type=bind,source={scratch},target={scratch}', tools_image]
-    start = [*tool, 'python3', str(repository / 'deploy/runtime/start.py'), str(destination), '--target', 'next']
+    # Like host-fixture.py, this isolated proof contains synthetic credentials only.
+    # Keep the real startup entry point while showing the failing subprocess here.
+    diagnostic_entry = f'''import sys,subprocess
+sys.path.insert(0,{str(repository / 'deploy/runtime')!r})
+import start
+try: start.main()
+except subprocess.CalledProcessError as error:
+ print(error.stderr.decode()[-6000:],file=sys.stderr)
+ raise
+'''
+    start = [*tool, 'python3', '-c', diagnostic_entry, str(destination), '--target', 'next']
     try:
         run(start)
     except AssertionError:
@@ -163,7 +177,8 @@ try:
     run(start)
     assert first['ID'] in run(['docker', 'compose', '--project-directory', str(destination), 'ps', '--format', 'json'])
     names = run(['docker', 'compose', '--project-directory', str(destination), 'ps', '--services']).splitlines()
-    assert set(names) == {f'{generation}-{name}' for name in ('database', 'database-access', 'artifact-provisioner-access', 'platform-provisioner', 'artifact-store-provisioner', 'artifact-store', 'actor-runner', 'intent-service', 'backup')}
+    expected_services = {f'{generation}-{name}' for name in ('database', 'database-access', 'artifact-provisioner-access', 'platform-provisioner', 'artifact-store-provisioner', 'artifact-store', 'actor-runner', 'intent-service', 'backup')}
+    assert set(names) == expected_services, f'Runtime services: missing={sorted(expected_services - set(names))}, unexpected={sorted(set(names) - expected_services)}'
     inventory = run(['docker', 'compose', '--project-directory', str(destination), 'exec', '-T', f'{generation}-database',
                      'psql', '-U', 'postgres', '-tAc', "SELECT count(*) FROM pg_database WHERE datname IN ('aven_api','aven_checkout','aven_identity')"])
     assert inventory == '0'

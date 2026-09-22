@@ -1,12 +1,13 @@
 import { GoldenInvoiceModel } from '../../services/actor-runner/tests/support/golden-document-model'
+import { studioFixtureResponse } from './studio-agent-fixture'
 
 const encoder = new TextEncoder()
-// Release unfinished narration when the next request arrives. This proves late
-// output is discarded after barge-in without racing a fixed two-second deadline.
-const pendingNarrations = new Set<() => void>()
 
 Bun.serve({
 	port: 8090,
+	// The bounded duplex fixture intentionally pauses longer than Bun's default
+	// HTTP idle timeout. A transport disconnect would test retry, not barge-in.
+	idleTimeout: 0,
 	fetch: async (request) => {
 		const url = new URL(request.url)
 		if (url.pathname === '/health') return Response.json({ status: 'ok' })
@@ -17,6 +18,7 @@ Bun.serve({
 			model?: string
 			messages?: Array<{ role?: string; content?: string | Array<{ type: string; text?: string }> }>
 			response_format?: { json_schema?: { name?: string } }
+			tools?: Array<{ function?: { name?: string } }>
 		}
 		if (body.model === 'e2e-document') {
 			const name = body.response_format?.json_schema?.name
@@ -103,10 +105,25 @@ Bun.serve({
 				usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 }
 			})
 		}
-		for (const release of [...pendingNarrations]) release()
+		const studio = studioFixtureResponse(body.messages ?? [], body.tools ?? [])
+		if (studio) {
+			const finish = 'tool_calls' in studio ? 'tool_calls' : 'stop'
+			return body.stream
+				? new Response(
+						`data: ${JSON.stringify({ choices: [{ delta: studio, finish_reason: finish }] })}\n\ndata: [DONE]\n\n`,
+						{ headers: { 'content-type': 'text/event-stream' } }
+					)
+				: Response.json({
+						choices: [{ message: { role: 'assistant', ...studio }, finish_reason: finish }]
+					})
+		}
 		if (body.stream) {
 			const lastUser = body.messages?.findLast((message) => message.role === 'user')?.content
-			if (lastUser === 'Start E2E narrated answer') {
+			if (
+				typeof lastUser === 'string' &&
+				(lastUser === 'Start E2E narrated answer' ||
+					lastUser.startsWith('Start E2E narrated answer\n\n[Input widget decision,'))
+			) {
 				let tail: ReturnType<typeof setTimeout> | undefined
 				let release: () => void
 				const stream = new ReadableStream<Uint8Array>({
@@ -117,22 +134,21 @@ Bun.serve({
 							)
 						)
 						release = () => {
-							pendingNarrations.delete(release)
 							clearTimeout(tail)
 							controller.enqueue(
 								encoder.encode(
-									`data: ${JSON.stringify({ id: 'chat-e2e-slow', model: body.model, choices: [{ delta: { content: 'E2E narration tail must be cancelled.' }, finish_reason: 'stop' }] })}\n\n`
+									`data: ${JSON.stringify({ id: 'chat-e2e-slow', model: body.model, choices: [{ delta: { content: 'E2E narration continued as text.' }, finish_reason: 'stop' }] })}\n\n`
 								)
 							)
 							controller.enqueue(encoder.encode('data: [DONE]\n\n'))
 							controller.close()
 						}
-						pendingNarrations.add(release)
+						// Independent background feedback/routing must not complete this
+						// stream. Barge-in stops audio while the text finishes normally.
 						tail = setTimeout(release, 20_000)
 					},
 					cancel() {
 						if (tail) clearTimeout(tail)
-						pendingNarrations.delete(release)
 					}
 				})
 				return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })

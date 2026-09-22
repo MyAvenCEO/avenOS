@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { HeldMessage } from '$lib/actors/bus'
-import { confirmHeld, rejectHeld } from '$lib/actors/hitl.svelte'
+import { confirmHeld, hitlQueue, rejectHeld } from '$lib/actors/hitl.svelte'
 
 /**
  * THE human gate, as one answer shape (0159).
@@ -15,7 +15,7 @@ import { confirmHeld, rejectHeld } from '$lib/actors/hitl.svelte'
  * now one arm of the query modal's answer dispatcher — the layouts moved
  * verbatim, the surface around them did not survive.
  */
-const { held }: { held: HeldMessage } = $props()
+const { held, bounded = false }: { held: HeldMessage; bounded?: boolean } = $props()
 </script>
 
 <!--
@@ -24,14 +24,14 @@ const { held }: { held: HeldMessage } = $props()
   footer are the actor's; the four preview LAYOUTS below stay, because they are
   content shapes and `gate-card-preview` is the box that holds whatever they are.
 -->
-<div class="gate-card" data-held-id={held.id}>
+<div class="gate-card" class:gate-card--bounded={bounded} data-held-id={held.id}>
 	<div class="gate-card-body">
 		<div class="gate-card-head">
 			{#if held.preview}
 				<span class="gate-card-kind">{held.preview.kind}</span>
 			{/if}
 			<p class="gate-card-question">{held.label}</p>
-			<span class="gate-card-asked">{held.actor}· {held.method}</span>
+			<span class="gate-card-asked" title={`${held.actor} · ${held.method}`}>Review</span>
 		</div>
 
 		{#if held.preview}
@@ -130,8 +130,8 @@ const { held }: { held: HeldMessage } = $props()
 							>
 								{side.heading}
 							</p>
-							{#each side.lines as line (line)}
-								<p class="truncate text-xs leading-relaxed">{line}</p>
+							{#each side.lines as line, lineIndex (lineIndex)}
+								<p class="break-words text-xs leading-relaxed">{line}</p>
 							{/each}
 						</div>
 					{/each}
@@ -169,9 +169,39 @@ const { held }: { held: HeldMessage } = $props()
 
 	<!-- the footer: the only place the gate opens -->
 	<div class="gate-card-actions">
-		<button class="btn btn--ghost" type="button" onclick={() => rejectHeld(held.id)}>Reject</button>
-		<button class="btn btn--primary" type="button" onclick={() => confirmHeld(held.id)}>
+		<button
+			class="btn btn--ghost"
+			type="button"
+			disabled={hitlQueue.saving > 0}
+			onclick={() => rejectHeld(held.id)}
+		>
+			Reject
+		</button>
+		<button
+			class="btn btn--primary"
+			type="button"
+			disabled={hitlQueue.saving > 0}
+			onclick={() => confirmHeld(held.id)}
+		>
 			Confirm
 		</button>
 	</div>
 </div>
+
+<style>
+.gate-card-actions .btn--ghost {
+	color: inherit;
+}
+.gate-card--bounded {
+	max-height: min(26rem, 45dvh);
+	grid-template-rows: minmax(0, 1fr) auto;
+}
+.gate-card--bounded .gate-card-body {
+	min-height: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+.gate-card--bounded .gate-card-head {
+	flex-wrap: wrap;
+}
+</style>

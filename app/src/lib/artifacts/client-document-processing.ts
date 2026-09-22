@@ -7,6 +7,7 @@ import type {
 	PlanRunStartCommand
 } from '@avenos/actors'
 import { type CommittedClientRun, QueuedClientArtifactGateway } from '@avenos/artifact-store'
+import { transportError } from '@avenos/chat-engine/transport-error'
 import { createDocumentActors } from '@avenos/document-ingest/actors'
 import { isCsvSource } from '@avenos/document-ingest/csv'
 import {
@@ -30,9 +31,9 @@ import { intents } from '$lib/intents/intents.svelte'
 import { BrowserDocumentDecoder } from './browser-document-decoder'
 import { clientReconciliation } from './client-reconciliation'
 import { holdCsvDocumentReview } from './csv-document-review'
+import { customerWork } from './customer-work.svelte'
 import { immutableDocumentRunRequest } from './document-source-request'
 import type { ArtifactProcessingLookup } from './processing'
-import { transportError } from './transport-error'
 
 interface ArtifactContent {
 	mediaType: string
@@ -40,11 +41,6 @@ interface ArtifactContent {
 }
 
 const PUBLICATION_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const
-let activeDocumentRuns = 0
-
-export function clientDocumentRunsBusy(): boolean {
-	return activeDocumentRuns > 0
-}
 
 function publicationErrorMessage(error: unknown): string {
 	return transportError(error).message
@@ -80,7 +76,7 @@ class TauriClientArtifactGateway implements ClientArtifactGateway {
 	}
 }
 
-const publicationGateway = singleton(
+export const publicationGateway = singleton(
 	'aven.client-artifact-publication-gateway',
 	() =>
 		new QueuedClientArtifactGateway(new TauriClientArtifactGateway(), {
@@ -192,7 +188,7 @@ export async function processClientDocument(
 	reconcile = true,
 	csvConfirmationArtifactId?: string
 ): Promise<void> {
-	activeDocumentRuns++
+	customerWork.documents++
 	let request = documentRunStartRequest(
 		{ artifactId, originalName, ...(declaredMediaType && { declaredMediaType }) },
 		executionEnvironment
@@ -253,7 +249,7 @@ export async function processClientDocument(
 	} catch (error) {
 		clientDocumentRuntime.fail(request, new Error(transportError(error).message))
 	} finally {
-		activeDocumentRuns--
+		customerWork.documents--
 	}
 }
 

@@ -6,6 +6,8 @@ export interface RetrievalInput {
 	limit?: number
 	intent?: string
 	state?: 'all' | 'active' | 'archive'
+	role?: 'user' | 'assistant'
+	order?: 'oldest' | 'newest'
 }
 export class InvalidRetrievalCursor extends Error {}
 interface Cursor {
@@ -17,7 +19,17 @@ interface Cursor {
 export function retrievalPage(subject: string, input: RetrievalInput, kind: string) {
 	const query = (input.query ?? '').trim()
 	const binding = createHash('sha256')
-		.update(JSON.stringify([subject, kind, query, input.intent ?? '', input.state ?? 'all']))
+		.update(
+			JSON.stringify([
+				subject,
+				kind,
+				query,
+				input.intent ?? '',
+				input.state ?? 'all',
+				input.role ?? '',
+				input.order ?? 'newest'
+			])
+		)
 		.digest('hex')
 	let after: Cursor | undefined
 	if (input.cursor) {

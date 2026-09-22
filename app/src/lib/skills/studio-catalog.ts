@@ -1,5 +1,6 @@
 import {
 	type ActorAuthorizer,
+	STUDIO_CATALOG_REFRESH_REQUIRED,
 	StudioCatalog,
 	type StudioCatalogActor,
 	type StudioCatalogEntry,
@@ -46,13 +47,14 @@ export async function combinedStudioCatalog(
 	remote: RemoteRequest
 ): Promise<StudioCatalogPage> {
 	const request = parse(data)
-	const search = (request.search ?? '').trim().toLowerCase()
-	const readyOnly = request.readyOnly === true
+	const previous = request.viewToken ? views.get(request.viewToken) : undefined
+	const search = (request.search ?? previous?.search ?? '').trim().toLowerCase()
+	const readyOnly = request.readyOnly ?? previous?.readyOnly ?? false
 	const limit = request.limit ?? 50
 	let captured: Captured
 	let token = request.viewToken
 	if (request.cursor || token) {
-		if (!token) throw new Error('CATALOG_REFRESH_REQUIRED')
+		if (!token) throw new Error(STUDIO_CATALOG_REFRESH_REQUIRED)
 		const prior = views.get(token)
 		if (
 			!prior ||
@@ -60,7 +62,7 @@ export async function combinedStudioCatalog(
 			prior.readyOnly !== readyOnly ||
 			prior.expiresAt <= new Date().toISOString()
 		)
-			throw new Error('CATALOG_REFRESH_REQUIRED')
+			throw new Error(STUDIO_CATALOG_REFRESH_REQUIRED)
 		const current = await project(search, remote)
 		if (
 			current.catalogDigest !== prior.catalogDigest ||
@@ -68,7 +70,7 @@ export async function combinedStudioCatalog(
 			JSON.stringify({ actors: current.actors, entries: current.entries }) !==
 				JSON.stringify({ actors: prior.actors, entries: prior.entries })
 		)
-			throw new Error('CATALOG_REFRESH_REQUIRED')
+			throw new Error(STUDIO_CATALOG_REFRESH_REQUIRED)
 		captured = prior
 	} else {
 		const projection = await project(search, remote)
@@ -85,7 +87,7 @@ export async function combinedStudioCatalog(
 		: captured.entries
 	const offset = request.cursor ? Number(request.cursor) : 0
 	if (!Number.isSafeInteger(offset) || offset < 0 || offset > entries.length)
-		throw new Error('CATALOG_REFRESH_REQUIRED')
+		throw new Error(STUDIO_CATALOG_REFRESH_REQUIRED)
 	const next = offset + limit
 	return {
 		contractVersion: 1,
@@ -160,7 +162,7 @@ async function collect(
 			viewToken: page.viewToken
 		})
 		if (page.catalogDigest !== digest || page.authorityContext !== authorityContext)
-			throw new Error('CATALOG_REFRESH_REQUIRED')
+			throw new Error(STUDIO_CATALOG_REFRESH_REQUIRED)
 		entries.push(...page.entries)
 	}
 	return { actors, entries, catalogDigest: digest, authorityContext, capturedAt, expiresAt }
@@ -171,7 +173,7 @@ export function resetCombinedStudioCatalog(): void {
 	views.clear()
 }
 
-function mergeEntries(
+export function mergeEntries(
 	left: StudioCatalogEntry[],
 	right: StudioCatalogEntry[]
 ): StudioCatalogEntry[] {
@@ -194,29 +196,42 @@ function mergeEntries(
 		}
 		const contract = (entry: StudioCatalogEntry) => ({
 			...entry,
+			// Store bindings belong to a trusted host installation, not the manifest.
+			// A discover-only native copy legitimately has no binding yet.
+			inputs: entry.inputs.map((port) => ({ ...port, type: undefined })),
+			outputs: entry.outputs.map((port) => ({ ...port, type: undefined })),
 			installationDigest: undefined,
 			placements: [],
 			readiness: undefined,
 			reasonCodes: [],
 			canAuthor: undefined,
 			canPlan: undefined,
-			canInvokeNow: undefined
+			invocationStatus: undefined
 		})
 		if (
-			JSON.stringify(contract(prior)) !== JSON.stringify(contract(value)) ||
+			identity(contract(prior)) !== identity(contract(value)) ||
 			(prior.installationDigest &&
 				value.installationDigest &&
 				prior.installationDigest !== value.installationDigest)
 		)
-			throw new Error('CATALOG_IDENTITY_CONFLICT')
+			throw new Error(`CATALOG_IDENTITY_CONFLICT: ${value.capabilityId}`)
+		const ports = (side: 'inputs' | 'outputs') =>
+			prior[side].map((port, index) => {
+				const other = value[side][index]!
+				if (port.type && other.type && identity(port.type) !== identity(other.type))
+					throw new Error(`CATALOG_IDENTITY_CONFLICT: ${value.capabilityId} ${side}.${port.name}`)
+				return { ...port, ...(port.type || other.type ? { type: port.type ?? other.type } : {}) }
+			})
 		const best = rank.indexOf(prior.readiness) <= rank.indexOf(value.readiness) ? prior : value
 		values.set(value.capabilityId, {
 			...best,
+			inputs: ports('inputs'),
+			outputs: ports('outputs'),
 			installationDigest: prior.installationDigest ?? value.installationDigest,
 			placements: [...new Set([...prior.placements, ...value.placements])].sort(),
 			canAuthor: prior.canAuthor || value.canAuthor,
 			canPlan: prior.canPlan || value.canPlan,
-			canInvokeNow: false
+			invocationStatus: 'not-evaluated'
 		})
 	}
 	return [...values.values()].sort((a, b) => a.capabilityId.localeCompare(b.capabilityId))
@@ -233,15 +248,15 @@ function mergeActors(
 			values.set(value.actorId, value)
 			continue
 		}
-		const identity = (actor: StudioCatalogActor) => ({
+		const actorIdentity = (actor: StudioCatalogActor) => ({
 			actorId: actor.actorId,
 			version: actor.version,
 			label: actor.label,
 			description: actor.description,
 			tags: actor.tags
 		})
-		if (JSON.stringify(identity(prior)) !== JSON.stringify(identity(value)))
-			throw new Error('CATALOG_IDENTITY_CONFLICT')
+		if (identity(actorIdentity(prior)) !== identity(actorIdentity(value)))
+			throw new Error(`CATALOG_IDENTITY_CONFLICT: ${value.actorId}`)
 		values.set(value.actorId, {
 			...prior,
 			placements: [...new Set([...prior.placements, ...value.placements])].sort(),
@@ -267,6 +282,14 @@ function parse(data: Record<string, unknown>): CatalogData {
 	)
 		throw new Error('CATALOG_INVALID_REQUEST')
 	return data as CatalogData
+}
+
+function identity(value: unknown): string {
+	return JSON.stringify(value, (_key, item) =>
+		item && typeof item === 'object' && !Array.isArray(item)
+			? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
+			: item
+	)
 }
 
 async function digest(value: string): Promise<string> {

@@ -8,6 +8,7 @@ import { singleton } from './singleton'
  * confirming is not a tool, it is these two functions, wired to buttons.
  */
 class HitlQueue {
+	saving = $state(0)
 	items = $state<HeldMessage[]>([])
 }
 
@@ -21,16 +22,22 @@ bus.onHeldResolved = (id) => {
 }
 
 export function confirmHeld(id: string): void {
+	hitlQueue.saving++
 	void bus
 		.confirmHeld(id)
 		.then((result) => {
 			if (JSON.parse(result.record)?.ok === false) reviewFailed(id, result.wire)
 		})
 		.catch((error) => reviewFailed(id, error))
+		.finally(() => hitlQueue.saving--)
 }
 
 export function rejectHeld(id: string): void {
-	void bus.rejectHeld(id).catch((error) => reviewFailed(id, error))
+	hitlQueue.saving++
+	void bus
+		.rejectHeld(id)
+		.catch((error) => reviewFailed(id, error))
+		.finally(() => hitlQueue.saving--)
 }
 
 /** Prevent review callbacks from crossing a native customer-environment transition. */

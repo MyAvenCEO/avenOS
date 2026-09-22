@@ -2,8 +2,12 @@ import type { TenantGrantClaims, TenantGrantKey } from '@avenos/aven-customer-co
 import { admitCustomerRequest, CustomerAdmissionError } from '@avenos/aven-customer-runtime'
 import type { IdentityVerifier } from '@avenos/aven-identity'
 import { BodyLimitError, readBoundedText } from '@avenos/http-boundary'
+import { inputAdmissionSchema } from '@avenos/intents/admission'
+import { intentRetrievalSchema, messageRetrievalSchema } from '@avenos/intents/retrieval'
+import { turnPageInputSchema, turnStopCommandSchema } from '@avenos/intents/turn-status'
 import { z } from 'zod'
 import type { IntentServiceConfig } from './config.js'
+import { feedbackAssessmentSchema, feedbackContributionSchema } from './feedback.js'
 import { InvalidRetrievalCursor } from './retrieval.js'
 import {
 	IntentConflictError,
@@ -13,17 +17,9 @@ import {
 	type UpdateIntent,
 	type VersionCommand
 } from './store.js'
+import { admitWorkAuthority } from './work-authority.js'
 
 const uuid = z.uuid()
-const retrievalSchema = z
-	.object({
-		query: z.string().max(500).optional(),
-		cursor: z.string().max(2048).optional(),
-		limit: z.coerce.number().int().min(1).max(50).optional(),
-		intent: uuid.optional(),
-		state: z.enum(['all', 'active', 'archive']).optional()
-	})
-	.strict()
 const createSchema = z
 	.object({
 		id: uuid,
@@ -46,6 +42,18 @@ const contributionSchema = z
 	.refine((input) => Buffer.byteLength(JSON.stringify(input.payload)) <= 64 * 1024, {
 		message: 'payload must not exceed 64 KiB'
 	})
+	.refine(
+		(input) =>
+			input.kind !== 'response-feedback' || feedbackContributionSchema.safeParse(input).success,
+		{
+			message: 'Invalid response feedback.'
+		}
+	)
+	.refine(
+		(input) =>
+			input.kind !== 'feedback-assessment' || feedbackAssessmentSchema.safeParse(input).success,
+		{ message: 'Invalid feedback assessment.' }
+	)
 const updateSchema = z
 	.object({
 		expectedVersion: z.number().int().positive(),
@@ -83,9 +91,14 @@ const mergeSchema = versionSchema
 type Store = Pick<
 	IntentStore,
 	| 'append'
+	| 'admit'
+	| 'admission'
 	| 'archiveOrRestore'
 	| 'create'
 	| 'detail'
+	| 'preview'
+	| 'turns'
+	| 'stopTurn'
 	| 'page'
 	| 'messages'
 	| 'message'
@@ -156,17 +169,78 @@ export function createIntentHandler(
 			const claims = admitted.identity
 			const store = await stores.forGrant(admitted.tenant)
 			await store.ready()
+			if (request.method === 'POST' && pathname === '/api/intents/input') {
+				const input = inputAdmissionSchema.parse(await requestJson(request))
+				const authority = await admitWorkAuthority(
+					request.headers.get('x-aven-work-grant') ?? '',
+					tenantGrantPublicKey,
+					config.TENANT_GRANT_ISSUER,
+					admitted.tenant,
+					input
+				)
+				return json(
+					201,
+					await store.admit(claims.sub, input, admitted.tenant.routingGeneration, authority)
+				)
+			}
+			const receipt = pathname.match(/^\/api\/intents\/input\/([0-9a-f-]+)\/(\d+)$/i)
+			if (request.method === 'GET' && receipt) {
+				return json(
+					200,
+					await store.admission(
+						claims.sub,
+						uuid.parse(receipt[1]),
+						z.coerce.number().int().min(1).max(1_000_000).parse(receipt[2])
+					)
+				)
+			}
 			if (
 				request.method === 'GET' &&
 				(pathname === '/api/intents/search' || pathname === '/api/intents/messages')
 			) {
-				const input = retrievalSchema.parse(Object.fromEntries(url.searchParams))
+				const input = (
+					pathname.endsWith('/search') ? intentRetrievalSchema : messageRetrievalSchema
+				).parse(Object.fromEntries(url.searchParams))
 				return json(
 					200,
 					pathname.endsWith('/search')
 						? await store.page(claims.sub, input)
 						: await store.messages(claims.sub, input)
 				)
+			}
+			const stop = pathname.match(/^\/api\/intents\/([0-9a-f-]+)\/turns\/([0-9a-f-]+)\/stop$/i)
+			if (request.method === 'POST' && stop) {
+				if (url.search) throw new IntentInputError('Turn controls do not accept query parameters.')
+				return json(
+					200,
+					await store.stopTurn(
+						claims.sub,
+						uuid.parse(stop[1]),
+						uuid.parse(stop[2]),
+						admitted.tenant.routingGeneration,
+						turnStopCommandSchema.parse(await requestJson(request))
+					)
+				)
+			}
+			const turns = pathname.match(/^\/api\/intents\/([0-9a-f-]+)\/turns$/i)
+			if (request.method === 'GET' && turns) {
+				if ([...url.searchParams.keys()].some((key) => url.searchParams.getAll(key).length !== 1))
+					throw new IntentInputError('Duplicate turn query parameters.')
+				return json(
+					200,
+					await store.turns(
+						claims.sub,
+						uuid.parse(turns[1]),
+						admitted.tenant.routingGeneration,
+						turnPageInputSchema.parse(Object.fromEntries(url.searchParams))
+					)
+				)
+			}
+			const preview = pathname.match(/^\/api\/intents\/([0-9a-f-]+)\/preview$/i)
+			if (request.method === 'GET' && preview) {
+				if (url.search)
+					throw new IntentInputError('Intent previews do not accept query parameters.')
+				return json(200, await store.preview(claims.sub, uuid.parse(preview[1])))
 			}
 			const message = pathname.match(/^\/api\/intents\/messages\/([0-9a-f-]+)$/i)
 			if (request.method === 'GET' && message) {

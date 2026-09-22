@@ -14,6 +14,11 @@ let width = $state(0)
 let loading = $state(false)
 let failure = $state('')
 const count = $derived(document?.numPages ?? 1)
+const invalidLocator = $derived(
+	document &&
+		locator?.kind === 'page-region' &&
+		(!Number.isInteger(locator.page) || locator.page < 1 || locator.page > count)
+)
 const choices = $derived(
 	Array.from(
 		{ length: Math.min(count, 7) },
@@ -63,7 +68,7 @@ $effect(() => {
 	const pageNumber = current
 	const target = canvas
 	const pageWidth = Math.floor(width)
-	if (!doc || !target || pageWidth < 1) return
+	if (!doc || !target || pageWidth < 1 || invalidLocator) return
 	const generation = ++renderGeneration
 	loading = true
 	renderQueue = renderQueue
@@ -133,11 +138,14 @@ $effect(() => {
 	{#if failure}
 		<p role="alert">{failure}</p>
 	{/if}
+	{#if invalidLocator}
+		<p role="alert">Die gespeicherte Fundstelle verweist auf eine nicht vorhandene PDF-Seite.</p>
+	{/if}
 	<div class="pdf-scroll">
 		{#if loading}
 			<p role="status">Seite wird geladen …</p>
 		{/if}
-		<div class="page" bind:clientWidth={width} data-page={current}>
+		<div class="page" hidden={!!invalidLocator} bind:clientWidth={width} data-page={current}>
 			<canvas bind:this={canvas}></canvas>
 			{#if region}
 				<div

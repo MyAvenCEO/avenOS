@@ -48,8 +48,8 @@ function reduce(state, ev) {
 		if (!m) {
 			return {
 				state: next,
-				said: 'There is no actor ' + ev.payload.actor + '.',
-				record: { ok: false, error: 'no actor ' + ev.payload.actor }
+				said: 'Not registered in this client. Check studio_catalog for installed server operations.',
+				record: { ok: false, error: 'LOCAL_ACTOR_NOT_REGISTERED', discoveryScope: 'local', nextTool: 'studio_catalog', arguments: { search: ev.payload.actor } }
 			}
 		}
 		return { state: next, said: prose(m), record: { ok: true, manifest: m } }
@@ -70,7 +70,7 @@ const REGISTRY_MANIFEST: Manifest = {
 	version: '1',
 	name: 'Registry',
 	description:
-		'The directory itself, as an actor: knows every actor in the mesh and describes ' +
+		'The local directory itself, as an actor: knows every actor in this client mesh and describes ' +
 		'them from their manifests.',
 	tags: ['system'],
 	capabilities: ['actors', 'manifest'],
@@ -84,7 +84,8 @@ const REGISTRY_MANIFEST: Manifest = {
 		},
 		{
 			name: 'registry_describe',
-			description: 'Describes one actor completely from its manifest.',
+			description:
+				'Inspect a local Actor by UUID, name or canonical Actor ID. For server capabilities use studio_catalog with the canonical Actor ID; local absence does not mean unavailable on the server.',
 			parameters: {
 				type: 'object',
 				properties: { actor: { type: 'string', description: 'The actor id.' } },
@@ -110,7 +111,14 @@ export class RegistryActor extends Actor {
 						methods: a.manifest.methods.length,
 						live: a.instanceState() !== null
 					})),
-				manifest: (p) => bus.get(String(p.actor ?? ''))?.manifest ?? null
+				manifest: (p) => {
+					const ref = String(p.actor ?? '')
+					return (
+						bus.get(ref)?.manifest ??
+						bus.registry.snapshot().definitions.find((d) => d.ref === ref)?.manifest ??
+						null
+					)
+				}
 			}
 		)
 	}

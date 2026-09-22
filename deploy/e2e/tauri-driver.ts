@@ -1,8 +1,9 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { createServer } from 'node:net'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { desktopRenderingEnv } from '../../scripts/lib/desktop-rendering'
 
 const ELEMENT_KEY = 'element-6066-11e4-a52e-4f735466cecf'
 
@@ -30,12 +31,17 @@ async function request<T>(
 	origin: string,
 	path: string,
 	init?: RequestInit,
-	timeoutMs = 10_000
+	timeoutMs = 30_000
 ): Promise<T> {
 	const response = await fetch(`${origin}${path}`, {
 		...init,
 		headers: { 'content-type': 'application/json', ...init?.headers },
 		signal: init?.signal ?? AbortSignal.timeout(timeoutMs)
+	}).catch((cause) => {
+		throw new Error(
+			`WebDriver ${init?.method ?? 'GET'} ${path} did not complete within ${timeoutMs}ms`,
+			{ cause }
+		)
 	})
 	const text = await response.text()
 	const body = text
@@ -114,7 +120,15 @@ export class TauriSession {
 		private readonly output: () => string
 	) {}
 
-	static async launch(application: string, driver: string): Promise<TauriSession> {
+	static async launch(
+		application: string,
+		driver = process.env.E2E_TAURI_DRIVER ?? join(homedir(), '.cargo/bin/tauri-driver')
+	): Promise<TauriSession> {
+		const renderingEnv = desktopRenderingEnv(
+			process.env,
+			process.platform,
+			process.env.E2E_TAURI_RENDERING ?? 'software'
+		)
 		const [port, nativePort] = await Promise.all([freePort(), freePort()])
 		const stateDirectory = await mkdtemp(join(tmpdir(), 'aven-e2e-tauri-'))
 		const child = spawn(
@@ -131,7 +145,7 @@ export class TauriSession {
 				detached: true,
 				stdio: ['ignore', 'pipe', 'pipe'],
 				env: {
-					...process.env,
+					...renderingEnv,
 					XDG_CONFIG_HOME: join(stateDirectory, 'config'),
 					XDG_DATA_HOME: join(stateDirectory, 'data'),
 					XDG_CACHE_HOME: join(stateDirectory, 'cache')
@@ -227,9 +241,25 @@ export class TauriSession {
 	}
 
 	async type(element: string, value: string): Promise<void> {
-		await request(this.origin, this.path(`/element/${element}/value`), {
+		// WebKit synthesizes individual key events. Long agent-authored settings
+		// can exceed the ordinary RPC deadline while typing normally.
+		// Give this single command a bounded length-aware deadline; never retry it,
+		// since an uncertain timeout may already have entered part of the value.
+		await request(
+			this.origin,
+			this.path(`/element/${element}/value`),
+			{
+				method: 'POST',
+				body: JSON.stringify({ text: value, value: [...value] })
+			},
+			Math.min(120_000, Math.max(30_000, value.length * 100))
+		)
+	}
+
+	async clear(element: string): Promise<void> {
+		await request(this.origin, this.path(`/element/${element}/clear`), {
 			method: 'POST',
-			body: JSON.stringify({ text: value, value: [...value] })
+			body: '{}'
 		})
 	}
 
@@ -242,6 +272,11 @@ export class TauriSession {
 
 	async bodyText(): Promise<string> {
 		return await this.text(await this.find('body'))
+	}
+	async screenshot(): Promise<string> {
+		// Software-rendered WebKit snapshots can take longer than an ordinary
+		// command on a busy native test host. This is a read, never an action retry.
+		return request(this.origin, this.path('/screenshot'), undefined, 60_000)
 	}
 
 	async waitForBodyText(expected: string, timeoutMs = 20_000): Promise<void> {

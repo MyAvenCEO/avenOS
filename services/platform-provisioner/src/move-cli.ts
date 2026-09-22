@@ -4,8 +4,8 @@ import pg from 'pg'
 import { z } from 'zod'
 import { loadCatalog } from './catalog.js'
 import { provisionerConfigSchema } from './config.js'
-import { queueCustomerReconciliation } from './control.js'
 import { CustomerMovementStore, resumeMovement } from './movement.js'
+import { movementComponents, queueInstalledComponentReconciliation } from './movement-components.js'
 import { PostgresMovementDriver } from './movement-postgres.js'
 import { CustomerDatabaseProvisioner, restoreProvisionerAuthority } from './postgres.js'
 
@@ -211,7 +211,8 @@ async function main(): Promise<void> {
 				[...catalog.values()].map(({ manifest }) => ({
 					componentRef: manifest.componentRef,
 					targetSchemaVersion: manifest.targetSchemaVersion,
-					migrationSetDigest: manifest.migrationSetDigest
+					migrationSetDigest: manifest.migrationSetDigest,
+					requiredByDefault: manifest.requiredByDefault
 				}))
 			)
 			console.info(`New customer environments will use runtime ${destination.id}.`)
@@ -232,20 +233,18 @@ async function main(): Promise<void> {
 					[id]
 				)
 				for (const customer of customers.rows) {
+					const { entries } = await queueInstalledComponentReconciliation(
+						client,
+						customer.id,
+						id,
+						catalog,
+						'all'
+					)
 					await restoreProvisionerAuthority(
 						destination.recoveryDatabaseUrl,
 						decodeURIComponent(new URL(destination.provisioner.CLUSTER_DATABASE_URL).username),
 						customer.id,
-						catalog.values()
-					)
-					await queueCustomerReconciliation(client, customer.id)
-					await client.query(
-						"UPDATE customer_environment_components SET observed_state='pending' WHERE environment_id=$1 AND desired_state='ready'",
-						[customer.id]
-					)
-					await client.query(
-						"UPDATE customer_environments SET observed_state='reconciling' WHERE id=$1",
-						[customer.id]
+						entries
 					)
 				}
 				await client.query('COMMIT')
@@ -271,13 +270,14 @@ async function main(): Promise<void> {
 				])
 			),
 			async prepareDestination(current, signal) {
+				const entries = await movementComponents(pool, current.environment_id, catalog)
 				await restoreProvisionerAuthority(
 					destination.recoveryDatabaseUrl,
 					decodeURIComponent(new URL(destination.provisioner.CLUSTER_DATABASE_URL).username),
 					current.environment_id,
-					catalog.values()
+					entries
 				)
-				for (const entry of catalog.values()) {
+				for (const entry of entries) {
 					signal.throwIfAborted()
 					await provisioner.reconcile(
 						{
@@ -295,7 +295,7 @@ async function main(): Promise<void> {
 				}
 			},
 			async verifyApplication(current, signal) {
-				for (const entry of catalog.values()) {
+				for (const entry of await movementComponents(pool, current.environment_id, catalog)) {
 					signal.throwIfAborted()
 					await provisioner.verify(
 						{

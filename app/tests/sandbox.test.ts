@@ -149,17 +149,17 @@ describe('logic sandbox (0130 slice A)', () => {
 describe('todo logic (0130 slice B — parity + validation)', () => {
 	test('both faces validate and the style passes the whitelist', async () => {
 		const { validateStyleDef, validateViewDef } = await import('@myavenceo/aven-vibes')
-		const { todoBoardView, todoListView } = await import('../src/lib/actors/views/todo/view')
-		const { todoStyle } = await import('../src/lib/actors/views/todo/style')
+		const { todoBoardView, todoListView } = await import('./fixtures/sandbox-tasks/view')
+		const { todoStyle } = await import('./fixtures/sandbox-tasks/style')
 		expect(() => validateViewDef(todoListView)).not.toThrow()
 		expect(() => validateViewDef(todoBoardView)).not.toThrow()
 		expect(() => validateStyleDef(todoStyle)).not.toThrow()
 	})
 
 	test('initState derives the rendered state from source', async () => {
-		const { composeTodoProgram } = await import('../src/lib/actors/views/todo/logic')
+		const { composeTodoProgram } = await import('./fixtures/sandbox-tasks/logic')
 		const { loadMachine } = await import('../src/lib/actors/machine')
-		const todoMachineSource = (await import('../src/lib/actors/todo-machine.pl?raw')).default
+		const todoMachineSource = (await import('./fixtures/sandbox-tasks/machine.pl?raw')).default
 		const todoLogic = composeTodoProgram(loadMachine(todoMachineSource))
 		const session = await createSession(todoLogic)
 		try {
@@ -177,9 +177,9 @@ describe('todo logic (0130 slice B — parity + validation)', () => {
 	})
 
 	test('PARITY: the UI event and the equivalent voice call are byte-identical', async () => {
-		const { composeTodoProgram } = await import('../src/lib/actors/views/todo/logic')
+		const { composeTodoProgram } = await import('./fixtures/sandbox-tasks/logic')
 		const { loadMachine } = await import('../src/lib/actors/machine')
-		const todoMachineSource = (await import('../src/lib/actors/todo-machine.pl?raw')).default
+		const todoMachineSource = (await import('./fixtures/sandbox-tasks/machine.pl?raw')).default
 		const todoLogic = composeTodoProgram(loadMachine(todoMachineSource))
 		const ui = await createSession(todoLogic)
 		const voice = await createSession(todoLogic)
@@ -212,9 +212,9 @@ describe('todo logic (0130 slice B — parity + validation)', () => {
 	})
 
 	test('shape applies model ops through the SAME transitions; garbage changes nothing', async () => {
-		const { composeTodoProgram } = await import('../src/lib/actors/views/todo/logic')
+		const { composeTodoProgram } = await import('./fixtures/sandbox-tasks/logic')
 		const { loadMachine } = await import('../src/lib/actors/machine')
-		const todoMachineSource = (await import('../src/lib/actors/todo-machine.pl?raw')).default
+		const todoMachineSource = (await import('./fixtures/sandbox-tasks/machine.pl?raw')).default
 		const todoLogic = composeTodoProgram(loadMachine(todoMachineSource))
 		const session = await createSession(todoLogic)
 		try {

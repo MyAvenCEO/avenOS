@@ -73,12 +73,26 @@ function entry(overrides: Partial<StudioCatalogEntry> = {}): StudioCatalogEntry 
 		reasonCodes: [],
 		canAuthor: true,
 		canPlan: true,
-		canInvokeNow: false,
+		invocationStatus: 'not-evaluated',
 		...overrides
 	}
 }
 
 describe('catalog-driven v2 composition', () => {
+	test('connects an optional source to a collection without inventing a required input', () => {
+		const existing = {
+			...definition(),
+			inputs: { candidate: { ...source, cardinality: 'optional' as const } }
+		}
+		const composed = composeCatalogOperation(
+			existing,
+			entry({ inputs: [{ name: 'source', ...source, cardinality: 'many', sensitive: false }] })
+		)
+		expect(composed.definition.inputs).toEqual(existing.inputs)
+		expect(composed.definition.steps[0]).toMatchObject({
+			inputs: { source: { kind: 'input', port: 'candidate' } }
+		})
+	})
 	test('turns an operation into a valid reusable Skill without manual wiring', () => {
 		const composed = composeCatalogOperation(definition(), entry())
 		expect(composed.stepId).toBe('transform')

@@ -4,7 +4,9 @@ import {
 	databaseNameForEnvironment,
 	type MembershipRole,
 	membershipAllows,
-	type TenantGrantClaims
+	type TenantGrantClaims,
+	type WorkerPlacementRequest,
+	workerPlacementRequestSchema
 } from '@avenos/aven-customer-contracts'
 import type { IdentityClaims } from '@avenos/aven-identity'
 import type pg from 'pg'
@@ -37,10 +39,51 @@ export class CustomerAuthorizationError extends Error {
 	}
 }
 
-const defaults = customerComponentCatalog
+const defaults = customerComponentCatalog.filter((component) => component.requiredByDefault)
 
 export class CustomerStore {
-	constructor(private readonly pool: pg.Pool) {}
+	constructor(
+		private readonly pool: pg.Pool,
+		private readonly issuer: string
+	) {}
+
+	/** Service-only discovery, fixed to an operator-authorized runtime/component.
+	 * This directory contains no conversations, user identity tokens or work data.
+	 */
+	async workPlacements(raw: WorkerPlacementRequest) {
+		const input = workerPlacementRequestSchema.parse(raw)
+		const result = await this.pool.query<{
+			id: string
+			database_name: string
+			routing_generation: number
+		}>(
+			`SELECT e.id,e.database_name,e.routing_generation FROM customer_environments e
+			JOIN customer_runtimes r ON r.id=e.runtime_id AND r.retired_at IS NULL
+			JOIN customer_environment_components c ON c.environment_id=e.id AND c.component_ref=$2
+			WHERE e.runtime_id=$1 AND e.movement_id IS NULL AND e.desired_state='ready' AND e.observed_state='ready'
+			AND c.desired_state='ready' AND c.observed_state='ready' AND c.routing_generation=e.routing_generation
+			AND ($3::uuid IS NULL OR e.id>$3) AND ($5::uuid IS NULL OR e.id=$5) ORDER BY e.id LIMIT $4`,
+			[
+				input.runtimeId,
+				input.componentRef,
+				input.after ?? null,
+				input.limit + 1,
+				input.environmentId ?? null
+			]
+		)
+		const rows = result.rows.slice(0, input.limit)
+		return {
+			placements: rows.map((row) => ({
+				iss: this.issuer,
+				runtimeId: input.runtimeId,
+				componentRef: input.componentRef,
+				environmentId: row.id,
+				databaseName: row.database_name,
+				routingGeneration: Number(row.routing_generation)
+			})),
+			next: result.rows.length > input.limit ? rows.at(-1)!.id : null
+		}
+	}
 
 	async acceptEntitlement(
 		event: EntitlementEvent
@@ -157,7 +200,9 @@ export class CustomerStore {
 						targetSchemaVersion: row.target_schema_version,
 						migrationSetDigest: row.migration_set_digest
 					}))
-				: (placement?.component_catalog ?? (placement?.runtime_id === 'primary' ? defaults : []))
+				: (
+						placement?.component_catalog ?? (placement?.runtime_id === 'primary' ? defaults : [])
+					).filter((component) => component.requiredByDefault)
 			if (!components.length) throw new Error('default runtime has no component catalog')
 			for (const component of components) {
 				await client.query(
@@ -247,7 +292,7 @@ export class CustomerStore {
 	}
 
 	async authorize(
-		claims: IdentityClaims,
+		claims: Pick<IdentityClaims, 'sub' | 'sid' | 'role'>,
 		environmentId: string,
 		componentRef: string,
 		actions: string[]
@@ -292,7 +337,7 @@ export class CustomerStore {
 				'The customer component is not ready.'
 			)
 		return {
-			iss: process.env.API_PUBLIC_BASE_URL ?? 'https://api.aven.ceo',
+			iss: this.issuer,
 			aud: componentRef,
 			sub: claims.sub,
 			sid: claims.sid,

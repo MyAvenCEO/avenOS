@@ -143,6 +143,75 @@ describeWithStore('Artifact Store runtime port persistence', () => {
 			artifactId: output.artifactId,
 			inputs: [{ role: 'source', ordinal: 0, artifactId: sourceArtifactId }]
 		})
+		expect(await client.references(scopeId, sourceArtifactId)).toEqual({
+			artifactId: sourceArtifactId,
+			references: []
+		})
+		const membershipId = randomUUID()
+		const membership = record(
+			await client.publish(scopeId, membershipId, storeEpoch, {
+				intent: {
+					commandVersion: 1,
+					publicationId: membershipId,
+					scopeId,
+					kind: 'roots',
+					rootActor: { kind: 'service', id: 'service:runtime-conformance' },
+					artifacts: [
+						{
+							localKey: 'members',
+							typeKey: 'actors.port-result',
+							typeVersion: 1,
+							payload: {
+								invocationId: membershipId,
+								port: 'results',
+								cardinality: 'many',
+								members: [
+									{ memberKey: 'first', referenceOrdinal: 0 },
+									{ memberKey: 'second', referenceOrdinal: 1 }
+								]
+							},
+							blob: null,
+							output: null,
+							references: [output.artifactId, sourceArtifactId].map((artifactId, ordinal) => ({
+								role: 'member',
+								ordinal,
+								target: { kind: 'existing', artifactId },
+								attributes: {}
+							}))
+						}
+					],
+					evidence: []
+				},
+				blobAuthorities: {}
+			})
+		)
+		const membershipArtifactId = stringField(
+			record(arrayField(membership, 'artifacts')[0]),
+			'artifactId'
+		)
+		const edges = record(await client.references(scopeId, membershipArtifactId))
+		expect(edges.artifactId).toBe(membershipArtifactId)
+		expect(arrayField(edges, 'references')).toEqual([
+			expect.objectContaining({
+				role: 'member',
+				ordinal: 0,
+				artifactId: output.artifactId,
+				artifactSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+				attributes: {}
+			}),
+			expect.objectContaining({ role: 'member', ordinal: 1, artifactId: sourceArtifactId })
+		])
+		expect(record(await client.artifact(scopeId, membershipArtifactId))).not.toHaveProperty(
+			'references'
+		)
+		await expect(client.references(scopeId, randomUUID())).rejects.toMatchObject({ status: 404 })
+		await expect(client.references(randomUUID(), membershipArtifactId)).rejects.toMatchObject({
+			status: 403
+		})
+		const anonymous = await fetch(
+			`${baseUrl}/v1/scopes/${scopeId}/artifacts/${membershipArtifactId}/references`
+		)
+		expect(anonymous.ok).toBe(false)
 	})
 })
 

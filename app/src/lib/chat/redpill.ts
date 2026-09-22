@@ -5,9 +5,22 @@
  * so this module only turns the byte stream into events.
  */
 
+import {
+	chatGatewayRequest,
+	createGatewayModelStream,
+	withStallWatchdog
+} from '@avenos/chat-engine/gateway'
+import { eventsFromFrame, streamEvents } from '@avenos/chat-engine/stream'
+import { IncompleteModelStream } from '@avenos/chat-engine/stream-errors'
+import { VisibleModelText } from '@avenos/chat-engine/visible-text'
 import { type OpenAiChatCompletionRequest, streamOpenAiChat } from '$lib/models/gateway'
 
-export type ChatRole = 'system' | 'user' | 'assistant' | 'tool'
+export { eventsFromFrame, sanitize, streamEvents } from '@avenos/chat-engine/stream'
+
+import type { ChatMessage, StreamEvent, ToolSpec } from '@avenos/chat-engine/model'
+
+export type { ChatMessage, ChatRole, StreamEvent, ToolSpec } from '@avenos/chat-engine/model'
+export { IncompleteModelStream } from '@avenos/chat-engine/stream-errors'
 
 export interface ToolCall {
 	id: string
@@ -16,136 +29,8 @@ export interface ToolCall {
 	arguments: string
 }
 
-/**
- * One message on the wire — the standard OpenAI shape, tool lane included.
- *
- * It was not always this. Gemma's chat template had no tool role: sending a
- * result back as `role: "tool"` got an empty turn back, so results traveled
- * as user messages and every tool round left a synthetic assistant filler in
- * the history. Qwen imitated exactly that scaffolding — final answers of
- * literal "…", duplicated create calls — because to a model with a real tool
- * lane the workaround itself looks like degenerate conversation. With calls
- * and results in their proper fields, there is nothing fake to imitate.
- */
-export interface ChatMessage {
-	role: ChatRole
-	content: string
-	/** Assistant turns only: the calls made in that turn. */
-	tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]
-	/** Tool turns only: which call this result answers. */
-	tool_call_id?: string
-}
-
-/** A tool as the model is told about it. */
-export interface ToolSpec {
-	name: string
-	description: string
-	parameters: Record<string, unknown>
-}
-
 /** Public gateway model ID for the latency-sensitive voice/chat lane. */
 export const CHAT_MODEL = 'deepseek/deepseek-v4-flash-0731'
-
-export type StreamEvent =
-	| { kind: 'text'; text: string }
-	| { kind: 'finish'; reason: string }
-	| { kind: 'usage'; usage: Record<string, unknown> }
-	/** One fragment of a tool call. Name and arguments arrive in pieces. */
-	| { kind: 'tool'; index: number; id?: string; name?: string; args?: string }
-
-/** Remove leaked chat-template tokens; retain multilingual text and JSON punctuation. */
-const CONTROL_TOKENS = /<\|[^|>]{0,24}\|>/g
-
-export function sanitize(text: string): string {
-	return text.replace(CONTROL_TOKENS, '')
-}
-
-/**
- * Pull events out of one OpenAI-compatible SSE frame.
- *
- * Returns nothing for frames with no payload — the `[DONE]` sentinel, the
- * keep-alives some proxies emit, the opening frame that carries only a role,
- * and anything unparseable. Exported for the tests.
- */
-export function eventsFromFrame(frame: string): StreamEvent[] {
-	const line = frame.split('\n').find((l) => l.startsWith('data:'))
-	if (!line) return []
-
-	const data = line.slice('data:'.length).trim()
-	if (data === '' || data === '[DONE]') return []
-
-	try {
-		const payload = JSON.parse(data)
-		const choice = payload.choices?.[0]
-		const delta = choice?.delta ?? {}
-		const events: StreamEvent[] = []
-		if (payload.usage) events.push({ kind: 'usage', usage: payload.usage })
-		if (typeof delta.content === 'string' && delta.content !== '') {
-			const text = sanitize(delta.content)
-			if (text !== '') events.push({ kind: 'text', text })
-		}
-		for (const call of delta.tool_calls ?? []) {
-			events.push({
-				kind: 'tool',
-				index: call.index ?? 0,
-				id: call.id,
-				name: call.function?.name,
-				// Arguments may contain verbatim source quotes; preserve them byte for byte.
-				args: call.function?.arguments
-			})
-		}
-		if (choice?.finish_reason) events.push({ kind: 'finish', reason: choice.finish_reason })
-		return events
-	} catch {
-		// A frame split across two network chunks would land here. The caller
-		// buffers on the blank-line boundary precisely so that cannot happen, so
-		// anything reaching this point is genuinely malformed and worth skipping
-		// rather than throwing away the rest of the response.
-		return []
-	}
-}
-
-/**
- * Undo the model writing a tool call as code.
- *
- * The OpenAI shape is a bare `name` plus JSON `arguments`. This model
- * intermittently emits the whole call as Python instead — the name arrives as
- * `todo_create(titles=['Mehr Wasser trinken'])` with empty arguments — and
- * every such call failed as an unknown tool, after which the model cheerfully
- * confirmed work it had not done. The paren split recovers the name; the
- * kwargs are rewritten to JSON (quotes, True/False/None) and validated, so a
- * repair that does not parse falls through to the normal unreadable-arguments
- * error rather than inventing arguments.
- */
-export function repairCall(call: ToolCall): ToolCall {
-	const paren = call.name.indexOf('(')
-	if (paren === -1) return call
-
-	const name = call.name.slice(0, paren).trim()
-	// The call may be split across name and arguments mid-token; the paren tail
-	// plus whatever landed in arguments is the full kwargs text.
-	const inner = (call.name.slice(paren) + call.arguments)
-		.trim()
-		.replace(/^\(/, '')
-		.replace(/\)$/, '')
-
-	if (inner.trim() === '') return { ...call, name, arguments: '{}' }
-
-	const json = `{${inner
-		.replace(/(\w+)\s*=/g, '"$1":')
-		.replace(/'/g, '"')
-		.replace(/\bTrue\b/g, 'true')
-		.replace(/\bFalse\b/g, 'false')
-		.replace(/\bNone\b/g, 'null')}}`
-	try {
-		JSON.parse(json)
-		return { ...call, name, arguments: json }
-	} catch {
-		// Not rescuable — keep the recovered name so the runner's complaint is
-		// about the arguments, which is the part that is actually wrong.
-		return { ...call, name, arguments: inner }
-	}
-}
 
 export interface ChatProxyRequest {
 	messages: ChatMessage[]
@@ -158,29 +43,17 @@ export interface ChatProxyRequest {
 }
 
 export function openAiGatewayRequest(input: ChatProxyRequest): OpenAiChatCompletionRequest {
-	const chosen = input.model ?? CHAT_MODEL
-	const maximumTokens = chosen === CHAT_MODEL ? 16_384 : 32_768
-	const requestedTokens =
-		typeof input.max_tokens === 'number'
-			? Math.max(256, Math.min(maximumTokens, input.max_tokens))
-			: maximumTokens
-	return {
-		model: chosen,
-		messages: input.messages,
-		stream: true,
-		...((chosen === CHAT_MODEL || input.thinking !== undefined) && {
-			chat_template_kwargs: { enable_thinking: input.thinking ?? false }
-		}),
-		...(chosen === CHAT_MODEL && { frequency_penalty: 0.3 }),
-		max_tokens: requestedTokens,
-		...(input.json === true && { response_format: { type: 'json_object' } }),
-		...(typeof input.temperature === 'number' && {
-			temperature: Math.max(0, Math.min(2, input.temperature))
-		}),
-		...(input.tools.length > 0 && {
-			tools: input.tools.map((tool) => ({ type: 'function', function: tool }))
-		})
-	}
+	const model = input.model ?? CHAT_MODEL
+	return chatGatewayRequest(
+		{
+			...input,
+			model,
+			...((model === CHAT_MODEL || input.thinking !== undefined) && {
+				thinking: input.thinking ?? false
+			})
+		},
+		model === CHAT_MODEL ? 16_384 : 32_768
+	)
 }
 
 async function openChatStream(
@@ -190,82 +63,10 @@ async function openChatStream(
 	return streamOpenAiChat(openAiGatewayRequest(request), signal)
 }
 
-async function* withStallWatchdog(
-	source: AsyncIterable<string>,
-	stallMs = 75_000
-): AsyncGenerator<string> {
-	const iterator = source[Symbol.asyncIterator]()
-	try {
-		while (true) {
-			let timer: ReturnType<typeof setTimeout> | undefined
-			const stalled = new Promise<never>((_, reject) => {
-				timer = setTimeout(
-					() => reject(new Error(`lane stalled \u2014 no stream frames for ${stallMs / 1000}s`)),
-					stallMs
-				)
-			})
-			let next: IteratorResult<string>
-			try {
-				next = await Promise.race([iterator.next(), stalled])
-			} finally {
-				clearTimeout(timer)
-			}
-			if (next.done) break
-			yield next.value
-		}
-	} finally {
-		await iterator.return?.()
-	}
-}
-
-/**
- * Stream one completion, yielding events as they arrive.
- *
- * Pass an `AbortSignal` to stop mid-sentence; aborting is a normal end to the
- * loop here, not an error the caller has to catch.
- */
-export async function* streamChat(
-	messages: ChatMessage[],
-	tools: ToolSpec[],
-	signal?: AbortSignal,
-	model?: string,
-	options: Pick<ChatProxyRequest, 'json' | 'thinking' | 'max_tokens'> = {}
-): AsyncGenerator<StreamEvent> {
-	const source = await openChatStream(
-		{ messages, tools, ...(model && { model }), ...options },
-		signal
-	)
-	yield* streamEvents(withStallWatchdog(source), signal)
-}
-
-/** Shared SSE decoder: preserve completion status, including across split transport chunks. */
-export async function* streamEvents(
-	source: AsyncIterable<string>,
-	signal?: AbortSignal
-): AsyncGenerator<StreamEvent> {
-	let buffer = ''
-	let finished = false
-	for await (const chunk of source) {
-		buffer += chunk
-
-		// SSE frames are separated by a blank line. Anything after the last
-		// one is a partial frame — keep it in the buffer until its tail turns up.
-		const frames = buffer.split(/\r?\n\r?\n/)
-		buffer = frames.pop() ?? ''
-
-		for (const frame of frames) {
-			for (const event of eventsFromFrame(frame)) {
-				if (event.kind === 'finish') finished = true
-				yield event
-			}
-		}
-	}
-	for (const event of eventsFromFrame(buffer)) {
-		if (event.kind === 'finish') finished = true
-		yield event
-	}
-	if (!finished && !signal?.aborted) throw new Error('Stream ended without completion status')
-}
+export const streamChat = createGatewayModelStream({
+	request: openAiGatewayRequest,
+	open: streamOpenAiChat
+})
 
 /**
  * The design lane: one whole completion from the stronger, slower model.
@@ -348,6 +149,10 @@ export async function complete(
 	// hits the same wall. The design lane is slow work anyway; two spaced
 	// attempts beat failing the whole run because a minute was busy.
 	for (let attempt = 0; ; attempt++) {
+		const controller = new AbortController()
+		const cancel = () => controller.abort()
+		if (options.signal?.aborted) cancel()
+		else options.signal?.addEventListener('abort', cancel, { once: true })
 		try {
 			const source = await openChatStream(
 				{
@@ -358,17 +163,18 @@ export async function complete(
 					...(options.json === true && { json: true }),
 					...(typeof options.maxTokens === 'number' && { max_tokens: options.maxTokens })
 				},
-				options.signal
+				controller.signal
 			)
 			let buffer = ''
 			let text = ''
+			const visible = new VisibleModelText()
 			// Watch both answer and reasoning for repetition loops.
 			let watched = ''
 			let nextCheck = 1024
 			let finishReason = ''
-			for await (const chunk of withStallWatchdog(source)) {
+			for await (const chunk of withStallWatchdog(source, cancel)) {
 				buffer += chunk
-				const frames = buffer.split('\n\n')
+				const frames = buffer.split(/\r?\n\r?\n/)
 				buffer = frames.pop() ?? ''
 				for (const frame of frames) {
 					const line = frame.split('\n').find((l) => l.startsWith('data:'))
@@ -382,16 +188,17 @@ export async function complete(
 							finishReason = choice.finish_reason
 						}
 						if (typeof delta?.content === 'string' && delta.content !== '') {
-							text += delta.content
+							const answer = visible.push(delta.content)
+							text += answer
 							watched += delta.content
-							options.onDelta?.({ text: delta.content })
+							if (answer) options.onDelta?.({ text: answer })
 						}
 						if (typeof delta?.reasoning_content === 'string' && delta.reasoning_content !== '') {
 							watched += delta.reasoning_content
 							options.onDelta?.({ reasoning: delta.reasoning_content })
 						}
 					} catch {
-						// partial frames cannot occur (blank-line buffering); skip junk
+						throw new IncompleteModelStream('The model stream contained an invalid data frame.')
 					}
 				}
 				if (watched.length >= nextCheck) {
@@ -409,6 +216,8 @@ export async function complete(
 						`after ~${Math.round(watched.length / 4)} streamed tokens (reasoning included)`
 				)
 			}
+			if (finishReason !== 'stop')
+				throw new IncompleteModelStream('Completion ended without a successful finish status')
 			return text
 		} catch (error) {
 			const failure = error instanceof Error ? error.message : String(error)
@@ -421,6 +230,9 @@ export async function complete(
 				continue
 			}
 			throw error
+		} finally {
+			cancel()
+			options.signal?.removeEventListener('abort', cancel)
 		}
 	}
 }

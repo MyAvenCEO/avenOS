@@ -1,272 +1,68 @@
 # Skill Studio: discover possibilities and build reusable programs
 
-Status: clean-cut `studio.skill@2` Studio implemented and verified for authorized
-Actor discovery, visual and agent composition, immutable reuse, finite execution,
-artifact preview, provenance, and authenticated-session connections. Advanced
-goal-solving, review, collection, observation branching, and unattended Source
-supervision remain explicit foundations and are never reported as runnable.
+Status: bounded v2 authoring and finite execution are implemented, with email-brief
+as the only production generic Actor installation. Existing document Actors are
+not yet composable through Studio. Draft recovery and broader case-lifecycle gaps
+remain in the [experience review](skill-studio-experience.md#review-findings).
+The first case-derived authoring slice is implemented: attributed evidence,
+immutable case revisions, human confirmation, descriptive ideal steps, structural
+what-if, and case-linked executable drafts. Its limits are in the
+[verification record](skill-studio-verification.md#first-real-case-authoring-slice).
+Temporary execution, automatic capture of execution history, regression examples, scoped
+variants, advanced control steps, and unattended Sources remain proposed work.
 
-The executable acceptance record is
-[Skill Studio verification](skill-studio-verification.md). It is the authority for
-current coverage; older slice notes below are retained only as design history.
+Skill Studio lets a person and their Aven turn useful work into a reusable
+procedure. Start with a real case, work toward an outcome, retain what should
+repeat, and improve the procedure as new cases reveal new needs. A saved Skill can
+run on another case, be called by another Skill, or be explicitly connected to
+future arrivals.
 
-Skill Studio lets a person and their Aven turn available material into useful work.
-Start with any artifact, explore possible outcomes, shape a program together, and
-save it as a Skill. The same Skill can run once, be called by another Skill, or
-handle artifacts arriving from a monitor.
+The [case-to-Skill experience specification](skill-studio-experience.md) owns human
+and agent interaction: persistent case context, generalization, temporary trials,
+refinement through examples, variants, recovery, and acceptance journeys. It
+supersedes the previous Explore/Compose/Activity navigation prescription.
+The [verification record](skill-studio-verification.md) describes current runtime
+coverage; its focused proofs do not establish the full intended user experience.
 
-The central object is a **partially specified program**. Some steps are fixed;
-others describe an outcome and let the solver find the steps. A person can accept,
-replace, or constrain a proposed section. The Aven uses the same structured edits.
-Saving preserves the program and its policy as an immutable artifact.
+This document owns the conceptual program, Source, subscription, and provenance
+model. Its remaining sections specify the target system; unsupported features must
+not be inferred to exist. A partially specified program remains the internal
+composition model: some steps are fixed, others request an outcome from the solver.
+The person sees a procedure grounded in an example case. The Aven uses the same
+revision-checked authoring operations.
+The proposed authoring experience can also retain explicit
+[ideal nodes](skill-studio-experience.md#ideal-nodes-design-the-procedure-before-every-capability-exists)
+for missing capabilities. Their what-if outcomes remain hypothetical and cannot
+enter productive execution until real implementations and evidence replace them.
 
-This document owns the Studio experience and composition contracts.
 [Skills and goal-directed problem solving](actor-skills-and-problem-solving.md)
 owns the vocabulary; the [Actor runtime protocol](actor-runtime-formal-spec.md)
 owns execution and authorization. The
 [Artifact Store core](../services/artifact-store/artifact-store-spec/ARTIFACT-STORE-MINIMAL-CORE.md)
 owns immutable occurrences, composition references, production receipts, and
-publication history. Extensions below must preserve those boundaries.
+publication history. The
+[shared Actor integration specification](skill-studio-shared-runtime.md) owns the
+authorized catalog, generic execution, and all-Actor acceptance gates.
 
-The [shared Actor integration specification](skill-studio-shared-runtime.md) owns
-the wider implementation: one authorized catalog and runtime, general bindings,
-visual Skill previews in the artifact library, and a clean cutover without legacy
-compatibility. Its full all-Actor runtime and continuous Source gates are not met.
+A case can begin with a captured email and its attachments. The person and Aven
+inspect those documents, try a useful route, and retain the successful procedure.
+It can also begin with the person's recollection of work done manually in earlier
+chats, email, or other connected tools. The Aven finds the supporting evidence,
+reconstructs the episode, confirms that it is the intended case, and builds the
+procedure from that confirmed example. The
+[historical-case interaction contract](skill-studio-experience.md#find-a-remembered-case-confirm-it-and-build-from-it)
+defines retrieval scope, source attribution, correction, and historical replay limits.
+The originating case stays linked as an example. Later, a difficult document can
+become a regression example for an improved revision or the starting point for a
+variant with a narrower applicability rule. Source-to-Skill automation is a
+separate decision made after its scope, effects, examples, and host requirements
+are understood.
 
-## Historical slice notes
-
-This section describes the earlier implementation sequence and is superseded by the
-verification record above. It must not be used to infer current versions or readiness.
-
-The native client's **Skills** surface now uses the customer-backed Studio API.
-The native environment rail selects one owned customer environment for the signed-in
-session. Studio requests, Actor runs, drafts, and artifact previews follow that
-selection. Switching clears the in-memory Studio snapshot and selected Skill or
-artifact, discards queued review callbacks captured for the previous customer, then
-reloads the new customer's data. A switch waits while a customer write or review is
-being saved. It does not start a Source or grant unattended access to another
-environment.
-It supports artifact exploration, solver-filled goals, fixed steps, exact nested
-Skill references, revision-checked drafts, immutable `studio.skill@2` publication,
-execution, provenance inspection, and planning-only budget comparisons. The
-Artifact browser can open any selected artifact in Studio. Unknown types remain
-inspectable and report that no installed route is available.
-
-The Artifact library also has a Skills filter and a read-only visual preview of a
-selected saved Skill: its exact artifact revision, named interface, authored route,
-nested child reference, bounded public settings and current limits. Conditional
-branch steps are retained with their branch context instead of disappearing from the
-top-level route. This preview does not run the solver,
-Actor, model or subscription. Exact v2 definitions can be opened and reused by the
-shared editor. File previews continue to use the file viewer.
-
-The next foundation exists in this worktree but is **not production coverage**:
-the registry inventories zero-output methods, the `studio.skill@2` parser checks
-closed named-port definitions and installed method contracts, and a trusted-host
-authorized catalog can be supplied to the shared Studio/agent read boundary.
-Trusted release installation descriptors now reject same-version projector or
-implementation changes and produce a method-level proof/non-proof/incomplete
-inventory without instantiating Actors. A supplied installation digest is included
-in the visible catalog identity. Every page also carries an opaque authority-context
-binding, and the combined native/server view rejects pagination after a subject,
-session or environment change even when the visible contracts happen to be identical.
-The owning Actor packages have not yet exported a complete production installation
-set.
-The document package now exports all 18 built-in method manifests as static data,
-including model-backed entries when a model is unavailable. A test verifies parity
-with constructed Actors without calling the decoder or model. Those methods remain
-contract-incomplete for generic Studio execution; static presence is not a runnable
-installation.
-
-The immutable Store type `studio.skill@2` is also registered with closed step and
-binding variants. A separate v2-only publisher now validates exact child ports,
-public parameter bindings, installed Actor contracts, read authority, and the
-registered Store type digest before an immutable publication. It records child
-references and producer inputs, and a predecessor as a causal input. Idempotent
-replay is tested. The current Studio draft/editor workflow does not call this
-publisher yet, so v2 publication is not available in the native UI.
-A fresh v2 draft repository and authoring orchestrator now provide subject-scoped
-revision CAS, idempotent creation, immutable-head recording, predecessor handoff and
-an explicit committed-artifact result when a draft races after Store commit. They
-reject v1 definitions instead of converting them. These seams are tested but are not
-yet connected to the public Studio command while the native v2 composer is unfinished.
-A shared side-effect-free v2 validator now drives both authoring preview and
-publication admission. It resolves the exact readable transitive child graph and
-checks every nested interface and installed Actor capability, so a malformed
-child-of-child cannot pass preview and fail only during publication. Preview remains
-an authoring-contract check: it does not invoke an Actor or claim runtime readiness.
-The production Runner now exposes those 18 static document methods through the
-authorized Studio catalog as contract-incomplete entries; discover authority is
-customer-scoped, while plan/spawn/invoke remain denied. It does not install generic
-execution adapters, projector/implementation digests, or other client Actor families.
-Studio has an Operations drawer for this authorized inventory, with server-side
-search/ready filtering, named-port cues, and specific blocked status. Browsing it
-never adds a blocked method to a program or executes an Actor.
-The native drawer composes that server view with the live native Actor registry. It
-shows visible Actors separately from their operations, so event-flow Actors such as
-Listener, Speaker and Chat remain inspectable without invented callable methods. The
-agent-facing Studio Actor uses the same combined request path. Client operations
-without complete Store, retry, placement and public-form contracts remain blocked.
-An authorable catalog operation now carries exact Store-backed named ports from its
-matching trusted installation; a manifest or caller-provided digest cannot manufacture
-that state. A shared v2 composer can turn it into a valid step without JSON editing:
-exact preceding outputs connect automatically, unmatched artifacts become named Skill
-inputs, method settings become bounded public parameters, optional inputs remain
-explicit, and protected inputs stay on the trusted host path. The native visual editor
-does not call this composer yet. The agent already exposes the same rule as
-`studio_compose_operation`: it refreshes the authorized catalog, selects an exact
-capability ID and returns the changed definition plus compact wiring cues without
-saving, publishing or executing anything.
-
-The portable executor has a tested live-instance resolver, but still lacks named result publications,
-fenced durable attempts, review, protected ingress and general Store integration.
-The neutral `actors.port-result@1` and `actors.execution-receipt@1` Store types are
-registered as foundations, and a pure named-result checker builds ordered
-membership references, including empty ports and exact reuse. No production Actor
-path publishes these records yet, so this is not a BIND/RUN acceptance claim.
-
-The initial catalog contains document understanding through the existing document
-Actor pipeline and a deterministic brief derived from its committed report.
-Understanding is an observation: a successful run does not promise that the
-document contained an invoice or yielded complete findings. Model assistance is
-off by default. A parent cannot grant a child more model authority than it has.
-
-The agent's `studio_*` tools use the same native transport, server validation and
-draft revisions as the UI. Both can inspect the full definition, change bindings,
-nest Skills, compare plans, publish, run, and control connections. Run cancellation
-and explicit retry retain the existing Actor Runner lifecycle.
-
-The synthetic mailbox commits an RFC 822 email and text attachment. Source-filtered
-and generic artifact subscriptions can start published Skills, including follow-on
-Skills consuming derived outputs. Definitions are immutable artifacts; mutable
-draft heads, activation cursors and delivery intents live in the customer Actor
-schema. Feed progress and delivery intent are committed together. Stable activation
-and invocation identities prevent an acknowledgement retry from becoming a new run;
-two explicit activations or child call sites remain different occurrences.
-Admission records a canonical resolved-program digest. Resume refuses a changed
-resolution rather than silently selecting a new route.
-
-Important limits:
-
-- Dispatch advances only under fresh authenticated requests: while Studio is
-  visible, or when the agent explicitly syncs it. Closing all clients stops
-  dispatch, not persistence. This is **not an unattended mailbox worker**.
-- Sources are synthetic only. Live IMAP/HTTP supervision, mailbox credentials,
-  service identities and durable source leases remain future work.
-- Subscriptions bind one arriving artifact plus explicitly fixed companions.
-  Related-artifact joins, waiting bindings, collections and time windows are not
-  implemented. Enable starts after the current feed high-water mark; pause/resume
-  keeps the cursor and catches up. A delivery batch selected before pause can finish
-  admission; already accepted runs are not cancelled by pause.
-- Review nodes can be saved in drafts but cannot be published for execution.
-  Arbitrary effects, child parameter ports, device execution and saved scenario
-  artifacts are not implemented.
-- Discovery is bounded to the installed catalog and the first 128 shelf/library
-  entries. Any exact artifact ID remains addressable. It does not enumerate every
-  Actor on the bus or claim to exhaust all possible business outcomes.
-- Programs have at most 16 inputs, 32 authored steps, 64 compiled capability calls
-  and eight nesting levels. The call budget counts Studio capability invocations,
-  not internal document Actors, model tokens or elapsed time. Dispatch reads eight
-  complete publications per connection per sync, keeps up to 256 pending deliveries
-  per subject in its admission check, and limits each admission batch to 32.
-  These checks are not a global multi-server resource quota.
-
-The complete synthetic path, duplicate capture, concurrent sync, restart,
-pause/resume, draft conflicts and nested provenance have focused PostgreSQL and
-production Artifact Store tests. Browser tests cover the real Svelte screen with
-only native IPC simulated. See [build and test](operations/build-and-test.md).
-
-## Target design
-
-The remainder describes the intended wider system. Features not listed above
-must not be inferred to be available in the first slice.
-
-## A concrete experience
-
-Select a captured email. The Studio shows its attachments and a few relevant
-possibilities: understand its documents, look for related records, or use an
-existing Skill. Pick an attachment and an outcome. The proposed route shows what
-can be established now and where an observation or decision is still needed.
-
-Keep the document-understanding section and save it inside a reusable Skill.
-Connect its results to a matching Skill that also needs a payment record. Reuse
-the understanding section in another program without copying its internals.
-Connect the first Skill to a mailbox, preview the matching captures, then enable
-future processing under a bounded policy.
-
-If the payment has not arrived, the connection preserves the waiting work. A later
-payment artifact can make it ready. The Aven can explain that waiting state,
-compare alternatives, and propose a change that opens in the person's Studio.
-
-```mermaid
-flowchart LR
-    S["Mailbox Source"] --> E["Committed email and attachments"]
-    E --> T["Subscription and input binding"]
-    T --> P["Skill: process attachment"]
-    P --> C["Child Skill: understand document"]
-    C --> R["Committed document results"]
-    R --> J["Subscription: match related records"]
-    B["Later payment artifact"] --> J
-    J --> M["Finite matching run"]
-    M --> O["Result with provenance"]
-```
-
-The drawing can collapse nested work into one card. Its underlying identities
-remain available. Source capture, admission, and each run have their own lifetime
-and failure state.
-
-## The product surface
-
-The default view keeps the selected material, proposed outcome, and next action
-visible. It does not require a sentence, predicate, JSON, or drawn wire.
-
-| Surface | What stays visible | What opens on demand |
-| --- | --- | --- |
-| Explore | Artifact shelf, useful outcomes, missing ingredients | Evidence, discovery limits, available implementations |
-| Shape | One selected route, compact steps, alternatives | Typed inputs, parameters, nested programs, constraints |
-| Activity | Active Sources, waiting work, runs needing attention | Capture history, attempts, decisions, complete provenance |
-| Artifact library | Skill name, input/output chips, compact program preview | Named ports, nested Skills, effects, exact revision and provenance |
-
-These are views of the same selected work, not disconnected editors. Switching
-between them preserves the draft, selected artifacts, and navigation context.
-An artifact can open directly into Explore; an agent proposal opens directly
-into its draft and changes.
-
-Use restrained color, clear shapes, short labels, and generous spacing. Show a
-few ranked possibilities initially and offer further exploration. The agent can
-page the full authorized search space without putting every node on the canvas.
-Expand one nested section or inspector at a time.
-
-A Skill is previewable directly in Artifacts even though it has no file blob. Its
-preview renders the exact saved definition, not a speculative solver result or a
-mutable draft head. Opening it does not execute, plan, or advance subscriptions.
-The [artifact preview contract](skill-studio-shared-runtime.md#skill-previews-in-the-artifact-library)
-defines cards, expanded views, actions, access checks, and incomplete dependencies.
-
-A route card summarizes inputs, expected result, conditional observations,
-placement, measured or unknown cost, and significant effects. Selecting an
-alternative shows only meaningful differences. Dragging is optional; selection,
-search, and keyboard commands can express every operation.
-
-| Situation | Required response |
-| --- | --- |
-| Empty workspace | Offer recent artifacts, saved Skills, and connected Sources |
-| Search in progress | Preserve the current route; allow editing and cancellation |
-| No usable route | Identify the missing input or constraint and offer a relevant change |
-| Observation required | Show the next observation and possible declared outcomes |
-| Waiting for another artifact | Name the missing input and show what can wake the work |
-| Waiting for a decision | Open the exact question with its evidence |
-| Failed or disconnected | Retain the program and offer a specific recovery action |
-| Draft conflict or stale preview | Show the changed fields or route and preserve both edits |
-
-An unknown or denied capability must not leak through a suggestion. When no next
-action is available, retain the draft and give a short explanation. Do not suggest
-retrying a permanent denial.
-
-Color and motion supplement labels. Keyboard access, focus order, readable
-contrast, screen-reader descriptions, reduced motion, and small-window layouts
-are first-release requirements. Source activation summarizes scope, backlog,
-limits, and effects through compact choices.
+Trials require the isolated execution mode specified in the experience document.
+The logical what-if overlay described below remains non-executing; it is not a
+substitute for exercising a Skill on real data. Productive execution continues to
+require complete Artifact Store provenance. Temporary and hypothetical evidence
+cannot silently become production facts.
 
 ## Shared definitions and records
 

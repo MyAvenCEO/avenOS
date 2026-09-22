@@ -9,6 +9,7 @@ import pg from 'pg'
 import type { ComponentCatalogEntry } from './catalog.js'
 import type { ProvisionerConfig } from './config.js'
 import type { Operation } from './control.js'
+import { grantRuntimeAccess, verifyRuntimeAccess } from './runtime-grants.js'
 
 const literal = (value: string) => `'${value.replaceAll("'", "''")}'`
 
@@ -69,7 +70,7 @@ export async function restoreProvisionerAuthority(
 }
 
 export class CustomerDatabaseProvisioner {
-	private readonly roots: Record<string, string>
+	private readonly roots: Record<string, string | undefined>
 
 	constructor(
 		private readonly clusterUrl: string,
@@ -77,9 +78,15 @@ export class CustomerDatabaseProvisioner {
 	) {
 		this.roots = {
 			'ceo.aven:db-role:intents:api@1': this.config.INTENTS_API_DB_CREDENTIAL_ROOT,
+			'ceo.aven:db-role:productivity:api@1': this.config.PRODUCTIVITY_API_DB_CREDENTIAL_ROOT,
 			'os.aven:db-role:actors:api@1': this.config.ACTOR_API_DB_CREDENTIAL_ROOT,
 			'os.aven:db-role:actors:worker@1': this.config.ACTOR_WORKER_DB_CREDENTIAL_ROOT,
-			'ceo.aven:db-role:artifacts:api@1': this.config.ARTIFACT_API_DB_CREDENTIAL_ROOT
+			'ceo.aven:db-role:artifacts:api@1': this.config.ARTIFACT_API_DB_CREDENTIAL_ROOT,
+			'ceo.aven:db-role:credentials:set@1': this.config.CREDENTIAL_SET_DB_CREDENTIAL_ROOT,
+			'ceo.aven:db-role:credentials:metadata@1': this.config.CREDENTIAL_METADATA_DB_CREDENTIAL_ROOT,
+			'ceo.aven:db-role:credentials:match@1': this.config.CREDENTIAL_MATCH_DB_CREDENTIAL_ROOT,
+			'ceo.aven:db-role:credentials:use-http@1': this.config.CREDENTIAL_HTTP_DB_CREDENTIAL_ROOT,
+			'ceo.aven:db-role:credentials:use-imap@1': this.config.CREDENTIAL_IMAP_DB_CREDENTIAL_ROOT
 		}
 	}
 
@@ -282,6 +289,30 @@ export class CustomerDatabaseProvisioner {
 			await customer.query(
 				`CREATE SCHEMA IF NOT EXISTS ${quoteIdentifier(entry.manifest.schema)} AUTHORIZATION ${quoteIdentifier(owner)}`
 			)
+			if (
+				[
+					'ceo.aven:component:data:credentials@1',
+					'os.aven:component:actors:run-repository@1'
+				].includes(entry.manifest.componentRef)
+			) {
+				// Fixed definer functions independently verify physical customer/generation.
+				const grantClient = await customer.connect()
+				try {
+					await grantClient.query(`SET ROLE ${quoteIdentifier(platformOwner)}`)
+					await grantClient.query(
+						`GRANT USAGE ON SCHEMA aven_platform TO ${quoteIdentifier(owner)}`
+					)
+					await grantClient.query(
+						`GRANT SELECT ON aven_platform.environment_identity TO ${quoteIdentifier(owner)}`
+					)
+					await grantClient.query(
+						`GRANT UPDATE(execution_unsettled) ON aven_platform.environment_identity TO ${quoteIdentifier(owner)}`
+					)
+				} finally {
+					await grantClient.query('RESET ROLE')
+					grantClient.release()
+				}
+			}
 			for (const migration of entry.migrations) {
 				const applied = (
 					await customer.query<{ digest: string }>(
@@ -327,10 +358,8 @@ export class CustomerDatabaseProvisioner {
 						`GRANT USAGE ON SCHEMA ${quoteIdentifier(entry.manifest.schema)} TO ${quoteIdentifier(role)}`
 					)
 					const grants = entry.grants[spec.kind]
-					for (const table of grants?.tables ?? [])
-						await grantsClient.query(
-							`GRANT ${table.privileges.join(',')} ON TABLE ${quoteIdentifier(entry.manifest.schema)}.${quoteIdentifier(table.name)} TO ${quoteIdentifier(role)}`
-						)
+					if (!grants) throw new Error('component runtime grants are absent')
+					await grantRuntimeAccess(grantsClient, entry.manifest.schema, role, grants)
 					await grantsClient.query('RESET ROLE')
 					await grantsClient.query(`SET ROLE ${quoteIdentifier(platformOwner)}`)
 					await grantsClient.query(
@@ -388,8 +417,14 @@ export class CustomerDatabaseProvisioner {
 	}
 
 	async verify(operation: Operation, entry: ComponentCatalogEntry): Promise<void> {
-		const spec = entry.manifest.functionRoles[0]
-		if (!spec) throw new Error('component has no runtime verification role')
+		for (const spec of entry.manifest.functionRoles) await this.verifyRole(operation, entry, spec)
+	}
+
+	private async verifyRole(
+		operation: Operation,
+		entry: ComponentCatalogEntry,
+		spec: CustomerComponentManifest['functionRoles'][number]
+	): Promise<void> {
 		const role = databaseRoleName(operation.environmentId, spec.roleSuffix)
 		const password = deriveDatabasePassword({
 			root: this.roots[spec.kind] ?? '',
@@ -425,11 +460,15 @@ export class CustomerDatabaseProvisioner {
 				Number(installation?.routing_generation) !== operation.routingGeneration
 			)
 				throw new Error('runtime component verification failed')
-			const verifyTable = entry.verifyTable ?? entry.grants[spec.kind]?.tables[0]?.name
-			if (!verifyTable) throw new Error('component has no runtime verification table')
-			await runtime.query(
-				`SELECT 1 FROM ${quoteIdentifier(entry.manifest.schema)}.${quoteIdentifier(verifyTable)} LIMIT 1`
-			)
+			const grants = entry.grants[spec.kind]
+			if (!grants) throw new Error('component runtime grants are absent')
+			if (!entry.verifyTable && !grants.tables.length && !grants.functions?.length)
+				throw new Error('component has no runtime verification target')
+			await verifyRuntimeAccess(runtime, entry.manifest.schema, grants)
+			if (entry.verifyTable)
+				await runtime.query(
+					`SELECT 1 FROM ${quoteIdentifier(entry.manifest.schema)}.${quoteIdentifier(entry.verifyTable)} LIMIT 1`
+				)
 			await expectDenied(runtime, 'CREATE TABLE public.forbidden(id int)')
 		} finally {
 			await runtime.end()

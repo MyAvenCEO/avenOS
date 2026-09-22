@@ -5,15 +5,6 @@ import { AVEN_RUNTIME_AUTHORITY, type ProtocolId, resourceId, type SkillId } fro
 import type { Ingredient } from './planner'
 import type { ExecutionEnvironment } from './registry'
 
-/** Legacy exact-goal wire contract retained for rolling upgrades. */
-export const ACTOR_RUN_PROTOCOL_V1 = resourceId({
-	authority: AVEN_RUNTIME_AUTHORITY,
-	kind: 'protocol',
-	namespace: 'actors',
-	name: 'plan-runner',
-	version: '1'
-})
-
 /** Wire contract shared by desktop and server plan runners. */
 export const ACTOR_RUN_PROTOCOL = resourceId({
 	authority: AVEN_RUNTIME_AUTHORITY,
@@ -70,7 +61,7 @@ export interface PlanRunStartCommand {
 	executionEnvironment: ExecutionEnvironment
 	ingredients: Ingredient[]
 	goals: Predicate[]
-	/** Absent preserves version 1 exact-goal behavior. */
+	/** Defaults to exact-goal completion when omitted. */
 	goalSpec?: PlanRunGoalSpec
 	parameters: Record<string, unknown>
 }
@@ -114,6 +105,8 @@ export interface PlanRunContinuation {
 	schema: string
 	subject?: string
 	prompt: string
+	/** Exact runner-owned review, never approval asserted by a continuation value. */
+	review?: { id: string; revision: number; subjectDigest: string }
 	/** Secrets are never persisted. Only this request metadata is durable. */
 	persistence: 'metadata-only' | 'artifact'
 	state: 'open' | 'postponed' | 'resolved' | 'cancelled'
@@ -157,6 +150,12 @@ export interface PlanRunExecutionResult {
 }
 
 export interface PlanRunExecutionContext {
+	/** Server-owned execution fence. Never supplied by or persisted from a command. */
+	lease?: {
+		runId: string
+		ownerId: string
+		assertActive(): Promise<void>
+	}
 	/** Live cancellation/deadline; never persisted. */
 	signal?: AbortSignal
 	/** Persist only non-secret presentation data. This does not authorize an effect or commit a step. */

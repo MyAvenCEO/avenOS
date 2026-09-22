@@ -91,7 +91,7 @@ async function executeFixture(
 	add(firstEmail, 'studio.email', 1, { subject: 'First', from: 'first@example.test' })
 	if (options.twoSteps)
 		add(secondEmail, 'studio.email', 1, { subject: 'Second', from: 'second@example.test' })
-	add(skillId, 'studio.skill', 2, definition)
+	add(skillId, 'studio.skill', 3, definition)
 	add(activationId, 'studio.activation', 2, {
 		contractVersion: 2,
 		activationId: randomUUID(),
@@ -107,7 +107,12 @@ async function executeFixture(
 	const publications: any[] = []
 	const client: any = {
 		context: async () => ({ storeEpoch: epoch }),
+		publication: async () => null,
 		artifact: async (_scope: string, id: string) => structuredClone(records.get(id)),
+		references: async (_scope: string, id: string) => ({
+			artifactId: id,
+			references: structuredClone(records.get(id)?.references ?? [])
+		}),
 		publish: async (_scope: string, publicationId: string, _epoch: string, body: any) => {
 			publications.push(structuredClone(body.intent))
 			const artifacts = body.intent.artifacts.map((draft: any) => {
@@ -120,6 +125,18 @@ async function executeFixture(
 				)
 				return { localKey: draft.localKey, artifactId: committed.artifactId }
 			})
+			for (const draft of body.intent.artifacts) {
+				const committed = records.get(
+					artifacts.find((a: any) => a.localKey === draft.localKey).artifactId
+				)
+				committed.references = draft.references.map((r: any) => ({
+					...r,
+					artifactId:
+						r.target.kind === 'local'
+							? artifacts.find((a: any) => a.localKey === r.target.localKey).artifactId
+							: r.target.artifactId
+				}))
+			}
 			if (options.cancelAfterFirst && publications.length === 1)
 				controller.abort(new Error('cancelled after first publication'))
 			return { publicationId, artifacts }
@@ -257,7 +274,7 @@ describe('Studio v2 execution safety', () => {
 					scopeId: scope,
 					artifactSha256: 'a'.repeat(64),
 					typeKey: 'studio.skill',
-					typeVersion: 2,
+					typeVersion: 3,
 					payload: definition
 				}
 			],
@@ -278,7 +295,10 @@ describe('Studio v2 execution safety', () => {
 			get: async (id: string) => structuredClone(rows.get(id)),
 			client: {}
 		}
-		const query = async () => ({ rows: [], rowCount: 0 })
+		const query = async (sql: string) =>
+			sql.includes('pg_try_advisory_lock')
+				? { rows: [{ acquired: true }], rowCount: 1 }
+				: { rows: [], rowCount: 0 }
 		const database: any = { query, connect: async () => ({ query, release() {} }) }
 		const service = new StudioService(database, artifacts, {} as any)
 		await expect(
@@ -288,6 +308,8 @@ describe('Studio v2 execution safety', () => {
 					data: {
 						id: randomUUID(),
 						name: 'Loop',
+						collection: { mode: 'each', initial: [] },
+						origin: null,
 						skillArtifactId: skillId,
 						sourceArtifactId: null,
 						inputPort: 'trigger',
@@ -357,7 +379,7 @@ describe('Studio v2 execution safety', () => {
 					artifactId: skillId,
 					scopeId: scope,
 					typeKey: 'studio.skill',
-					typeVersion: 2,
+					typeVersion: 3,
 					payload: definition
 				}
 			],
@@ -377,7 +399,10 @@ describe('Studio v2 execution safety', () => {
 			get: async (id: string) => structuredClone(rows.get(id)),
 			client: {}
 		}
-		const query = async () => ({ rows: [], rowCount: 0 })
+		const query = async (sql: string) =>
+			sql.includes('pg_try_advisory_lock')
+				? { rows: [{ acquired: true }], rowCount: 1 }
+				: { rows: [], rowCount: 0 }
 		const database: any = { query, connect: async () => ({ query, release() {} }) }
 		const service = new StudioService(database, artifacts, {} as any)
 		await expect(
@@ -387,6 +412,8 @@ describe('Studio v2 execution safety', () => {
 					data: {
 						id: randomUUID(),
 						name: 'Activation loop',
+						collection: { mode: 'each', initial: [] },
+						origin: null,
 						skillArtifactId: skillId,
 						sourceArtifactId: null,
 						inputPort: 'trigger',

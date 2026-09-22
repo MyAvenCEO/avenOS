@@ -45,6 +45,18 @@ Update the owning documentation in the same change whenever you modify:
 Do not “refresh” a date without verifying the procedure. Prefer removing a stale claim
 to preserving it with a caveat.
 
+## Test-data privacy
+
+Customer conversations and documents may be inspected only for an authorized
+diagnosis. Never copy their contents, identifiers, filenames, distinctive amounts,
+dates, routes, or combinations of values into tests, fixtures, model prompts,
+screenshots, or test evidence. Reproduce the behavior using independently invented
+scenarios, not renamed or lightly anonymized customer records. Keep diagnostic
+inspection separate from the test corpus. Use isolated test accounts and databases;
+never replay customer history to obtain test evidence. Public specimens require
+documented public provenance. Follow the test-data rules in
+`docs/operations/build-and-test.md`.
+
 ## Required validation
 
 For documentation-only work, run:

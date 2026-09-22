@@ -1,6 +1,6 @@
 import type { StudioCatalogEntry, StudioCatalogPage } from '@avenos/actors'
+import { composeAuthorizedStudioOperation } from '@avenos/actors/studio/compose-authorized'
 import { describe, expect, test } from 'vitest'
-import { composeAuthorizedStudioOperation } from '../src/lib/skills/studio-compose'
 
 const capabilityId = 'ceo.aven:capability:fixture:inspect@1'
 const source = {
@@ -34,7 +34,7 @@ const entry: StudioCatalogEntry = {
 	reasonCodes: [],
 	canAuthor: true,
 	canPlan: true,
-	canInvokeNow: false
+	invocationStatus: 'not-evaluated'
 }
 const definition = {
 	version: 2,

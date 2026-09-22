@@ -2,15 +2,25 @@
 set -eu
 
 proof=${1:-full}
-case "$proof" in full|native) ;; *) echo 'Usage: run.sh [full|native]' >&2; exit 64 ;; esac
+case "$proof" in full|native|live|background) ;; *) echo 'Usage: run.sh [full|native|live|background]' >&2; exit 64 ;; esac
+case "$proof" in live|background) E2E_LIVE_CHAT=true ;; *) E2E_LIVE_CHAT=false ;; esac
+if [ "$proof" = background ]; then E2E_BACKGROUND_CHAT=true; else E2E_BACKGROUND_CHAT=false; fi
+export E2E_LIVE_CHAT E2E_BACKGROUND_CHAT
 
 root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
+bun "$root/services/aven-api/node_modules/typescript/bin/tsc" --project "$root/deploy/e2e/tsconfig.json"
 compose="$root/deploy/e2e/docker-compose.yml"
 project=${COMPOSE_PROJECT_NAME:-aven-e2e-$$}
+case "$project" in aven-e2e-?*) ;; *) echo 'Use a disposable aven-e2e-* project, never the local customer stack.' >&2; exit 64 ;; esac
+case "$project" in *[!a-z0-9-]*) echo 'The E2E project may contain only lowercase letters, digits and hyphens.' >&2; exit 64 ;; esac
+E2E_PROJECT_NAME=$project
+export E2E_PROJECT_NAME
 built_images=""
 key_dir=$(mktemp -d)
 hardening="$key_dir/hardening.json"
 bun "$root/deploy/e2e/render-hardening.ts" "$hardening"
+background="$key_dir/background.json"
+bun "$root/deploy/e2e/background-composition.ts" "$background"
 openssl genpkey -algorithm ED25519 -out "$key_dir/tenant-private.pem" >/dev/null 2>&1
 openssl pkey -in "$key_dir/tenant-private.pem" -pubout -out "$key_dir/tenant-public.pem" >/dev/null 2>&1
 E2E_TENANT_PRIVATE_KEY=$(sed ':a;N;$!ba;s/\n/\\n/g' "$key_dir/tenant-private.pem")
@@ -40,19 +50,19 @@ export E2E_DATABASE_HOST_PORT E2E_STATIC_HOST_PORT E2E_MAILPIT_HOST_PORT
 export E2E_ARTIFACT_STORE_HOST_PORT
 
 # Only explicit provider configuration may send repository OCR fixtures outside
-# this disposable stack. Chat/voice remains deterministic in either lane.
+# this disposable stack. The live lane requires real Qwen for chat and routing too.
 E2E_LLM_MODELS_JSON=$(bun "$root/deploy/e2e/llm-catalog.ts")
 export E2E_LLM_MODELS_JSON
 
 teardown() {
-  docker compose --project-name "$project" --file "$compose" --file "$hardening" --profile hosting down --volumes --remove-orphans >/dev/null 2>&1 || true
+  docker compose --project-name "$project" --file "$compose" --file "$hardening" --file "$background" --profile hosting down --volumes --remove-orphans >/dev/null 2>&1 || true
 }
 finish() {
   status=$?
   trap - EXIT INT TERM
   if [ "$status" -ne 0 ]; then
-    docker compose --project-name "$project" --file "$compose" --file "$hardening" --profile hosting ps --all || true
-    docker compose --project-name "$project" --file "$compose" --file "$hardening" --profile hosting logs --no-color --tail=200 || true
+    docker compose --project-name "$project" --file "$compose" --file "$hardening" --file "$background" --profile hosting ps --all || true
+    docker compose --project-name "$project" --file "$compose" --file "$hardening" --file "$background" --profile hosting logs --no-color --tail=200 || true
   fi
   teardown
   rm -rf "$key_dir"
@@ -64,6 +74,11 @@ finish() {
   exit "$status"
 }
 trap finish EXIT INT TERM
+
+# Keep failed synthetic observations when the next fresh-stack attempt starts.
+E2E_EVIDENCE_DIR=$(mktemp -d /tmp/aven-platform-proof.XXXXXX)
+export E2E_EVIDENCE_DIR
+echo "E2E evidence: $E2E_EVIDENCE_DIR"
 
 teardown
 
@@ -139,13 +154,15 @@ fi
 # Registry access is needed by image builds only. Customer fixtures and tests receive no token.
 unset NODE_AUTH_TOKEN
 
-docker compose --project-name "$project" --file "$compose" --file "$hardening" config --quiet
+bun "$root/deploy/e2e/pdf-render.ts" "${E2E_ACTOR_RUNNER_IMAGE:-aven-e2e-actor-runner:local}"
+
+docker compose --project-name "$project" --file "$compose" --file "$hardening" --file "$background" config --quiet
 if [ -n "$built_images" ]; then
   # Internally generated, whitespace-free image names; deliberate word splitting.
   # shellcheck disable=SC2086
   bash "$root/scripts/scan-container-os.sh" $built_images
 fi
-docker compose --project-name "$project" --file "$compose" --file "$hardening" --profile hosting up --detach --wait --wait-timeout 360
+docker compose --project-name "$project" --file "$compose" --file "$hardening" --file "$background" --profile hosting up --detach --wait --wait-timeout 360
 
 E2E_SILENT_VOICE_FIXTURE=$(cargo run --quiet --locked \
   --manifest-path "$root/libs/aven-voice-runtime/Cargo.toml" \
@@ -157,11 +174,22 @@ E2E_SILENT_DUPLEX_FIXTURE=$(cargo run --quiet --locked \
   --example silent_duplex_conversation)
 export E2E_SILENT_VOICE_FIXTURE E2E_SILENT_DUPLEX_FIXTURE
 
+if [ "$proof" = full ]; then
+  # Real Store/SQL resource regressions use only this run's disposable cluster.
+  for probe in artifact-store-memory artifact-store-pools; do
+    TEST_TASK_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \
+    TEST_ARTIFACT_STORE_IMAGE="${E2E_ARTIFACT_STORE_IMAGE:-aven-e2e-artifact-store:local}" \
+      bun "$root/deploy/e2e/$probe.ts"
+  done
+fi
+
+if [ "$E2E_LIVE_CHAT" != true ]; then
 TEST_ACTOR_RUNNER_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \
 TEST_ARTIFACT_STORE_BASE_URL="http://127.0.0.1:$E2E_ARTIFACT_STORE_HOST_PORT" \
 TEST_ARTIFACT_STORE_BEARER_TOKEN="artifact-store-runtime-conformance-token" \
 TEST_ARTIFACT_STORE_SCOPE_ID="99999999-9999-4999-8999-999999999999" \
 bun run --cwd "$root/services/actor-runner" test:e2e:persistence
+fi
 
 (
   cd "$root/services/checkout"
@@ -188,7 +216,7 @@ E2E_SILENT_VOICE_FIXTURE="$E2E_SILENT_VOICE_FIXTURE" \
 E2E_SILENT_DUPLEX_FIXTURE="$E2E_SILENT_DUPLEX_FIXTURE" \
 bunx playwright test --config "$root/deploy/e2e/playwright.config.ts"
 
-docker compose --project-name "$project" --file "$compose" --file "$hardening" ps
+docker compose --project-name "$project" --file "$compose" --file "$hardening" --file "$background" ps
 if [ "$proof" = full ]; then
   bun run --cwd "$root" test:runtime-install
 fi

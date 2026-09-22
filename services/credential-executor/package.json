@@ -1,0 +1,30 @@
+{
+	"name": "@avenos/credential-executor",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"build": "bun build src/index.ts --target=bun --outdir=build",
+		"start": "bun src/index.ts",
+		"check": "tsc --noEmit",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@avenos/aven-customer-contracts": "workspace:*",
+		"@avenos/aven-customer-runtime": "workspace:*",
+		"@avenos/aven-identity": "workspace:*",
+		"@avenos/http-boundary": "workspace:*",
+		"@avenos/artifact-store": "workspace:*",
+		"@avenos/credential-storage": "workspace:*",
+		"@avenos/http-resources": "workspace:*",
+		"@avenos/mail": "workspace:*",
+		"imapflow": "2.0.5",
+		"zod": "4.4.3"
+	},
+	"devDependencies": {
+		"@types/bun": "1.3.13",
+		"@types/node": "24.10.13",
+		"typescript": "6.0.3",
+		"vitest": "4.1.11"
+	}
+}

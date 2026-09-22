@@ -21,8 +21,8 @@ describe('local LLM catalog', () => {
 					'text-generation',
 					'streaming',
 					'tool-calling',
-					'vision',
-					'structured-output'
+					'structured-output',
+					'vision'
 				]
 			}),
 			expect.objectContaining({
@@ -39,6 +39,7 @@ describe('local LLM catalog', () => {
 			profile: string
 		}>
 		expect(chat.capabilities).not.toContain('vision')
+		expect(chat.capabilities).toContain('structured-output')
 		expect(chat.profile).toBe('generic-json')
 	})
 

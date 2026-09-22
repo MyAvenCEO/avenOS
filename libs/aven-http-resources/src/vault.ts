@@ -78,6 +78,7 @@ export type CredentialBinding = z.infer<typeof bindingSchema>
 
 export interface RedactedCredentialBinding {
 	bindingRef: string
+	revision: number
 	label: string
 	credentialRef: string
 	placements: Array<'local' | 'server'>
@@ -122,9 +123,29 @@ export type VaultMatch =
 			secretVersion: number
 	  }
 
+/** Pin the authorized identity AND versions, not just a reusable reference. */
+export interface CredentialSelection {
+	bindingRef: string
+	bindingRevision: number
+	credentialRef: string
+	secretVersion: number
+}
+
+export function credentialSelection(match: VaultMatch): CredentialSelection | null {
+	return match.outcome === 'matched'
+		? {
+				bindingRef: match.binding.bindingRef,
+				bindingRevision: match.binding.revision,
+				credentialRef: match.credentialRef,
+				secretVersion: match.secretVersion
+			}
+		: null
+}
+
 /** Host-only value. Callers must pass it directly to a trusted transport and discard it. */
 export interface RequestScopedCredentialAttachment {
 	bindingRef: string
+	bindingRevision: number
 	credentialRef: string
 	secretVersion: number
 	requestDigest: string
@@ -135,7 +156,7 @@ export interface RequestScopedCredentialAttachment {
 export interface SessionVaultClient {
 	match(request: HttpRequestArtifact, context: VaultSessionContext): Promise<VaultMatch>
 	resolveForUse(input: {
-		bindingRef: string
+		selection: CredentialSelection
 		request: HttpRequestArtifact
 		requestDigest: string
 		runId: string
@@ -174,7 +195,7 @@ interface StoredCredential extends VaultCredentialMetadata {
 
 interface VaultState {
 	credentials: Map<string, StoredCredential>
-	bindings: Map<string, CredentialBinding>
+	bindings: Map<string, CredentialBinding & { revision: number }>
 }
 
 /**
@@ -255,8 +276,9 @@ class MemoryVaultAdministration implements VaultAdministration {
 		if (existing && existing.ownerSubjectId !== binding.ownerSubjectId) {
 			throw new VaultError('VAULT_BINDING_NOT_FOUND')
 		}
-		this.state.bindings.set(binding.bindingRef, binding)
-		return redactedBinding(binding)
+		const saved = { ...binding, revision: (existing?.revision ?? 0) + 1 }
+		this.state.bindings.set(binding.bindingRef, saved)
+		return redactedBinding(saved)
 	}
 
 	async revokeBinding(
@@ -265,6 +287,7 @@ class MemoryVaultAdministration implements VaultAdministration {
 	): Promise<RedactedCredentialBinding> {
 		const binding = ownedBinding(this.state, ownerSubjectId, bindingRef)
 		binding.enabled = false
+		binding.revision += 1
 		return redactedBinding(binding)
 	}
 
@@ -290,6 +313,10 @@ class MemorySessionVault implements SessionVaultClient {
 	) {}
 
 	async match(request: HttpRequestArtifact, context: VaultSessionContext): Promise<VaultMatch> {
+		return this.currentMatch(request, context)
+	}
+
+	private currentMatch(request: HttpRequestArtifact, context: VaultSessionContext): VaultMatch {
 		assertSessionContext(context, this.tenantId)
 		const normalized = parseHttpRequestArtifact(request, {
 			allowHttpOrigins: request.url.startsWith('http:') ? [new URL(request.url).origin] : []
@@ -320,7 +347,7 @@ class MemorySessionVault implements SessionVaultClient {
 	}
 
 	async resolveForUse(input: {
-		bindingRef: string
+		selection: CredentialSelection
 		request: HttpRequestArtifact
 		requestDigest: string
 		runId: string
@@ -336,16 +363,24 @@ class MemorySessionVault implements SessionVaultClient {
 		})
 		const digest = httpRequestDigest(request)
 		if (digest !== input.requestDigest) throw new VaultError('VAULT_REQUEST_DIGEST_MISMATCH')
-		const match = await this.match(request, input.context)
-		if (match.outcome !== 'matched' || match.binding.bindingRef !== input.bindingRef) {
+		// This fixture's claim is synchronous with the current-state check. The
+		// durable adapter must serialize the equivalent check and use claim in SQL.
+		const match = this.currentMatch(request, input.context)
+		const selected = credentialSelection(match)
+		if (
+			!selected ||
+			selected.bindingRef !== input.selection.bindingRef ||
+			selected.bindingRevision !== input.selection.bindingRevision ||
+			selected.credentialRef !== input.selection.credentialRef ||
+			selected.secretVersion !== input.selection.secretVersion
+		) {
 			throw new VaultError('VAULT_BINDING_NOT_USABLE')
 		}
-		const credential = ownedCredential(this.state, input.context.subjectId, match.credentialRef)
+		if (match.outcome !== 'matched') throw new VaultError('VAULT_BINDING_NOT_USABLE')
+		const credential = ownedCredential(this.state, input.context.subjectId, selected.credentialRef)
 		if (!credential.enabled) throw new VaultError('VAULT_CREDENTIAL_REVOKED')
 		return {
-			bindingRef: match.binding.bindingRef,
-			credentialRef: credential.credentialRef,
-			secretVersion: credential.version,
+			...selected,
 			requestDigest: digest,
 			rule: structuredClone(match.binding.attachment),
 			secret: credential.secret
@@ -357,7 +392,7 @@ function matchingBindings(
 	state: VaultState,
 	request: HttpRequestArtifact,
 	context: VaultSessionContext
-): Array<{ binding: CredentialBinding; score: number }> {
+): Array<{ binding: CredentialBinding & { revision: number }; score: number }> {
 	if (request.authentication.mode === 'anonymous') return []
 	const url = new URL(request.url)
 	const purpose = request.authentication.purpose
@@ -403,7 +438,8 @@ function pathMatches(prefix: string, pathname: string): boolean {
 	return pathname === prefix || pathname.startsWith(`${prefix}/`)
 }
 
-function normalizeBinding(input: CredentialBinding): CredentialBinding {
+/** Shared policy validation for trusted persistent adapters and the memory fixture. */
+export function normalizeBinding(input: CredentialBinding): CredentialBinding {
 	const parsed = bindingSchema.parse(input)
 	const host = parsed.host.value.toLowerCase().replace(/^\*\./, '')
 	if (host.includes(':') || host.endsWith('.')) throw new VaultError('VAULT_BINDING_HOST_INVALID')
@@ -439,9 +475,12 @@ function normalizeAttachment(attachment: CredentialAttachmentRule): CredentialAt
 	return { ...attachment, name }
 }
 
-function redactedBinding(binding: CredentialBinding): RedactedCredentialBinding {
+function redactedBinding(
+	binding: CredentialBinding & { revision: number }
+): RedactedCredentialBinding {
 	return {
 		bindingRef: binding.bindingRef,
+		revision: binding.revision,
 		label: binding.label,
 		credentialRef: binding.credentialRef,
 		placements: [...binding.placements],
@@ -485,7 +524,7 @@ function ownedBinding(
 	state: VaultState,
 	ownerSubjectId: string,
 	bindingRef: string
-): CredentialBinding {
+): CredentialBinding & { revision: number } {
 	const subject = z.uuid().parse(ownerSubjectId)
 	const reference = z.uuid().parse(bindingRef)
 	const binding = state.bindings.get(reference)
@@ -499,6 +538,7 @@ function assertSessionContext(context: VaultSessionContext, tenantId: string): v
 	if (requestedTenantId !== tenantId) throw new VaultError('VAULT_TENANT_MISMATCH')
 	z.uuid().parse(context.subjectId)
 	z.string().min(1).max(256).parse(context.sessionId)
+	z.enum(['local', 'server']).parse(context.executionEnvironment)
 }
 
 function secretValue(value: string): string {

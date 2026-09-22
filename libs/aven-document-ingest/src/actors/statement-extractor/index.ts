@@ -21,7 +21,13 @@ export const STATEMENT_EXTRACTOR_MANIFEST = manifest(
 	'Statement extractor',
 	'Extracts a grounded account statement or payment receipt candidate.',
 	'document_extract_statement',
-	['ceo.aven.docs.file(F)', 'ceo.aven.docs.document_classification(F, C)'],
+	[
+		'ceo.aven.docs.file(F)',
+		'ceo.aven.docs.document_classification(F, C)',
+		'ceo.aven.docs.page(F, P)',
+		'ceo.aven.docs.extracted_text(F, P, T)',
+		'ceo.aven.docs.text_layout(F, P, L)'
+	],
 	['ceo.aven.bookkeeping.statement_candidate(F, S)']
 )
 

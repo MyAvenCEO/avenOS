@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
+import { parseReview, ResearchRecord, repetitiveTail } from '@avenos/chat-engine/research'
 import { type ChatMessage, eventsFromFrame, type StreamEvent } from '../src/lib/chat/redpill'
-import { parseReview, ResearchRecord, repetitiveTail } from '../src/lib/chat/research'
 
 let Chat: typeof import('../src/lib/chat/chat.svelte').Chat
 beforeAll(async () => {
@@ -8,6 +8,16 @@ beforeAll(async () => {
 	Chat = (await import('../src/lib/chat/chat.svelte')).Chat
 })
 const textSpec = { name: 'workspace_read', description: 'read', parameters: { type: 'object' } }
+// Protocol fixtures only; model quality is exercised by the live workday/review lanes.
+const requestChecks = Object.fromEntries(
+	['language', 'timeScope', 'outcome', 'presentation'].map((key) => [
+		key,
+		{
+			reason: 'This protocol fixture has no additional request-wide error.',
+			verdict: 'pass'
+		}
+	])
+)
 const source = {
 	ok: true,
 	recordType: 'document',
@@ -71,22 +81,64 @@ test('working record refuses invented sources and quotes; retains uncertainty', 
 	expect(messages[1].content).toContain(item.requirement)
 	expect(JSON.parse(messages[1].content).checklist[0].item).toBe(0)
 })
-test('calculator uses exact signed integers without code execution or currency mixing', () => {
+test('calculator receipts reach the reviewer; an empty checklist is not calculation proof', () => {
 	const r = new ResearchRecord()
-	expect(r.run('calculate', { currency: 'EUR', amounts: [32000, -18000, -18000] })).toEqual({
-		ok: true,
-		currency: 'EUR',
-		totalMinor: '-4000'
-	})
-	expect(r.run('calculate', { currency: 'EUR', amounts: [1.5] }).ok).toBe(false)
-	expect(r.run('calculate', { currency: 'EUR/USD', amounts: [1] }).ok).toBe(false)
-	expect(
-		r.run('calculate', {
-			currency: 'EUR',
-			amounts: [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]
-		}).totalMinor
-	).toBe('18014398509481982')
+	r.run('research_record', { items: [] })
+	expect(r.toolOutcomes).toHaveLength(0)
+	r.observe(
+		'calculate',
+		JSON.stringify({
+			ok: true,
+			outputs: { calculation: { result: { value: '18000', unit: 'currency:USD' }, exact: true } }
+		}),
+		JSON.stringify({ operation: 'multiply' })
+	)
+	expect(r.needsReview).toBe(true)
+	expect(r.toolOutcomes).toHaveLength(1)
+	expect(r.verifierMessages('Multiply', '18000 USD')[1].content).toContain('currency:USD')
 	expect(() => parseReview('{"verdict":"pass","issues":["wrong"]}')).toThrow()
+})
+test('knowledge observations support review without becoming primary-source quotations', () => {
+	const record = new ResearchRecord()
+	record.observe(
+		'knowledge_query',
+		JSON.stringify({
+			ok: true,
+			outputs: {
+				result: {
+					query: { collection: 'invoices', view: 'summary' },
+					data: {
+						groups: [
+							{
+								currency: 'EUR',
+								sumMinor: '10000',
+								sumMajor: { value: '100.00', unit: 'currency:EUR' }
+							}
+						],
+						snapshotSequence: 24
+					}
+				}
+			}
+		})
+	)
+	expect(record.sources.size).toBe(0)
+	expect(record.needsReview).toBe(true)
+	expect(
+		record.verifierMessages('Reported total?', '100 EUR recorded; payment unknown')[1].content
+	).toContain('100.00')
+	expect(record.run('research_record', { items: [] }).ok).toBe(true)
+	expect(
+		record.run('research_record', {
+			items: [
+				{
+					requirement: 'Total?',
+					finding: '100 EUR',
+					status: 'supported',
+					sources: [{ sourceId: 'invented-document', quote: '100 EUR' }]
+				}
+			]
+		}).ok
+	).toBe(false)
 })
 describe('completion and answer verification', () => {
 	test('truncated tool arguments never execute; retry is bounded', async () => {
@@ -139,7 +191,11 @@ describe('completion and answer verification', () => {
 				run: () => ({ record: JSON.stringify(source), wire: JSON.stringify(source) })
 			},
 			async function* (messages: ChatMessage[]): AsyncGenerator<StreamEvent> {
-				if (messages[0].content.startsWith('You verify')) {
+				if (
+					messages[1]?.role === 'user' &&
+					messages[1].content.startsWith('{') &&
+					'draft' in JSON.parse(messages[1].content)
+				) {
 					checks++
 					yield {
 						kind: 'text',
@@ -147,6 +203,7 @@ describe('completion and answer verification', () => {
 							checks === 1
 								? {
 										verdict: 'revise',
+										requestChecks,
 										issues: ['Credit is pending, not paid.'],
 										checks: [
 											{ item: 0, verdict: 'revise', reason: 'Source says the credit is pending.' }
@@ -154,6 +211,7 @@ describe('completion and answer verification', () => {
 									}
 								: {
 										verdict: 'pass',
+										requestChecks,
 										issues: [],
 										checks: [
 											{ item: 0, verdict: 'pass', reason: 'Source and answer both say pending.' }
@@ -207,7 +265,11 @@ describe('completion and answer verification', () => {
 					run: () => ({ record: JSON.stringify(source), wire: JSON.stringify(source) })
 				},
 				async function* (messages): AsyncGenerator<StreamEvent> {
-					if (messages[0].content.startsWith('You verify')) {
+					if (
+						messages[1]?.role === 'user' &&
+						messages[1].content.startsWith('{') &&
+						'draft' in JSON.parse(messages[1].content)
+					) {
 						yield {
 							kind: 'text',
 							text:
@@ -215,6 +277,7 @@ describe('completion and answer verification', () => {
 									? 'invalid review'
 									: JSON.stringify({
 											verdict: 'pass',
+											requestChecks,
 											issues: [],
 											checks: [
 												{ item: 0, verdict: 'pass', reason: 'The source supports the answer.' }
@@ -272,8 +335,10 @@ describe('completion and answer verification', () => {
 		expect(executions).toBe(32)
 		expect(chat.failure).toContain('budget exhausted')
 		const wire = (chat.export() as { wire: ChatMessage[] }).wire
-		expect(wire.at(-1)?.role).toBe('tool')
-		expect(wire.at(-1)?.content).toContain('Execution status is unconfirmed')
+		expect(wire.at(-2)?.role).toBe('tool')
+		expect(wire.at(-2)?.content).toContain('Execution status is unconfirmed')
+		expect(wire.at(-1)?.role).toBe('assistant')
+		expect(wire.at(-1)?.content).toContain('budget exhausted')
 	})
 })
 
@@ -308,14 +373,21 @@ test('compaction retains each distinct source once so cross-source reasoning doe
 			)
 		}
 	const compact = r.compact(wire)
-	expect(compact.length).toBe(wire.length)
+	expect(compact.filter((m) => m.role === 'tool' || m.role === 'assistant').length).toBe(
+		wire.length
+	)
+	expect(compact.at(-1)?.content).toContain('Retained evidence choices')
 	const full = compact
 		.filter((m) => m.role === 'tool')
 		.map((m) => JSON.parse(m.content))
 		.filter((d) => d.content)
 	expect(full).toHaveLength(8)
 	for (let i = 0; i < 8; i++) expect(full.some((d) => d.sourceId === `file-${i}`)).toBe(true)
-	expect(JSON.stringify(compact).length).toBeLessThan(JSON.stringify(wire).length / 2)
+	// Repeated wire pages shrink; the separately bounded quotation-choice
+	// appendix is intentionally retained to prevent invalid model quotations.
+	expect(JSON.stringify(compact.filter((m) => m.role !== 'user')).length).toBeLessThan(
+		JSON.stringify(wire).length / 2
+	)
 })
 
 test('SSE stream detects missing completion metadata and handles every split boundary', async () => {
@@ -415,6 +487,7 @@ test('optional stronger repair runs only after the initial draft and first repai
 				kind: 'text',
 				text: JSON.stringify({
 					verdict: correct ? 'pass' : 'revise',
+					requestChecks,
 					issues: correct ? [] : ['The credit is pending, not paid.'],
 					checks: [
 						{
@@ -429,7 +502,7 @@ test('optional stronger repair runs only after the initial draft and first repai
 		},
 		async function* (messages): AsyncGenerator<StreamEvent> {
 			repairs++
-			expect(JSON.stringify(messages)).toContain('Re-evaluate this requirement')
+			expect(JSON.stringify(messages)).toContain('requiredCorrections')
 			yield { kind: 'text', text: 'The credit is pending.' }
 			yield { kind: 'finish', reason: 'stop' }
 		}

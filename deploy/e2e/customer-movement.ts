@@ -12,6 +12,7 @@ import type { IdentityClaims } from '../../libs/aven-identity/src/index.js'
 import { SqlPlanRunner } from '../../services/actor-runner/src/sql-runner.js'
 import { deterministicRunRequest } from '../../services/actor-runner/tests/support/deterministic-execution.js'
 import { CustomerStore } from '../../services/aven-api/src/customers/store.js'
+import { loadCatalog } from '../../services/platform-provisioner/src/catalog.js'
 import { ControlStore } from '../../services/platform-provisioner/src/control.js'
 import {
 	CustomerMovementStore,
@@ -20,6 +21,15 @@ import {
 import { PostgresMovementDriver } from '../../services/platform-provisioner/src/movement-postgres.js'
 
 const root = resolve(import.meta.dir, '../..')
+const initialDirectory = process.cwd()
+const actorMigrations = await (async () => {
+	process.chdir(join(root, 'services/platform-provisioner'))
+	try {
+		return (await loadCatalog()).get('os.aven:component:actors:run-repository@1')!.migrations
+	} finally {
+		process.chdir(initialDirectory)
+	}
+})()
 const scratch = await mkdtemp(join(tmpdir(), 'aven-customer-movement-'))
 const names = [0, 1].map((index) => `aven-movement-${randomUUID()}-${index}`)
 const pools: pg.Pool[] = []
@@ -110,7 +120,10 @@ try {
 	await store.registerRuntime('primary', 'a'.repeat(40))
 	await store.registerRuntime('green', 'b'.repeat(40))
 	await assert.rejects(store.registerRuntime('green', 'c'.repeat(40)), /another release/)
-	const customers = new CustomerStore(control)
+	const customers = new CustomerStore(
+		control,
+		process.env.API_PUBLIC_BASE_URL ?? 'https://api.aven.ceo'
+	)
 	const subject = randomUUID()
 	const environments: string[] = []
 	for (const name of ['customer-a', 'customer-b']) {
@@ -156,9 +169,8 @@ try {
 			Buffer.from(`exact bytes for ${name}\0\u2603`)
 		])
 		await customer.query('CREATE SCHEMA aven_actor_runs')
-		await customer.query(
-			`SET search_path=aven_actor_runs,public; ${await readFile(join(root, 'services/platform-provisioner/components/actor-runs/0001_actor_runs.sql'), 'utf8')}`
-		)
+		for (const migration of actorMigrations)
+			await customer.query(`SET search_path=aven_actor_runs,public; ${migration.sql}`)
 		for (const suffix of ['int_api', 'act_api', 'act_worker']) {
 			const role = databaseRoleName(environmentId, suffix)
 			await customer.query(
@@ -202,7 +214,20 @@ try {
 		true
 	)
 	const run = await runner.start(deterministicRunRequest('server', subject, randomUUID()))
-	await executing
+	let startTimer: ReturnType<typeof setTimeout> | undefined
+	try {
+		await Promise.race([
+			executing,
+			new Promise<never>((_, reject) => {
+				startTimer = setTimeout(
+					() => reject(Error('Movement fixture executor did not start.')),
+					30_000
+				)
+			})
+		])
+	} finally {
+		clearTimeout(startTimer)
+	}
 	const operationId = randomUUID()
 	const input = {
 		id: operationId,

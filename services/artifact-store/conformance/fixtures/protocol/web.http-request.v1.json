@@ -1,0 +1,110 @@
+{
+  "typeKey": "web.http-request",
+  "version": 1,
+  "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "method": {
+        "type": "string",
+        "enum": [
+          "GET",
+          "HEAD"
+        ]
+      },
+      "url": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+      },
+      "headers": {
+        "default": [],
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "value": {
+              "type": "string",
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "authentication": {
+        "default": {
+          "mode": "anonymous"
+        },
+        "type": "object",
+        "properties": {
+          "mode": {
+            "default": "anonymous",
+            "type": "string",
+            "enum": [
+              "anonymous",
+              "mapped-required",
+              "mapped-if-present"
+            ]
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "additionalProperties": false
+      },
+      "redirects": {
+        "default": {
+          "mode": "follow",
+          "maximumHops": 5
+        },
+        "type": "object",
+        "properties": {
+          "mode": {
+            "default": "follow",
+            "type": "string",
+            "enum": [
+              "follow",
+              "manual"
+            ]
+          },
+          "maximumHops": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10
+          }
+        },
+        "additionalProperties": false
+      },
+      "freshness": {
+        "default": "revalidate",
+        "type": "string",
+        "enum": [
+          "revalidate",
+          "offline-only",
+          "new-capture"
+        ]
+      }
+    },
+    "required": [
+      "method",
+      "url"
+    ],
+    "additionalProperties": false
+  },
+  "blobPolicy": "forbidden",
+  "referenceRules": []
+}

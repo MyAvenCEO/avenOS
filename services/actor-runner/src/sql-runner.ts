@@ -60,6 +60,7 @@ export class SqlPlanRunner implements PlanRunner {
 	readonly #contexts = new Map<string, PlanRunExecutionContext>()
 	#closed = false
 	#recovery?: Promise<number>
+	#recoveryCursor?: { createdAt: string; id: string }
 	readonly #timer: ReturnType<typeof setInterval>
 
 	constructor(
@@ -68,7 +69,17 @@ export class SqlPlanRunner implements PlanRunner {
 		private readonly executor: PlanRunExecutor,
 		private readonly customerExecutionBarrier = false,
 		private readonly executionTimeoutMs = 15 * 60_000,
-		private readonly maxParallelism = 5
+		private readonly maxParallelism = 5,
+		/** Host-owned prerequisite, checked before acquiring a lease, including recovery.
+		 * Used by durable input work until its outbox binds this exact run. No SQL lock
+		 * is held while another component answers; the executor must still check cancellation.
+		 */
+		private readonly executionReady?: (record: PlanRunRecord) => Promise<boolean | 'ended'>,
+		/** Opt-in only for an installed executor that fences every effect and replays
+		 * its I/O journal. The digest covers its engine, tools and pinned host policy.
+		 * It is resolved from installation code, never from the submitted parameters.
+		 */
+		private readonly journalEngineFor?: (record: PlanRunRecord) => string | undefined
 	) {
 		this.#timer = setInterval(() => {
 			if (!this.#closed) void this.recoverAcceptedRuns().catch((error) => this.log(error))
@@ -82,12 +93,24 @@ export class SqlPlanRunner implements PlanRunner {
 		runId: string,
 		context?: PlanRunExecutionContext,
 		submission?: PlanRunContinuationSubmission
-	): void {
-		if (this.#closed) return
+	): Promise<boolean> {
+		if (this.#closed) return Promise.resolve(false)
 		if (context) this.#contexts.set(runId, context)
-		const task = this.execute(runId, context, submission).catch((error) => this.log(error))
+		// Await lease admission, not a potentially long-running model or Actor. The
+		// execution itself remains tracked for shutdown and pool eviction.
+		let admitted!: (value: boolean) => void
+		const admission = new Promise<boolean>((resolve) => {
+			admitted = resolve
+		})
+		const task = this.execute(runId, context, submission, () => admitted(true)).catch((error) =>
+			this.log(error)
+		)
 		this.#tasks.add(task)
-		void task.finally(() => this.#tasks.delete(task))
+		void task.finally(() => {
+			this.#tasks.delete(task)
+			admitted(false)
+		})
+		return admission
 	}
 	get busy(): boolean {
 		return this.#active.size > 0 || this.#tasks.size > 0 || Boolean(this.#recovery)
@@ -161,6 +184,8 @@ export class SqlPlanRunner implements PlanRunner {
 			).rows[0]
 			if (!prior || prior.material_hash !== hash)
 				throw new PlanRunConflict('the idempotency key is already bound to another command')
+			if (['accepted', 'planning'].includes(prior.record.state))
+				queueMicrotask(() => this.launch(prior.record.runId, context))
 			return portableRunClone(handle(prior.record))
 		}
 		queueMicrotask(() => this.launch(record.runId, context))
@@ -176,7 +201,7 @@ export class SqlPlanRunner implements PlanRunner {
 		return row ? portableRunClone(row.record) : null
 	}
 
-	/** Queue recovery independently of HTTP requests. Never replay an expired execution lease. */
+	/** Reclaim accepted work; only an explicitly installed matching journal may resume. */
 	recoverAcceptedRuns(): Promise<number> {
 		if (this.#recovery) return this.#recovery
 		this.#recovery = this.recover().finally(() => {
@@ -185,20 +210,53 @@ export class SqlPlanRunner implements PlanRunner {
 		return this.#recovery
 	}
 	private async recover(): Promise<number> {
-		const abandoned = await this.worker.query<{ id: string }>(
-			`SELECT id FROM runs WHERE state='running' AND COALESCE((record->'lease'->>'expiresAt')::timestamptz,updated_at) < clock_timestamp()`
+		if (this.#closed) return 0
+		const abandoned = await this.worker.query<{
+			id: string
+			record: PlanRunRecord
+			journal_engine: string | null
+		}>(
+			`SELECT id,record,journal_engine FROM runs WHERE state='running' AND COALESCE((record->'lease'->>'expiresAt')::timestamptz,updated_at) < clock_timestamp() ORDER BY updated_at,id LIMIT 16`
 		)
-		for (const { id } of abandoned.rows) {
+		for (const { id, record, journal_engine } of abandoned.rows) {
+			const engine = this.journalEngineFor?.(record)
+			if (
+				engine &&
+				/^[a-f0-9]{64}$/.test(engine) &&
+				engine === journal_engine &&
+				(record.attemptCount ?? 1) < 3
+			) {
+				await this.worker.query(
+					`UPDATE runs SET state='planning',revision=revision+1,journal_resuming=true,
+					record=(record - 'lease') || jsonb_build_object('state','planning','revision',revision+1,
+					'attemptCount',COALESCE((record->>'attemptCount')::int,1)+1),updated_at=clock_timestamp()
+					WHERE id=$1 AND state='running' AND journal_engine=$2 AND revision=$3
+					AND (record->'lease'->>'expiresAt')::timestamptz < clock_timestamp()`,
+					[id, engine, record.revision]
+				)
+				continue
+			}
 			await this.worker.query(
 				`UPDATE runs SET state='failed',revision=revision+1,record=(record - 'lease') || jsonb_build_object('state','failed','revision',revision+1,'failure',jsonb_build_object('code','EXECUTION_UNCERTAIN','message','An interrupted execution requires reconciliation before retry.','retryable',false)),updated_at=clock_timestamp() WHERE id=$1 AND state='running' AND COALESCE((record->'lease'->>'expiresAt')::timestamptz,updated_at) < clock_timestamp()`,
 				[id]
 			)
 		}
-		const accepted = await this.worker.query<{ id: string }>(
-			`SELECT id FROM runs WHERE state IN ('accepted','planning') ORDER BY created_at,id LIMIT 16`
+		const accepted = await this.worker.query<{ id: string; created_at: string }>(
+			`SELECT id,created_at::text FROM runs WHERE state IN ('accepted','planning')
+			 AND ($1::timestamptz IS NULL OR (created_at,id)>($1::timestamptz,$2::uuid))
+			 ORDER BY created_at,id LIMIT 16`,
+			[this.#recoveryCursor?.createdAt ?? null, this.#recoveryCursor?.id ?? null]
 		)
-		const executed = await Promise.all(accepted.rows.map(({ id }) => this.execute(id)))
-		return executed.filter(Boolean).length
+		let started = 0
+		for (const row of accepted.rows) {
+			if (this.#closed || this.#active.size >= this.maxParallelism) return started
+			// Preserve PostgreSQL timestamp precision. Advance past blocked prerequisites
+			// as well as admitted work so an old unbound outbox cannot starve later work.
+			this.#recoveryCursor = { createdAt: row.created_at, id: row.id }
+			if (await this.launch(row.id)) started++
+		}
+		if (accepted.rows.length < 16) this.#recoveryCursor = undefined
+		return started
 	}
 	async retry(
 		runId: string,
@@ -209,8 +267,8 @@ export class SqlPlanRunner implements PlanRunner {
 		let record: PlanRunRecord
 		try {
 			await connection.query('BEGIN')
-			const row = await connection.query<{ record: PlanRunRecord }>(
-				'SELECT record FROM runs WHERE id=$1 FOR UPDATE',
+			const row = await connection.query<{ record: PlanRunRecord; journal_engine: string | null }>(
+				'SELECT record,journal_engine FROM runs WHERE id=$1 FOR UPDATE',
 				[runId]
 			)
 			if (!row.rows[0]) throw new PlanRunConflict('run not found')
@@ -221,6 +279,10 @@ export class SqlPlanRunner implements PlanRunner {
 			}
 			if (record.state !== 'failed' || record.failure?.code === 'EXECUTION_UNCERTAIN')
 				throw new PlanRunConflict('This run cannot be retried before reconciliation.')
+			if (row.rows[0].journal_engine)
+				throw new PlanRunConflict(
+					'This conversation must be reconciled and resumed from its Intent; a generic retry cannot renew its authority.'
+				)
 			if (this.customerExecutionBarrier) {
 				const row = await connection.query<{ blocked: boolean }>(
 					`SELECT NOT execution_enabled OR $1::uuid=ANY(execution_unsettled) AS blocked FROM aven_platform.environment_identity WHERE singleton`,
@@ -310,18 +372,46 @@ export class SqlPlanRunner implements PlanRunner {
 	private async execute(
 		runId: string,
 		context?: PlanRunExecutionContext,
-		submission?: PlanRunContinuationSubmission
+		submission?: PlanRunContinuationSubmission,
+		onAdmitted?: () => void
 	): Promise<boolean> {
 		if (this.#closed || this.#active.has(runId) || this.#active.size >= this.maxParallelism)
 			return false
 		const controller = new AbortController()
 		this.#active.set(runId, controller)
+		if (this.executionReady) {
+			try {
+				const candidate = await this.status(runId)
+				const readiness = candidate ? await this.executionReady(candidate) : false
+				if (candidate && readiness === 'ended' && !this.#closed) {
+					// An unbound admission whose owning turn was cancelled must not sit
+					// in the recovery queue forever. This cannot cancel an execution
+					// another worker has already leased, or clear an unsettled effect.
+					await this.worker.query(
+						`UPDATE runs SET state='cancelled',revision=revision+1,
+						record=record || jsonb_build_object('state','cancelled','revision',revision+1,
+						'updatedAt',clock_timestamp()),updated_at=clock_timestamp()
+						WHERE id=$1 AND revision=$2 AND state IN ('accepted','planning')`,
+						[runId, candidate.revision]
+					)
+				}
+				if (readiness !== true || this.#closed) {
+					this.#active.delete(runId)
+					if (readiness === 'ended') this.#contexts.delete(runId)
+					return false
+				}
+			} catch (error) {
+				this.#active.delete(runId)
+				throw error
+			}
+		}
 		let record: PlanRunRecord | undefined
 		const ownerId = randomUUID()
 		let heartbeat: ReturnType<typeof setInterval> | undefined
 		let timer: ReturnType<typeof setTimeout> | undefined
 		let execution: Promise<PlanRunExecutionResult> | undefined
 		let settled = false
+		let interruptedForRestart = false
 		const connection = await this.worker.connect().catch((error) => {
 			this.#active.delete(runId)
 			throw error
@@ -340,8 +430,12 @@ export class SqlPlanRunner implements PlanRunner {
 					return false
 				}
 			}
-			const row = await connection.query<{ record: PlanRunRecord }>(
-				`SELECT record FROM runs WHERE id=$1 AND state=ANY($2::text[]) FOR UPDATE SKIP LOCKED`,
+			const row = await connection.query<{
+				record: PlanRunRecord
+				journal_resuming: boolean
+				journal_engine: string | null
+			}>(
+				`SELECT record,journal_resuming,journal_engine FROM runs WHERE id=$1 AND state=ANY($2::text[]) FOR UPDATE SKIP LOCKED`,
 				[runId, submission ? ['waiting_for_input'] : ['accepted', 'planning']]
 			)
 			if (!row.rows[0]) {
@@ -349,11 +443,20 @@ export class SqlPlanRunner implements PlanRunner {
 				return false
 			}
 			record = row.rows[0].record
+			const resuming = row.rows[0].journal_resuming
+			if (
+				resuming &&
+				(!row.rows[0].journal_engine ||
+					this.journalEngineFor?.(record) !== row.rows[0].journal_engine)
+			)
+				throw new PlanRunConflict('The original journal engine is required to continue this turn.')
 			if (submission) requiredContinuation(record, submission.continuationId)
 			if (this.customerExecutionBarrier) {
 				const marked = await connection.query(
-					`UPDATE aven_platform.environment_identity SET execution_unsettled=array_append(execution_unsettled,$1::uuid) WHERE singleton AND execution_enabled AND NOT ($1::uuid=ANY(execution_unsettled)) RETURNING singleton`,
-					[runId]
+					`UPDATE aven_platform.environment_identity SET execution_unsettled=CASE WHEN $1::uuid=ANY(execution_unsettled)
+						THEN execution_unsettled ELSE array_append(execution_unsettled,$1::uuid) END
+						WHERE singleton AND execution_enabled AND ($2 OR NOT ($1::uuid=ANY(execution_unsettled))) RETURNING singleton`,
+					[runId, resuming]
 				)
 				if (!marked.rowCount) {
 					record.state = 'failed'
@@ -384,8 +487,8 @@ export class SqlPlanRunner implements PlanRunner {
 			record.updatedAt = new Date().toISOString()
 			record.lease = { ownerId, expiresAt: new Date(Date.now() + 30_000).toISOString() }
 			await connection.query(
-				`UPDATE runs SET state=$2,revision=$3,record=$4,updated_at=clock_timestamp() WHERE id=$1`,
-				[runId, record.state, record.revision, record]
+				`UPDATE runs SET state=$2,revision=$3,record=$4,execution_owner=$5,journal_resuming=false,updated_at=clock_timestamp() WHERE id=$1`,
+				[runId, record.state, record.revision, record, ownerId]
 			)
 			await connection.query('COMMIT')
 		} catch (error) {
@@ -400,12 +503,14 @@ export class SqlPlanRunner implements PlanRunner {
 			this.#contexts.delete(runId)
 			return false
 		}
+		onAdmitted?.()
 		context ??= this.#contexts.get(runId)
 		this.#contexts.delete(runId)
 		const owned = () => [runId, ownerId]
 		const keepAlive = async () => {
 			const saved = await this.worker.query(
-				`UPDATE runs SET record=jsonb_set(record,'{lease,expiresAt}',to_jsonb((clock_timestamp()+interval '30 seconds')::text)),updated_at=clock_timestamp() WHERE id=$1 AND state='running' AND record->'lease'->>'ownerId'=$2`,
+				`UPDATE runs SET record=jsonb_set(record,'{lease,expiresAt}',to_jsonb((clock_timestamp()+interval '30 seconds')::text)),updated_at=clock_timestamp() WHERE id=$1 AND state='running' AND record->'lease'->>'ownerId'=$2
+				AND (record->'lease'->>'expiresAt')::timestamptz > clock_timestamp()`,
 				owned()
 			)
 			if (!saved.rowCount) controller.abort(new Error('Execution ownership ended.'))
@@ -433,11 +538,25 @@ export class SqlPlanRunner implements PlanRunner {
 				this.executor(this.#request(record!), {
 					...context,
 					signal,
+					lease: {
+						runId,
+						ownerId,
+						assertActive: async () => {
+							signal.throwIfAborted()
+							const active = await this.worker.query(
+								`SELECT 1 FROM runs WHERE id=$1 AND state='running'
+							AND record->'lease'->>'ownerId'=$2 AND (record->'lease'->>'expiresAt')::timestamptz > clock_timestamp()`,
+								owned()
+							)
+							if (!active.rowCount) throw new PlanRunConflict('Execution ownership ended.')
+						}
+					},
 					...(submission?.action === 'submit' && { submission }),
 					reportProgress: async (progress) => {
 						signal.throwIfAborted()
 						const saved = await this.worker.query(
-							`UPDATE runs SET revision=revision+1,record=jsonb_set(jsonb_set(record,'{progress}',$3::jsonb),'{revision}',to_jsonb(revision+1)),updated_at=clock_timestamp() WHERE id=$1 AND state='running' AND record->'lease'->>'ownerId'=$2`,
+							`UPDATE runs SET revision=revision+1,record=jsonb_set(jsonb_set(record,'{progress}',$3::jsonb),'{revision}',to_jsonb(revision+1)),updated_at=clock_timestamp() WHERE id=$1 AND state='running' AND record->'lease'->>'ownerId'=$2
+							AND (record->'lease'->>'expiresAt')::timestamptz > clock_timestamp()`,
 							[...owned(), portableRunClone(progress)]
 						)
 						if (!saved.rowCount) throw new PlanRunConflict('the actor run is no longer active')
@@ -460,6 +579,13 @@ export class SqlPlanRunner implements PlanRunner {
 				submission ? requiredContinuation(record, submission.continuationId) : undefined
 			)
 		} catch (error) {
+			if (this.#closed && this.journalEngineFor?.(record)) {
+				const saved = await this.worker.query<{ journal_engine: string | null }>(
+					'SELECT journal_engine FROM runs WHERE id=$1',
+					[runId]
+				)
+				interruptedForRestart = saved.rows[0]?.journal_engine === this.journalEngineFor(record)
+			}
 			record.state = 'failed'
 			record.failure = {
 				code: 'EXECUTION_FAILED',
@@ -478,21 +604,41 @@ export class SqlPlanRunner implements PlanRunner {
 		try {
 			record.updatedAt = new Date().toISOString()
 			// Update only this lease. A concurrent cancel wins over completion.
-			await this.worker.query(
-				`UPDATE runs SET state=$3,revision=revision+1,record=($4::jsonb - 'lease') || jsonb_build_object('revision',revision+1),updated_at=clock_timestamp() WHERE id=$1 AND state='running' AND record->'lease'->>'ownerId'=$2`,
-				[...owned(), record.state, record]
-			)
+			if (!interruptedForRestart)
+				await this.worker.query(
+					`UPDATE runs SET state=$3,revision=revision+1,record=($4::jsonb - 'lease') || jsonb_build_object('revision',revision+1)
+					|| CASE WHEN record ? 'progress' THEN jsonb_build_object('progress',record->'progress') ELSE '{}'::jsonb END,
+					updated_at=clock_timestamp() WHERE id=$1 AND state='running' AND record->'lease'->>'ownerId'=$2
+				AND (record->'lease'->>'expiresAt')::timestamptz > clock_timestamp()`,
+					[...owned(), record.state, record]
+				)
 		} catch (error) {
 			this.#active.delete(runId)
 			throw error
 		}
 		{
 			const clean = async () => {
-				if (this.customerExecutionBarrier)
-					await this.worker.query(
-						`UPDATE aven_platform.environment_identity SET execution_unsettled=array_remove(execution_unsettled,$1::uuid) WHERE singleton`,
-						[runId]
-					)
+				if (this.customerExecutionBarrier) {
+					const db = await this.worker.connect()
+					try {
+						await db.query('BEGIN')
+						const held = await db.query('SELECT execution_owner FROM runs WHERE id=$1 FOR UPDATE', [
+							runId
+						])
+						// A slow, cancelled predecessor cannot clear its successor's movement fence.
+						if (held.rows[0]?.execution_owner === ownerId)
+							await db.query(
+								`UPDATE aven_platform.environment_identity SET execution_unsettled=array_remove(execution_unsettled,$1::uuid) WHERE singleton`,
+								[runId]
+							)
+						await db.query('COMMIT')
+					} catch (error) {
+						await db.query('ROLLBACK').catch(() => {})
+						throw error
+					} finally {
+						db.release()
+					}
+				}
 				this.#active.delete(runId)
 			}
 			// A timeout is not proof an arbitrary executor stopped. Keep the marker until it settles.

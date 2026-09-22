@@ -77,6 +77,8 @@ pub struct CommittedRunMetadata {
     pub procedure_key: String,
     pub procedure_version: String,
     pub parameters: CanonicalValue,
+    pub implementation: CanonicalValue,
+    pub receipt: CanonicalValue,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -353,6 +355,23 @@ pub struct ProducerInputs {
     pub artifact_id: Uuid,
     pub producer_run_id: Option<Uuid>,
     pub inputs: Vec<RunInput>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ArtifactReference {
+    pub role: Role,
+    pub ordinal: u32,
+    pub artifact_id: Uuid,
+    pub artifact_sha256: String,
+    pub attributes: CanonicalValue,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ArtifactReferences {
+    pub artifact_id: Uuid,
+    pub references: Vec<ArtifactReference>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

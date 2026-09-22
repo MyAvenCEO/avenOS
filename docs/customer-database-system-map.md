@@ -83,6 +83,7 @@ cust_<environment-id>
 ├── aven_platform      reconciliation metadata
 ├── artifact_store     artifacts, blobs, evidence, and production runs
 ├── aven_intents       intents and contribution history, including chat
+├── aven_productivity  tasks, immutable command receipts and task revisions
 └── aven_actor_runs    durable Actor runs, Studio drafts, connections, deliveries
 ```
 
@@ -91,18 +92,225 @@ function receives a customer-qualified login that can connect to exactly one cus
 database and access only its component schema. Artifact, Intent, and Actor roles cannot
 read each other's tables or create arbitrary objects.
 
+The provisioner supports exact SQL-function grants as well as table privileges.
+Signatures use a closed set of built-in argument types; granting one overload does
+not grant another. Reconciliation verifies every runtime login's declared privileges,
+without executing write functions or selecting secret rows. A migration introducing
+protected functions must revoke their default `PUBLIC` execution privilege explicitly.
+This is provisioning support, not an installed customer credentials component.
+
+The productivity component starts at schema version 1. Its API role has
+`SELECT`, `INSERT`, and `UPDATE` on tasks, and only `SELECT` and `INSERT` on command
+receipts and task revisions. The Intent Service hosts its HTTP endpoints in the
+same process but uses a separate credential root and pool. Linking a task change to
+an Intent requires a second signed, same-environment Intent-read grant; the owning
+Intent service verifies both ownership and the optional contribution reference.
+Batch changes and their receipts commit atomically. A stale revision rejects the
+whole batch; same-operation retries return the original outcome. Trials use an
+explicit temporary repository with the same domain reducer. Native and Skill
+integration are being qualified and are not yet a passed release guarantee.
+
+Response feedback lives with conversation contributions in `aven_intents`, not in
+browser storage or a central analytics database. Each human `response-feedback`
+contribution names the exact assistant message, its up/down vote (or a cleared vote),
+an optional reason, and the preceding feedback revision. The service checks the
+owned Intent and response inside the append transaction. Replays return the original
+receipt; stale concurrent edits conflict. Original replies and earlier feedback are
+retained. Read projections attach the latest feedback to its reply independently of
+the recent-history page. Feedback is not presented as a new message or fed back into
+the agent prompt. This uses the existing contribution schema and scoped write grant;
+it adds no database role, table or compatibility path.
+
+Intent component schema version 4 separates durable work order from conversation
+chronology. A queued replacement is a new, signed input with an immutable link to
+its predecessor and a revision-checked FIFO position. It cancels only the replaced
+pending delivery, including a reservation not yet bound to a run; later queued
+messages remain behind the replacement. Original contributions and admission receipts
+remain readable. A conflicting edit or a run already bound to an executor rejects
+the replacement without changing either request. Stopped-run receipt transfer and
+native Edit controls are not implemented; this internal queue slice does not claim
+the complete edit-while-running UX.
+
 Actor component schema version 2 adds Skill Studio's revision-checked draft heads,
 subscription cursors and durable delivery intents. The Actor API role receives
 `SELECT`, `INSERT`, and `UPDATE` on these three tables; the worker role remains
-limited to the run table. Published Skills, synthetic Source definitions, captures,
+limited to the run table at that schema version. Published Skills, synthetic Source definitions, captures,
 activation/invocation receipts and results remain in the Artifact Store, accessed
 through its scoped API. Studio does not read Artifact tables directly.
+Schema version 3 adds the immutable origin-Skill reference to a copied draft.
+Publication validates that exact readable Skill and records it as a causal input;
+the draft row is not the permanent provenance record.
+
+Actor component schema version 4 adds the private ordered `run_steps` journal and a
+pinned engine/start time on the owning run. Only the worker role receives access to
+the journal (`SELECT`, `INSERT`, `UPDATE`). A security-barrier `run_settlement` view
+gives the API and worker roles a run ID and an unresolved-tool boolean, not journal
+values. The worker uses the same projection before private settled-receipt inspection;
+the API still cannot read the journal.
+Every journal operation checks and locks
+the current unexpired run lease. Recovery reuses completed model responses and
+operation receipts; an interrupted effect requires reconciliation. The journal also
+pins the final answer and its timings. The SQL runner supports opt-in restart for an
+installed executor with the exact recorded engine digest, bounded to three attempts;
+generic or changed executors still fail closed. Execution ownership also fences
+movement-marker cleanup. These paths have isolated real-Qwen/SQL proofs, but production
+transport and customer discovery are not yet an enabled unattended chat dispatcher.
+
+Actor schema version 5 adds immutable `studio_draft_receipts`, keyed to a private
+tool invocation. The worker gets draft `SELECT`/`INSERT`/`UPDATE` and receipt
+`SELECT`/`INSERT`; the API gets no receipt privileges. Saving a background draft
+locks its current run and pending invocation, checks the physical execution epoch,
+and commits the exact draft snapshot with the edit. Recovery reads that snapshot,
+not the latest mutable draft. Separate Skill-publication recovery reads the immutable
+Store receipt and uses the same lease-checked transaction to acknowledge the head
+only if its draft revision is unchanged. A later edit is never overwritten, and a
+missing Store receipt never authorizes another write. No cross-service transaction
+is claimed. Delegated child execution remains unqualified.
+
+Actor schema version 7 adds private immutable `review_requests` and append-only
+`review_decisions`. Neither runtime role can access their tables directly. The worker
+can open a bounded request under its current run lease; only the interactive API role
+can decide an exact revision/digest for that user's waiting run. Shared functions check
+the customer generation and execution fence. The schema owner can take a shared lock
+on the platform identity row but these functions never change its movement counter.
+The native card and empty-output Studio barrier use these records; real-Qwen/SQL tests
+cover sequential gates, restart, refusal, approval and prevention of model-authored
+approval. The real management proof also exercises connection-policy adapters against
+the actual admitted Actor invocation, current grants, Store input and private review.
+The isolated native connection journey covers settings and exact-request review denial;
+full hosted connection deployment remains unqualified.
+
+The optional credentials component has independent set, metadata, match, HTTP-use and
+IMAP-use roles. Set-only ingress stores public-key-sealed values; only a protocol-use
+claim can release ciphertext to its protected executor. Metadata and match cannot read
+values. Current generation, binding revision, secret version, claim ordinal and bounded
+use authority are checked transactionally. This component is not installed by default;
+its ingress and fixed-protocol executors are opt-in in the local composition, not yet
+enabled in the hosted customer stack. Operator installation queues the ordinary
+provisioner only for a ready, stationary environment on the current runtime.
+Optional HTTP/IMAP factories use shared Actor admission and Studio execution. A
+host-only result handoff keeps the protected publisher's existing artifact identities;
+Studio adds typed port membership, not copies of those observations. The runner's
+private invocation guard reads only currently active host registrations and checks the
+SQL run lease and generation. Restart discards registrations and fails closed; resume
+must enter shared admission again. No caller JSON can create a registration.
+Each first use adds its own UUID to the physical execution markers. The protected
+host removes only that marker after protocol shutdown and publication have stopped;
+finishing one IMAP command does not settle the session. Expiry never removes a marker.
+The current movement path conservatively refuses an outstanding connection marker
+rather than treating an Actor's completed lease as proof that its remote use stopped.
+
+Intent schema version 2 adds `input_admissions` and `turn_outbox`. One transaction
+checks the owner and target, optionally creates an Intent, appends the exact human
+contribution and records its runnable delivery. `(subject, inputId)` binds the accepted
+revision and material digest so a lost acknowledgement or racing edit cannot duplicate
+a message or retarget it. Receipt lookup still works after an Intent is archived,
+merged or tombstoned. These state changes cancel unbound delivery and block bound
+work in the same transaction; restoration does not revive it or release an unsettled
+predecessor.
+
+Intent schema version 3 adds the due-time index for bounded supervision of dispatched
+turns. Status checks advance the due time without taking execution ownership. A
+separate supervisor can block an expired turn or a stopped runner that never saved
+its answer; it cannot repeat an action or rewrite a concurrently completed answer.
+The owner-scoped queue projection and revision-checked Stop endpoint are implemented.
+Stop withdraws new work authority; bound execution holds FIFO until the supervisor
+observes an ended executor with no unresolved tool checkpoint. Known settlement
+records an immutable system contribution; uncertainty remains blocked. Native
+controls, receipt reconciliation, renewal and production background qualification remain
+pending. Intent readiness uses the pinned component catalog version and digest, not
+a separately maintained version number.
+
+The customer-local outbox repository claims one earliest unfinished turn per Intent,
+with a thirty-second dispatch lease and a pinned conversation watermark. Future queued
+human contributions are excluded from that turn's history. Completing or failing a
+turn commits its exact assistant contribution and releases the next turn in one
+transaction; lost replies return that same output identity. Expired authority blocks
+the affected queue without blocking other Intents. These repository boundaries have
+real-PostgreSQL tests; they are not yet an enabled background dispatcher.
+
+The facade signs a distinct one-hour work certificate for the exact accepted input
+and the currently available component actions. Intent Service verifies its subject,
+session, environment, generation and material binding before retaining it with the
+outbox. The certificate is not a saved login token or a monitoring delegation. The
+API role can read/insert admission records and read/insert/update outbox records.
+The shared `@avenos/intents` package owns the input, receipt and canonical digest.
+The internal work-grant exchange requires both a live outbox/runner-lease check and
+current control-directory authorization, then issues a component grant bounded to
+that work, turn, run and lease for at most sixty seconds, capped at the current lease
+deadline and parent certificate expiry. Work admission does not apply login clock
+grace. The separate work admission helper never constructs an identity or
+accepts mixed login/work headers. Tasks use the same domain handler for both forms
+of admission and bind delegated changes to the actual accepted contribution. The
+real-Qwen task proof exercises these paths with signed permissions and restricted
+database roles and actual exchange/guard HTTP requests. The facade's opt-in internal
+exchange route checks the current Intent outbox and runner lease over fixed,
+operator-resolved service routes; probes return no customer content. See
+[the work-exchange configuration boundary](operations/build-and-test.md#live-studio-workday).
+Dispatcher startup is opt-in; renewal UX and native integration remain pending.
+Existing desktop turns still execute locally.
+
+The opt-in work control also provides signed queue-discovery placements. The
+requesting service must match the operator credential for the exact runtime and
+component. Only active, generation-matching component placements appear in bounded
+keyset pages. These sixty-second certificates contain no customer principal or
+session and are invalid as tenant/work grants. The component pool rechecks physical
+generation and execution state; Intent discovery returns only eligible turn IDs and
+owner scopes. Individual work certificates still govern execution. The HTTP discovery
+transport feeds a bounded delivery supervisor with interleaved queues, failure
+isolation and shutdown. Its real-Qwen proof advances past unavailable databases
+without blocking healthy work. Signed runner admission and lifecycle/context transport
+are implemented and exercised in that composition. The service entrypoints now wire
+these same components behind all-or-none background-work configuration. Actor Runner
+requires a bundled executable and pins its bytes, runtime and model identifier for
+recovery. Its Chat host installs shared history, task, calculation, knowledge and
+restricted Studio Actors with fresh delegated authority. Production startup qualification,
+document retrieval, child execution and the native switch remain pending; generated
+deployments do not enable unattended chat.
+
+Admission uses a distinct pre-lease dispatch grant bounded to the live outbox claim.
+It admits only the fixed chat-turn Skill with reference parameters derived from the
+accepted certificate. It cannot authorize tool execution. Intent Service's narrow
+lifecycle endpoint accepts a signed current-runtime Intent placement and an exact
+admitted run/input reference. It returns coordination state, a completion receipt,
+or the original live work certificate for lease-checked resumption; never conversation
+content. Completed work does not regain execution authority. Shared `ChatTurnHost`
+code verifies all bindings before loading context and constructing installed tools.
+
+The outbox dispatcher and runner prerequisite are separate building blocks. A run
+may be admitted before its dispatcher receives the reply, but cannot acquire an
+execution lease until the outbox binds that exact run. A repeated same-key admission
+wakes an accepted run without creating another one. Bounded keyset recovery sweeps
+advance past blocked prerequisites and await admission, not the entire execution.
+No execution lease or certificate
+is included in its idempotency material. This does not yet establish unattended
+startup discovery or automatic recovery of interrupted chat execution.
+
+Unassigned input is kept outside customer history in an encrypted native draft file
+bound to API origin, subject and environment. File locking and revision checks prevent
+one desktop process overwriting another's snapshot. The device key is protected by
+local file permissions; this is not a claim of protection against a compromised device.
+Browser previews remain session-only and do not write plaintext drafts to localStorage.
 
 Artifact component schema version 4 adds read indexes for the source-bound library.
 The library projects original documents and current validated financial observations
 from immutable artifacts; it does not create mutable entity records. Its scoped read
 path uses the verified customer database and environment, and the native client does
 not provide physical routing.
+
+The same library route exposes schema discovery, exact property predicates and
+whole-selection aggregates. Knowledge results remain immutable customer artifacts,
+with a query/watermark/Store-epoch receipt and exact references for returned rows.
+This is a read projection over existing observations, not an entity resolver or a
+background relationship-mining service.
+
+Unassigned desktop uploads are quarantined `intake.upload` artifacts in the same
+customer Store. A pinned inbox lists metadata without opening content. Store
+admission blocks their use by ordinary runs, references and source-blob reuse;
+the scoped API service alone can promote one to a normal file after explicit Intent
+placement. Promotion keeps the input lineage and is replayable. The UI freezes the
+customer scope while uploading or assigning a batch. No separate inbox database,
+cross-schema query, compatibility table or new database role is introduced.
 
 Studio query and command requests use the existing customer `actor-runs` route.
 The exact `POST /studio/query` suffix requires `actor-runs:read` and rejects

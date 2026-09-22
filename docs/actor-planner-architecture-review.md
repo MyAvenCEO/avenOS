@@ -42,7 +42,7 @@ Evidence labels used below:
 
 | Layer | Intended responsibility | Implemented boundary |
 | --- | --- | --- |
-| Actor | Encapsulate executable behavior and state behind messages | In-process object with a serialized `deliver` mailbox, manifest, handlers, and implicit retry; not a durable distributed actor system |
+| Actor | Encapsulate executable behavior and state behind messages | In-process object with a serialized `deliver` mailbox, manifest and one handler attempt per delivery; not a durable distributed actor system |
 | Registry | Describe definitions, existing instances, and factory offers without invoking them | Version-qualified identities and immutable snapshots; useful separation between discovery and instantiation |
 | Logical planner | Find a capability route from facts to goals | Bounded uniform-cost forward search over a small predicate language; static output promises |
 | Exploration planner | Enrich an artifact with relevant non-effecting evidence | Precomputes eligible invocations; supports independent evidence paths but does not execute observation frontiers and replan |
@@ -184,17 +184,20 @@ Also document the actual predicate language. `term.ts` handles flat comma-separa
 
 Evidence: [registry compilation](../libs/aven-actors/src/registry.ts), functions `methodCapabilities`, `definitionFromManifest`, and `definitionFromActor`; [manifest helper](../libs/aven-actors/src/planner.ts), lines 42–83; [term implementation](../libs/aven-actors/src/term.ts).
 
-### A9. Actor supervision silently retries non-idempotent handlers
+### A9. Handler delivery does not imply safe retry
 
-**High priority before effects or costly operations rely on this primitive · observed local behavior.**
+**Implicit retry removed; explicit durable recovery remains a separate boundary.**
 
-`Actor.#handle` retries any thrown handler once. It does not consult the declared idempotency or operation mode, recreate the Actor, roll back state, or record the first failed attempt when the retry succeeds. The comment compares this to a fresh restart, but it calls the same handler closure again.
-
-The benign diagnostic handler incremented a local counter and threw on its first call. Its method declared `idempotency: none`. One delivered message returned success with the counter at two and the Actor failure count at zero. This proves repeated local mutation, not an observed duplicate external write.
+`Actor.#handle` attempts a handler once for each delivered message. A thrown error
+increments the failure count and returns a failed response. The mailbox remains
+available for subsequent explicit deliveries. It does not replay a handler or imply
+that an external effect was rolled back.
 
 For a future HTTP operation, a thrown response-processing error could occur after the remote system has accepted a request. Retrying belongs in an explicit attempt policy that understands pure, idempotent, reconcilable, and non-idempotent work. Preserve uncertain outcomes and attempt history. Do not use hidden Actor retry underneath a second durable-run retry policy.
 
-Evidence: [Actor mailbox and handler](../libs/aven-actors/src/actor.ts), lines 442–489. Existing tests intentionally expect the current retry behavior, so changing it requires an explicit contract migration.
+Implementation: [Actor mailbox and handler](../libs/aven-actors/src/actor.ts).
+The mailbox regression in [Actor tests](../app/tests/actors.test.ts) distinguishes
+one failed delivery from a later explicitly delivered message.
 
 ### A10. Durable admission is not durable step execution
 
@@ -355,7 +358,6 @@ The formal specification's deliberate-gap table is useful and should remain the 
 - The skills/problem-solving paper's current-execution section ends by saying the HTTP runner is not the remote document-ingest runtime and both placement choices still use desktop-hosted coordinators. This is stale relative to the current server composition and contradicts the more recent execution description in that same section.
 - The generic registry/runtime paper has an early statement that exploratory saturation and affordance discovery are not implemented, while later scope notes and code include their static implementations. The accurate distinction is static exploration versus observation-frontier execution.
 - Descriptions of checkpointed discovery sometimes read as current behavior, although the implementation-status sections correctly mark it as future work.
-- The Actor retry comment describes a fresh restart, but the implementation reuses the same handler and state.
 - The Artifact Store adapter's comment says facts are not echoed from planner expectations, but its publication return path copies the draft predicate.
 
 These are report findings only; I did not edit the owning documents or code. A later implementation change should update the authoritative status descriptions alongside its conformance tests.

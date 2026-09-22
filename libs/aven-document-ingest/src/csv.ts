@@ -8,10 +8,37 @@ export const CSV_MAX_RECORDS = 129
 export function decodeCsvText(bytes: Uint8Array): string {
 	if (bytes.length > CSV_MAX_BYTES) throw new Error('CSV exceeds the 1 MB detection limit.')
 	let text: string
-	try {
-		text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-	} catch {
-		text = new TextDecoder('windows-1252', { fatal: true }).decode(bytes)
+	// Bank downloads often use UTF-16 without a BOM. Only infer it from a
+	// strongly alternating ASCII header, then validate the entire byte stream.
+	const prefix = bytes.subarray(0, Math.min(bytes.length, 256))
+	const pairs = Math.floor(prefix.length / 2)
+	const ascii = (n: number) => n === 9 || n === 10 || n === 13 || (n >= 32 && n <= 126)
+	const pattern = (zero: number) =>
+		pairs >= 8 &&
+		Array.from(
+			{ length: pairs },
+			(_, i) => prefix[i * 2 + zero] === 0 && ascii(prefix[i * 2 + 1 - zero]!)
+		).filter(Boolean).length /
+			pairs >=
+			0.8
+	const encoding =
+		bytes[0] === 0xff && bytes[1] === 0xfe
+			? 'utf-16le'
+			: bytes[0] === 0xfe && bytes[1] === 0xff
+				? 'utf-16be'
+				: pattern(1)
+					? 'utf-16le'
+					: pattern(0)
+						? 'utf-16be'
+						: null
+	if (encoding) {
+		text = new TextDecoder(encoding, { fatal: true }).decode(bytes)
+	} else {
+		try {
+			text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+		} catch {
+			text = new TextDecoder('windows-1252', { fatal: true }).decode(bytes)
+		}
 	}
 	if (
 		[...text].some((c) => {
@@ -152,7 +179,7 @@ function date(value: string, german: boolean): string {
 	return value
 }
 
-function iban(value: string): boolean {
+export function validCsvIban(value: string): boolean {
 	if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(value)) return false
 	let remainder = 0
 	for (const c of value.slice(4) + value.slice(0, 4)) {
@@ -214,7 +241,7 @@ export async function detectCsvStatement(source: DocumentSource): Promise<CsvDet
 		if (p.rows.some((r) => r.length !== p.headers.length))
 			throw new Error('CSV row width differs from its header.')
 		const account = p.rows[1]![0]!
-		if (!iban(account)) throw new Error('Missing or invalid own-account IBAN.')
+		if (!validCsvIban(account)) throw new Error('Missing or invalid own-account IBAN.')
 		const ids = new Set<string>()
 		const transactions = p.rows.slice(1).map((r, index) => {
 			if (r[0] !== account || r[german ? 15 : 1] !== 'EUR')
@@ -230,7 +257,7 @@ export async function detectCsvStatement(source: DocumentSource): Promise<CsvDet
 				ids.add(transactionId!)
 			}
 			const otherIban = r[german ? 12 : 8]!
-			if (otherIban && !iban(otherIban))
+			if (otherIban && !validCsvIban(otherIban))
 				throw new Error('Counterparty account needs an unsupported identifier mapping.')
 			const description = german ? r[4]! : [r[18], r[19], r[20], r[21]].filter(Boolean).join('\n')
 			const name = r[german ? 11 : 9]!

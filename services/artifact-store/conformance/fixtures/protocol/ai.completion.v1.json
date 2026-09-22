@@ -1,0 +1,18 @@
+{
+  "typeKey": "ai.completion",
+  "version": 1,
+  "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "additionalProperties": false,
+    "required": ["text", "data", "knowledgeMode", "modelId"],
+    "properties": {
+      "text": {"type": "string", "maxLength": 65536},
+      "data": {"type": "object", "maxProperties": 32, "additionalProperties": true},
+      "knowledgeMode": {"enum": ["source-only", "model-knowledge"]},
+      "modelId": {"type": "string", "minLength": 1, "maxLength": 256}
+    }
+  },
+  "blobPolicy": "forbidden",
+  "referenceRules": []
+}

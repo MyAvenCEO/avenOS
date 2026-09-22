@@ -19,7 +19,12 @@ export const DOCUMENT_KIND_CLASSIFIER_MANIFEST = manifest(
 	'Document kind classifier',
 	'Classifies the complete rendered document into the supported finance taxonomy.',
 	'document_classify_kind',
-	['ceo.aven.docs.file(F)', 'ceo.aven.docs.extracted_text(F, T)'],
+	[
+		'ceo.aven.docs.file(F)',
+		'ceo.aven.docs.page(F, P)',
+		'ceo.aven.docs.extracted_text(F, P, T)',
+		'ceo.aven.docs.text_layout(F, P, L)'
+	],
 	['ceo.aven.docs.document_classification(F, C)']
 )
 

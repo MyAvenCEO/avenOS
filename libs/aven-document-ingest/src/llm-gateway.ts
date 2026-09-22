@@ -18,7 +18,9 @@ import {
 
 export type DocumentLlmClient = LlmGatewayClient
 
-const REQUIRED_CAPABILITIES = [LLM_CAPABILITIES.vision, LLM_CAPABILITIES.structuredOutput] as const
+function requiredCapabilities(vision: boolean): string[] {
+	return [LLM_CAPABILITIES.structuredOutput, ...(vision ? [LLM_CAPABILITIES.vision] : [])]
+}
 
 interface ModelSelection {
 	selected: LlmModelDescriptor | null
@@ -33,10 +35,9 @@ interface ModelSelection {
 export class LlmDocumentModelGateway implements DocumentModelGateway {
 	readonly #preferredModelId?: string
 	readonly #client: DocumentLlmClient
-	#selection?: Promise<ModelSelection>
-	#selectedAt = 0
+	#selections = new Map<boolean, { at: number; pending: Promise<ModelSelection> }>()
 	invalidate(): void {
-		this.#selection = undefined
+		this.#selections.clear()
 	}
 
 	constructor(client: DocumentLlmClient, preferredModelId?: string) {
@@ -52,7 +53,7 @@ export class LlmDocumentModelGateway implements DocumentModelGateway {
 		modelLabel?: string
 		alternatives: Array<{ id: string; label: string }>
 	}> {
-		const { selected, alternatives } = await this.#select()
+		const { selected, alternatives } = await this.#select(true)
 		return {
 			available: selected !== null,
 			maxPages: MAX_MODEL_PAGES,
@@ -66,12 +67,13 @@ export class LlmDocumentModelGateway implements DocumentModelGateway {
 		request: DocumentModelRequest,
 		options?: { signal?: AbortSignal }
 	): Promise<DocumentModelResponse> {
-		const { selected } = await this.#select()
+		const vision = request.images.length > 0
+		const { selected } = await this.#select(vision)
 		if (!selected) {
 			throw new Error(
 				this.#preferredModelId
 					? `Preferred document model ${this.#preferredModelId} is unavailable.`
-					: 'No model supports vision and structured output.'
+					: `No model supports ${vision ? 'vision and ' : ''}structured output.`
 			)
 		}
 		const completed = await this.#client.complete(documentLlmRequest(selected.id, request), options)
@@ -97,11 +99,11 @@ export class LlmDocumentModelGateway implements DocumentModelGateway {
 		}
 	}
 
-	#select(): Promise<ModelSelection> {
-		if (!this.#selection || Date.now() - this.#selectedAt > 60_000) {
-			this.#selectedAt = Date.now()
+	#select(vision: boolean): Promise<ModelSelection> {
+		const cached = this.#selections.get(vision)
+		if (!cached || Date.now() - cached.at > 60_000) {
 			const pending = this.#client
-				.discover([...REQUIRED_CAPABILITIES])
+				.discover(requiredCapabilities(vision))
 				.then((alternatives) => ({
 					alternatives,
 					selected: this.#preferredModelId
@@ -109,12 +111,13 @@ export class LlmDocumentModelGateway implements DocumentModelGateway {
 						: (alternatives[0] ?? null)
 				}))
 				.catch((error) => {
-					if (this.#selection === pending) this.#selection = undefined
+					if (this.#selections.get(vision)?.pending === pending) this.#selections.delete(vision)
 					throw error
 				})
-			this.#selection = pending
+			this.#selections.set(vision, { at: Date.now(), pending })
+			return pending
 		}
-		return this.#selection
+		return cached.pending
 	}
 }
 
@@ -142,7 +145,7 @@ export function documentLlmRequest(
 	]
 	return {
 		modelId,
-		requiredCapabilities: [...REQUIRED_CAPABILITIES],
+		requiredCapabilities: requiredCapabilities(request.images.length > 0),
 		instructions: `${DOCUMENT_MODEL_SYSTEM_PROMPT}\n\n${UNTRUSTED_DOCUMENT_RULE}`,
 		messages: [{ role: 'user', content }],
 		output: {
@@ -165,6 +168,7 @@ export function documentLlmRequest(
 export function documentOutputTokenBudget(request: DocumentModelRequest): number {
 	const textTokensUpperBound = Math.ceil(new TextEncoder().encode(request.documentText).length / 2)
 	if (request.procedure === 'classify-document') return 4_096
+	if (request.procedure === 'summarize-sources') return 8_192
 	if (request.procedure === 'analyze-page') {
 		return Math.min(32_768, Math.max(8_192, textTokensUpperBound * 4))
 	}

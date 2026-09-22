@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'vitest'
 import { httpRequestDigest, parseHttpRequestArtifact } from '../src/contracts'
-import { type CredentialBinding, createMemoryCustomerVault, type VaultError } from '../src/vault'
+import {
+	type CredentialBinding,
+	createMemoryCustomerVault,
+	credentialSelection,
+	type VaultError
+} from '../src/vault'
 
 const TENANT = '10000000-0000-4000-8000-000000000001'
 const OTHER_TENANT = '10000000-0000-4000-8000-000000000009'
@@ -44,6 +49,58 @@ function request(method: 'GET' | 'HEAD' = 'GET') {
 }
 
 describe('customer Vault session boundary', () => {
+	test.each(['rotate', 'revise-binding', 'revoke-binding', 'revoke-credential'] as const)(
+		'refuses a stale selected version after %s',
+		async (change) => {
+			const vault = createMemoryCustomerVault({ tenantId: TENANT })
+			await vault.administration.setCredential({
+				ownerSubjectId: SUBJECT,
+				credentialRef: CREDENTIAL,
+				label: 'Synthetic connection',
+				secret: 'before'
+			})
+			await vault.administration.putBinding(binding())
+			const selection = credentialSelection(await vault.sessions.match(request(), context))!
+			if (change === 'rotate')
+				await vault.administration.rotateCredential({
+					ownerSubjectId: SUBJECT,
+					credentialRef: CREDENTIAL,
+					secret: 'after'
+				})
+			else if (change === 'revise-binding')
+				await vault.administration.putBinding(
+					binding({ attachment: { kind: 'header', name: 'x-service-key', prefix: '' } })
+				)
+			else if (change === 'revoke-binding')
+				await vault.administration.revokeBinding(SUBJECT, BINDING)
+			else await vault.administration.revokeCredential(SUBJECT, CREDENTIAL)
+			await expect(
+				vault.sessions.resolveForUse({
+					selection,
+					request: request(),
+					requestDigest: httpRequestDigest(request()),
+					runId: 'run',
+					stepId: 'step',
+					context
+				})
+			).rejects.toMatchObject({ code: 'VAULT_BINDING_NOT_USABLE' })
+			if (change === 'rotate' || change === 'revise-binding') {
+				const current = credentialSelection(await vault.sessions.match(request(), context))!
+				expect(current).not.toEqual(selection)
+				const used = await vault.sessions.resolveForUse({
+					selection: current,
+					request: request(),
+					requestDigest: httpRequestDigest(request()),
+					runId: 'run',
+					stepId: 'step',
+					context
+				})
+				expect(used.secret).toBe(change === 'rotate' ? 'after' : 'before')
+				expect(used.bindingRevision).toBe(change === 'revise-binding' ? 2 : 1)
+			}
+		}
+	)
+
 	test('sets without readback and resolves only a matching method in the active session', async () => {
 		const vault = createMemoryCustomerVault({
 			tenantId: TENANT,
@@ -84,7 +141,7 @@ describe('customer Vault session boundary', () => {
 
 		const exactRequest = request()
 		const resolved = await vault.sessions.resolveForUse({
-			bindingRef: BINDING,
+			selection: credentialSelection(matched)!,
 			request: exactRequest,
 			requestDigest: httpRequestDigest(exactRequest),
 			runId: 'run-1',
@@ -172,7 +229,7 @@ describe('customer Vault session boundary', () => {
 		await vault.administration.putBinding(binding())
 		await expect(
 			vault.sessions.resolveForUse({
-				bindingRef: BINDING,
+				selection: credentialSelection(await vault.sessions.match(request(), context))!,
 				request: request(),
 				requestDigest: '0'.repeat(64),
 				runId: 'run-1',

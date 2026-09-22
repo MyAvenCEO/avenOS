@@ -1,13 +1,17 @@
 import type { ExecutionEnvironment } from '@avenos/actors'
+import { transportError } from '@avenos/chat-engine/transport-error'
+import { turnPayload } from '@avenos/chat-engine/turn-payload'
 import { invoke } from '@tauri-apps/api/core'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { discardHeldForEnvironmentSwitch } from '$lib/actors/hitl.svelte'
-import { anonymousSpeakerFromPayload } from '$lib/chat/anonymous-speaker'
+import { saveFeedbackAssessment } from '$lib/chat/feedback'
 import { intents, type PersistentIntentDetail } from '$lib/intents/intents.svelte'
 import {
+	discoverIntentAttachments,
 	discoverIntentSources,
 	type ProjectionArtifact
 } from '$lib/intents/persistent-artifact-projection'
+import { persistentTurns } from '$lib/intents/persistent-turns'
 import { shell } from '$lib/intents/talk.svelte'
 import { resetStudioForEnvironment } from '$lib/skills/studio.svelte'
 import {
@@ -17,10 +21,11 @@ import {
 	processClientDocument
 } from './client-document-processing'
 import { clientReconciliation } from './client-reconciliation'
+import { customerWork } from './customer-work.svelte'
 import { emailDocumentQueue } from './document-import-queue.svelte'
 import type { FileImportContext } from './email-import'
-import { type ArtifactProcessingLookup, isTerminalProcessing } from './processing'
-import { transportError } from './transport-error'
+import { isTerminalProcessing } from './processing'
+import { quarantineUploads, resetUploadInbox } from './upload-inbox.svelte'
 
 /**
  * THE ONE DOOR EVERY FILE COMES THROUGH.
@@ -42,6 +47,96 @@ import { transportError } from './transport-error'
 
 const chat = chatActor.core
 
+const conversationSaves = new Map<string, Promise<void>>()
+
+async function saveConversationTurn(
+	session: string,
+	turn: import('$lib/chat/chat.svelte').Turn,
+	revision: number
+) {
+	if (!turn.content || turn.persisted) return
+	if (revision !== intents.environmentRevision)
+		throw Error('The workspace changed before the conversation was saved.')
+	await invoke('intent_append_contribution', {
+		intentId: session,
+		contribution: {
+			id: turn.id,
+			contributorKind: turn.role === 'user' ? 'human' : 'agent',
+			kind: 'message',
+			text: turn.content,
+			payload: turnPayload(turn)
+		}
+	})
+	if (revision !== intents.environmentRevision)
+		throw Error('The workspace changed before the conversation was saved.')
+	turn.persisted = true
+	if (turn.role === 'assistant') chat.resumeFeedback()
+}
+
+/** Chat admission and persistence outlive the dashboard view that hosts the input. */
+export function installConversationPersistence(ready: Promise<void>): void {
+	chat.onFeedbackAssessment = (...args) =>
+		saveFeedbackAssessment(
+			args,
+			args[3]
+				? chat.thread(args[2].intentId).turns.find((t) => t.id === args[3]!.responseId)
+				: undefined
+		)
+	chat.persistInput = async (session, user) => {
+		const revision = intents.environmentRevision
+		customerWork.conversations++
+		try {
+			await ready
+			await saveConversationTurn(session, user, revision)
+		} finally {
+			customerWork.conversations--
+		}
+	}
+	chat.prepareSession = async (prompt, session) => {
+		const revision = intents.environmentRevision
+		await ready
+		if (revision !== intents.environmentRevision) throw Error('The workspace changed.')
+		if (intents.items.find((intent) => intent.id === session)?.persistent) return session
+		const id = crypto.randomUUID()
+		await invoke('intent_create', {
+			intent: {
+				id,
+				title: prompt.slice(0, 100),
+				intentType: 'conversation',
+				sourceLabel: 'Chat',
+				routingSummary: prompt.slice(0, 200)
+			}
+		})
+		if (revision !== intents.environmentRevision) throw Error('The workspace changed.')
+		if (!(await refreshIntent(id)))
+			throw Error(
+				'The conversation was created but could not be loaded. Refresh before trying again.'
+			)
+		return id
+	}
+	chat.onExchange = (session, _user, assistant, inputs) => {
+		if (!intents.items.find((intent) => intent.id === session)?.persistent) return
+		const revision = intents.environmentRevision
+		customerWork.conversations++
+		const save = (conversationSaves.get(session) ?? Promise.resolve())
+			.then(async () => {
+				for (const turn of [...inputs, assistant]) {
+					await saveConversationTurn(session, turn, revision)
+				}
+				await refreshIntent(session)
+			})
+			.catch((error) => {
+				if (revision === intents.environmentRevision)
+					chat.thread(session).failure = `Could not save this conversation: ${String(error)}`
+			})
+			.finally(() => {
+				customerWork.conversations--
+				if (conversationSaves.get(session) === save) conversationSaves.delete(session)
+			})
+		conversationSaves.set(session, save)
+	}
+}
+
 /** What `artifact_upload` hands back once the publication is committed. */
 export interface UploadedArtifactReceipt {
 	publicationId: string
@@ -56,12 +151,11 @@ export interface UploadedArtifactReceipt {
 	replayed: boolean
 }
 
-/** One upload at a time — the composer shows a single upload's progress. */
-let uploadInFlight = false
 const processingWatchers = new Set<string>()
 let workspaceEpoch = 0
 
 export function resetCustomerWorkspace(): void {
+	resetUploadInbox()
 	workspaceEpoch++
 	persistentIntentPages.cursor = null
 	persistentIntentPages.loading = false
@@ -83,33 +177,12 @@ export const documentExecutionPreference = $state<{ environment: ExecutionEnviro
 	environment: 'local'
 })
 
-export function ingestBusy(): boolean {
-	return uploadInFlight
-}
-
 function wait(milliseconds: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 export function basename(path: string): string {
 	return path.split(/[\\/]/).at(-1) || 'Dropped file'
-}
-
-function persistentTurns(detail: PersistentIntentDetail) {
-	return detail.contributions.flatMap((entry) => {
-		if ((entry.contributorKind !== 'human' && entry.contributorKind !== 'agent') || !entry.text)
-			return []
-		const anonymousSpeaker =
-			entry.contributorKind === 'human' ? anonymousSpeakerFromPayload(entry.payload) : null
-		return [
-			{
-				id: entry.id,
-				role: entry.contributorKind === 'human' ? ('user' as const) : ('assistant' as const),
-				content: entry.text,
-				...(anonymousSpeaker ? { anonymousSpeaker } : {})
-			}
-		]
-	})
 }
 
 export async function refreshIntent(intentId: string): Promise<PersistentIntentDetail | null> {
@@ -163,18 +236,40 @@ async function discoverSources(revision: number) {
 				}
 			)
 			if (revision !== intents.environmentRevision) return
-			for (const [intentId, source] of sources)
-				intents.registerDiscoveredSource(
-					intentId,
-					source.artifactId,
-					source.title ?? source.artifactId
+			for (const [intentId, members] of sources)
+				for (const source of members)
+					intents.registerDiscoveredSource(
+						intentId,
+						source.artifactId,
+						source.title ?? source.artifactId
+					)
+			const attachments = await discoverIntentAttachments(
+				page.artifacts,
+				(artifactId) => invoke('artifact_get', { artifactId }),
+				() => {
+					incomplete = true
+				}
+			)
+			if (revision !== intents.environmentRevision) return
+			for (const attachment of attachments)
+				intents.registerDiscoveredAttachment(
+					attachment.intentId,
+					attachment.artifactId,
+					attachment.title
 				)
 			cursor = page.nextCursor
 		} while (cursor)
 		intents.setSourceInventoryComplete(!incomplete)
+		return !incomplete
 	} catch {
 		if (revision === intents.environmentRevision) intents.setSourceInventoryComplete(false)
+		return false
 	}
+}
+
+/** Refresh immutable links after a completed Skill without rehydrating chat. */
+export function refreshIntentArtifactLinks(): Promise<boolean | undefined> {
+	return discoverSources(intents.environmentRevision)
 }
 
 export const persistentIntentPages = $state({
@@ -213,47 +308,61 @@ export async function loadPersistentIntents(more = false): Promise<void> {
 		if (revision !== intents.environmentRevision) return
 		if (details.some((detail) => !detail))
 			throw Error('Some recent intents could not be loaded. Retry to finish this page.')
-		if (!more) void discoverSources(revision)
+		// Intent Service has no file projection. Restore immutable source links
+		// before deciding which loaded documents need their runtime restored.
+		await discoverSources(revision)
 
 		for (const detail of details) {
 			if (revision !== intents.environmentRevision) return
-			const source = detail
-				? (detail.artifacts.find((artifact) => artifact.relation === 'source') ??
-					intents.items
-						.find((intent) => intent.id === detail.id)
-						?.artifacts.find((artifact) => artifact.typeKey === 'core.file'))
-				: undefined
-			const executionEnvironment = source?.artifactId
-				? await clientDocumentSourceExecutionEnvironment(source.artifactId)
-				: null
-			if (revision !== intents.environmentRevision) return
-			if (
-				detail &&
-				source?.artifactId &&
-				executionEnvironment &&
-				(!detail.fileSkill?.presentation ||
-					!isTerminalProcessing(detail.fileSkill.presentation.state))
-			) {
-				void processClientDocument(
-					source.artifactId,
-					detail.title,
-					undefined,
-					executionEnvironment,
-					false
-				)
-				void watchArtifactProcessing(source.artifactId, detail.id)
-				continue
+			if (!detail) continue
+			const sources = new Map<string, { artifactId?: string; title?: string }>([
+				...detail.artifacts
+					.filter((artifact) => artifact.relation === 'source')
+					.map((artifact) => [artifact.artifactId, artifact] as const),
+				...(intents.items.find((intent) => intent.id === detail.id)?.artifacts ?? [])
+					.filter(
+						(artifact) =>
+							artifact.typeKey === 'core.file' && !artifact.stageKey && artifact.artifactId
+					)
+					.map((artifact) => [artifact.artifactId!, artifact] as const)
+			])
+			for (const source of sources.values()) {
+				const executionEnvironment = source?.artifactId
+					? await clientDocumentSourceExecutionEnvironment(source.artifactId)
+					: null
+				if (revision !== intents.environmentRevision) return
+				if (
+					detail &&
+					source?.artifactId &&
+					executionEnvironment &&
+					(!detail.fileSkill?.presentation ||
+						!isTerminalProcessing(detail.fileSkill.presentation.state))
+				) {
+					chat.adoptArtifact(source.artifactId, source.title ?? detail.title)
+					void processClientDocument(
+						source.artifactId,
+						source.title ?? detail.title,
+						undefined,
+						executionEnvironment,
+						false
+					)
+					void watchArtifactProcessing(source.artifactId)
+				}
 			}
 			if (
-				detail?.fileSkill &&
+				detail.fileSkill &&
 				detail.sourceArtifactId &&
 				(!detail.fileSkill.presentation ||
 					!isTerminalProcessing(detail.fileSkill.presentation.state))
-			) {
-				void watchArtifactProcessing(detail.sourceArtifactId, detail.id)
-			}
+			)
+				void watchArtifactProcessing(detail.sourceArtifactId)
 		}
 		if (revision === intents.environmentRevision) {
+			// Initial hydration must not navigate away from an inbox opened during upload.
+			if (!shell.inboxOpen && !intents.selectedId && intents.items[0]) {
+				intents.select(intents.items[0].id)
+				chat.use(intents.items[0].id)
+			}
 			persistentIntentPages.cursor = page.nextCursor
 			persistentIntentPages.hasMore = page.hasMore
 		}
@@ -262,10 +371,7 @@ export async function loadPersistentIntents(more = false): Promise<void> {
 	}
 }
 
-export async function watchArtifactProcessing(
-	artifactId: string,
-	intentId?: string
-): Promise<void> {
+export async function watchArtifactProcessing(artifactId: string): Promise<void> {
 	const epoch = workspaceEpoch
 	if (processingWatchers.has(artifactId)) return
 	processingWatchers.add(artifactId)
@@ -274,25 +380,17 @@ export async function watchArtifactProcessing(
 	try {
 		while (epoch === workspaceEpoch && chat.hasArtifact(artifactId)) {
 			try {
-				const local = clientDocumentProcessingStatus(artifactId)
-				const lookup =
-					local ??
-					(await invoke<ArtifactProcessingLookup>('artifact_processing_status', {
-						artifactId
-					}))
+				// Both device and server execution are observed by the document runtime.
+				// Its admission is async: absence here means it has not restored yet,
+				// not that the retired facade processing endpoint should be queried.
+				const lookup = clientDocumentProcessingStatus(artifactId)
 				if (epoch !== workspaceEpoch) return
 				consecutiveFailures = 0
-				if (lookup.pending || !lookup.presentation) {
+				if (!lookup || lookup.pending || !lookup.presentation) {
 					chat.markArtifactProcessingPending(artifactId)
 					delay = Math.min(2_000, Math.round(delay * 1.5))
 				} else {
 					chat.updateArtifactProcessing(artifactId, lookup.presentation)
-					const owner =
-						intentId ??
-						intents.items.find((intent) =>
-							intent.artifacts.some((artifact) => artifact.artifactId === artifactId)
-						)?.id
-					if (owner && !local) await refreshIntent(owner)
 					if (isTerminalProcessing(lookup.presentation.state)) return
 					delay = 1_500
 				}
@@ -332,16 +430,16 @@ export async function watchArtifactProcessing(
 export async function ingestFile(
 	path: string,
 	executionEnvironment: ExecutionEnvironment = documentExecutionPreference.environment,
-	context?: FileImportContext
+	context?: Partial<FileImportContext>
 ): Promise<UploadedArtifactReceipt | null> {
 	if (!context?.background) {
 		shell.tab = 'intents'
 		shell.detail = true
 	}
 	// A mailbox job waits for the shared upload slot instead of losing a file.
-	while (context?.background && uploadInFlight) await wait(100)
+	while (context?.background && customerWork.uploads) await wait(100)
 
-	if (uploadInFlight) {
+	if (customerWork.uploads) {
 		chat.failure = 'Wait for the current file upload to finish.'
 		return null
 	}
@@ -351,22 +449,25 @@ export async function ingestFile(
 	const intentId = context?.intentId ?? crypto.randomUUID()
 	const observedAt = context?.observedAt ?? new Date().toISOString()
 	const name = basename(path)
-	intents.beginFileIntent(intentId, name, !context?.background)
+	const existingIntent = intents.items.some((intent) => intent.id === intentId)
+	if (!existingIntent) intents.beginFileIntent(intentId, name, !context?.background)
+	else if (!context?.background) intents.select(intentId)
 	chat.beginArtifactUpload(uploadId, publicationId, name, intentId)
-	uploadInFlight = true
+	customerWork.uploads = true
 	let ownsUpload = true
 	try {
-		await invoke('intent_create', {
-			expectedImapScope: context?.imapScope ?? null,
-			intent: {
-				id: intentId,
-				title: name,
-				intentType: 'file',
-				sourceLabel: context?.sourceLabel ?? 'Upload · File',
-				deadline: null,
-				routingSummary: context?.routingSummary ?? `File upload: ${name}`
-			}
-		})
+		if (!existingIntent)
+			await invoke('intent_create', {
+				expectedImapScope: context?.imapScope ?? null,
+				intent: {
+					id: intentId,
+					title: name,
+					intentType: 'file',
+					sourceLabel: context?.sourceLabel ?? 'Upload · File',
+					deadline: null,
+					routingSummary: context?.routingSummary ?? `File upload: ${name}`
+				}
+			})
 		const receipt = await invoke<UploadedArtifactReceipt>('artifact_upload', {
 			expectedImapScope: context?.imapScope ?? null,
 			uploadId,
@@ -379,12 +480,12 @@ export async function ingestFile(
 		chat.commitArtifactUpload(uploadId, receipt)
 		intents.attachFileSource(receipt.intentId, receipt.artifactId, receipt.originalName)
 		await refreshIntent(receipt.intentId)
-		uploadInFlight = false
+		customerWork.uploads = false
 		ownsUpload = false
 		const startProcessing = async () => {
 			// A queued document remains bound to the account that uploaded it.
 			if (
-				context?.background &&
+				context?.imapScope &&
 				(await invoke<string>('imap_account_scope')) !== context.imapScope
 			) {
 				throw new Error(
@@ -397,7 +498,7 @@ export async function ingestFile(
 				receipt.mediaType,
 				executionEnvironment
 			)
-			void watchArtifactProcessing(receipt.artifactId, receipt.intentId)
+			void watchArtifactProcessing(receipt.artifactId)
 			await processing
 		}
 		if (context?.background) {
@@ -415,19 +516,56 @@ export async function ingestFile(
 		if (context?.throwOnError) throw new Error(message)
 		return null
 	} finally {
-		if (ownsUpload) uploadInFlight = false
+		if (ownsUpload) customerWork.uploads = false
 	}
 }
 
-/** The window's drop handler: one regular file at a time, then the one door. */
-export async function ingestDroppedFiles(paths: string[]): Promise<void> {
+/** Untargeted batches stay quarantined; an explicit Intent target admits files serially. */
+export async function ingestDroppedFiles(paths: string[], targetIntentId?: string): Promise<void> {
+	if (!targetIntentId) {
+		await quarantineUploads(paths)
+		return
+	}
 	shell.tab = 'intents'
 	shell.detail = true
-	if (paths.length !== 1) {
-		chat.failure = 'Drop exactly one regular file at a time.'
+	if (paths.length > 50) {
+		chat.failure = 'Drop at most 50 regular files at a time.'
 		return
 	}
 	// Capture the choice before upload begins. Changing the selector while this
 	// run is active affects only a future upload.
-	await ingestFile(paths[0], documentExecutionPreference.environment)
+	const environment = documentExecutionPreference.environment
+	const epoch = workspaceEpoch
+	const imapScope = await invoke<string>('imap_account_scope')
+	for (const path of paths) {
+		if (epoch !== workspaceEpoch) break
+		await ingestFile(path, environment, { intentId: targetIntentId, imapScope })
+	}
+}
+
+/** Promotion uses the ordinary processing lane, only after Store admission. */
+export async function processAdmittedUpload(
+	receipt: UploadedArtifactReceipt,
+	environment: ExecutionEnvironment,
+	imapScope: string
+) {
+	if ((await invoke<string>('imap_account_scope')) !== imapScope)
+		throw Error('Open the original customer environment to process this upload.')
+	// Promotion has no upload-progress entry. Register the committed source before
+	// starting the watcher; the asynchronous Intent projection may not contain it yet.
+	chat.adoptArtifact(receipt.artifactId, receipt.originalName, receipt.mediaType)
+	intents.attachFileSource(receipt.intentId, receipt.artifactId, receipt.originalName)
+	await refreshIntent(receipt.intentId)
+	void watchArtifactProcessing(receipt.artifactId)
+	emailDocumentQueue.setMaxParallelism(await clientDocumentParallelism().catch(() => 1))
+	emailDocumentQueue.enqueue(receipt.artifactId, async () => {
+		if ((await invoke<string>('imap_account_scope')) !== imapScope)
+			throw Error('Open the original customer environment to process this upload.')
+		await processClientDocument(
+			receipt.artifactId,
+			receipt.originalName,
+			receipt.mediaType,
+			environment
+		)
+	})
 }

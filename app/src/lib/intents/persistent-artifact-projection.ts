@@ -1,3 +1,22 @@
+import type { ArtifactProcessingState } from '@avenos/artifact-store'
+
+/** A finished source must not hide a sibling still running or needing attention. */
+export function summarizeFileSources(sources: readonly { state?: ArtifactProcessingState }[]) {
+	const counts = { succeeded: 0, active: 0, needs_review: 0, failed: 0 }
+	for (const source of sources) counts[source.state ?? 'active']++
+	const state: ArtifactProcessingState = counts.active
+		? 'active'
+		: counts.failed
+			? 'failed'
+			: counts.needs_review
+				? 'needs_review'
+				: 'succeeded'
+	return {
+		state,
+		note: `${sources.length} files · ${counts.succeeded} ready · ${counts.active} processing · ${counts.needs_review} to review · ${counts.failed} failed`
+	}
+}
+
 export interface ProjectionArtifact {
 	artifactId: string
 	localKey: string
@@ -24,6 +43,48 @@ interface FileProjection {
 	skills: unknown[]
 }
 
+export interface IntentDocumentAttachment {
+	intentId: string
+	artifactId: string
+	title: string
+}
+
+/** Immutable links are separate from upload roots; never replace the original file. */
+export async function discoverIntentAttachments(
+	artifacts: readonly ProjectionArtifact[],
+	loadEnvelope: (artifactId: string) => Promise<ArtifactEnvelope>,
+	onUnavailable?: () => void
+): Promise<IntentDocumentAttachment[]> {
+	const result: IntentDocumentAttachment[] = []
+	const links = artifacts.filter((a) => a.typeKey === 'intent.attachment')
+	let next = 0
+	await Promise.all(
+		Array.from({ length: Math.min(6, links.length) }, async () => {
+			while (next < links.length) {
+				const link = links[next++]!
+				try {
+					const { payload } = await loadEnvelope(link.artifactId)
+					if (
+						typeof payload?.intentId !== 'string' ||
+						typeof payload?.documentArtifactId !== 'string' ||
+						typeof payload?.title !== 'string'
+					)
+						throw Error('Invalid attachment')
+					await loadEnvelope(payload.documentArtifactId)
+					result.push({
+						intentId: payload.intentId,
+						artifactId: payload.documentArtifactId,
+						title: payload.title
+					})
+				} catch {
+					onUnavailable?.()
+				}
+			}
+		})
+	)
+	return result
+}
+
 /**
  * Intent Service currently owns conversation state, while the immutable
  * intent-to-file association lives in Artifact Store. An upload commits the
@@ -34,7 +95,7 @@ export async function discoverIntentSources(
 	artifacts: readonly ProjectionArtifact[],
 	loadEnvelope: (artifactId: string) => Promise<ArtifactEnvelope>,
 	onUnavailable?: () => void
-): Promise<Map<string, IntentSourceArtifact>> {
+): Promise<Map<string, IntentSourceArtifact[]>> {
 	const byPublication = new Map<string, ProjectionArtifact[]>()
 	for (const artifact of artifacts) {
 		const members = byPublication.get(artifact.publicationId) ?? []
@@ -83,14 +144,16 @@ export async function discoverIntentSources(
 				right.source.publicationOrdinal - left.source.publicationOrdinal ||
 				right.source.artifactId.localeCompare(left.source.artifactId)
 		)
-	const result = new Map<string, IntentSourceArtifact>()
+	const result = new Map<string, IntentSourceArtifact[]>()
 	for (const candidate of newestFirst) {
-		if (result.has(candidate.intentId)) continue
-		result.set(candidate.intentId, {
+		const sources = result.get(candidate.intentId) ?? []
+		if (sources.some((source) => source.artifactId === candidate.source.artifactId)) continue
+		sources.push({
 			artifactId: candidate.source.artifactId,
 			typeKey: 'core.file',
 			...(typeof candidate.title === 'string' ? { title: candidate.title } : {})
 		})
+		result.set(candidate.intentId, sources)
 	}
 	return result
 }

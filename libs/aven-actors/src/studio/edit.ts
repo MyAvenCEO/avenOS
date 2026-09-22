@@ -2,7 +2,8 @@ import {
 	parseStudioSkillV2,
 	type StudioPortBinding,
 	type StudioSkillStep,
-	type StudioSkillV2
+	type StudioSkillV2,
+	StudioSkillV2Error
 } from './v2'
 
 export type StudioV2SemanticEdit =
@@ -14,9 +15,13 @@ export type StudioV2SemanticEdit =
 	  }
 	| { kind: 'set-step-label'; stepId: string; label: string }
 	| { kind: 'remove-step'; stepId: string }
+	| { kind: 'move-step'; stepId: string; beforeStepId: string | null }
+	| { kind: 'set-after'; stepId: string; after: string[] }
 	| { kind: 'set-port-binding'; stepId: string; port: string; binding: StudioPortBinding }
 	| { kind: 'set-parameter-binding'; stepId: string; parameter: string; binding: unknown }
 	| { kind: 'set-output'; name: string; output: unknown }
+	| { kind: 'expose-output'; name: string; stepId: string; port: string }
+	| { kind: 'remove-input'; name: string }
 	| { kind: 'remove-output'; name: string }
 	| { kind: 'set-public-parameter'; name: string; schema: unknown; required: boolean }
 	| { kind: 'remove-public-parameter'; name: string }
@@ -58,8 +63,46 @@ export function newStudioSkillV2(name: string): StudioSkillV2 {
 
 /** Typed semantic edits for both agent and visual clients; the result is always reparsed. */
 export function editStudioSkillV2(rawDefinition: unknown, rawEdit: unknown): StudioV2EditResult {
+	const result = editStudioSkillV2Batch(rawDefinition, [rawEdit])
+	const change = result.changes[0]
+	if (!change) throw new Error('STUDIO_EDIT_INVALID')
+	return { definition: result.definition, change }
+}
+
+/** Atomic graph rewrites may temporarily disconnect a wire; only the final valid graph escapes. */
+export function editStudioSkillV2Batch(rawDefinition: unknown, rawEdits: unknown[]) {
+	if (!Array.isArray(rawEdits) || rawEdits.length < 1 || rawEdits.length > 16)
+		throw new Error('Supply 1–16 semantic edits.')
 	const definition = structuredClone(parseStudioSkillV2(rawDefinition))
-	const edit = parseEdit(rawEdit)
+	const changes = rawEdits.map((raw, index) => {
+		try {
+			const edit = parseEdit(raw)
+			return structuredClone(applyEdit(definition, edit))
+		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error)
+			throw new Error(
+				`Edit ${index + 1} failed: ${reason}. No edits in this batch were saved; the draft revision is unchanged.`
+			)
+		}
+	})
+	try {
+		return { definition: parseStudioSkillV2(definition), changes }
+	} catch (error) {
+		if (error instanceof StudioSkillV2Error)
+			throw new StudioSkillV2Error(
+				error.issues.map((issue) => ({
+					...issue,
+					message: `${issue.message} No edits in this batch were saved; the draft revision is unchanged.`
+				}))
+			)
+		const reason = error instanceof Error ? error.message : String(error)
+		throw new Error(
+			`The edited graph is invalid: ${reason} No edits in this batch were saved; the draft revision is unchanged.`
+		)
+	}
+}
+
+function applyEdit(definition: StudioSkillV2, edit: StudioV2SemanticEdit): StudioV2SemanticChange {
 	let change: StudioV2SemanticChange
 	if (edit.kind === 'rename') {
 		change = { path: 'name', before: definition.name, after: edit.name }
@@ -75,17 +118,35 @@ export function editStudioSkillV2(rawDefinition: unknown, rawEdit: unknown): Stu
 	} else if (edit.kind === 'remove-step') {
 		const removed = removeStep(definition.steps, edit.stepId)
 		change = { path: `steps.${edit.stepId}`, before: removed, after: undefined }
+	} else if (edit.kind === 'move-step') {
+		const before = definition.steps.map((step) => step.id)
+		const index = definition.steps.findIndex((step) => step.id === edit.stepId)
+		if (index < 0 || edit.beforeStepId === edit.stepId)
+			throw new Error('Select a top-level step and a different destination step.')
+		const [step] = definition.steps.splice(index, 1)
+		const target =
+			edit.beforeStepId === null
+				? definition.steps.length
+				: definition.steps.findIndex((step) => step.id === edit.beforeStepId)
+		if (!step || target < 0) throw new Error('STUDIO_EDIT_TARGET_UNAVAILABLE')
+		definition.steps.splice(target, 0, step)
+		change = { path: 'steps.order', before, after: definition.steps.map((step) => step.id) }
 	} else if (edit.kind === 'set-port-binding') {
 		const step = findStep(definition.steps, edit.stepId)
-		if (step.kind !== 'invoke' && step.kind !== 'skill')
+		if (step.kind !== 'invoke' && step.kind !== 'skill' && step.kind !== 'forEach')
 			throw new Error('STUDIO_EDIT_TARGET_INCOMPATIBLE')
-		const before = step.inputs[edit.port]
-		step.inputs[edit.port] = edit.binding
+		const inputs = step.kind === 'forEach' ? step.childInputs : step.inputs
+		const before = inputs[edit.port]
+		inputs[edit.port] = edit.binding
 		change = {
 			path: `steps.${edit.stepId}.inputs.${edit.port}`,
 			before,
 			after: edit.binding
 		}
+	} else if (edit.kind === 'set-after') {
+		const step = findStep(definition.steps, edit.stepId)
+		change = { path: `steps.${edit.stepId}.after`, before: step.after, after: edit.after }
+		step.after = edit.after
 	} else if (edit.kind === 'set-parameter-binding') {
 		const step = findStep(definition.steps, edit.stepId)
 		if (step.kind !== 'invoke' && step.kind !== 'skill')
@@ -97,13 +158,32 @@ export function editStudioSkillV2(rawDefinition: unknown, rawEdit: unknown): Stu
 			before,
 			after: edit.binding
 		}
+	} else if (edit.kind === 'expose-output') {
+		const port = findStep(definition.steps, edit.stepId).outputs[edit.port]
+		if (!port) throw new Error('STUDIO_EDIT_TARGET_UNAVAILABLE')
+		const output = {
+			...structuredClone(port),
+			from: { kind: 'step' as const, stepId: edit.stepId, port: edit.port }
+		}
+		change = { path: `outputs.${edit.name}`, before: definition.outputs[edit.name], after: output }
+		definition.outputs[edit.name] = output
+	} else if (edit.kind === 'remove-input') {
+		if (!definition.inputs[edit.name])
+			throw new Error(
+				`Input ${JSON.stringify(edit.name)} is absent. Current inputs: ${Object.keys(definition.inputs).join(', ') || '(none)'}. It may already have been removed by composition; do not remove it again`
+			)
+		change = { path: `inputs.${edit.name}`, before: definition.inputs[edit.name], after: undefined }
+		delete definition.inputs[edit.name]
 	} else if (edit.kind === 'set-output') {
 		const before = definition.outputs[edit.name]
 		definition.outputs[edit.name] = edit.output as never
 		change = { path: `outputs.${edit.name}`, before, after: edit.output }
 	} else if (edit.kind === 'remove-output') {
 		const before = definition.outputs[edit.name]
-		if (!before) throw new Error('STUDIO_EDIT_TARGET_UNAVAILABLE')
+		if (!before)
+			throw new Error(
+				`Output ${JSON.stringify(edit.name)} is absent. Current outputs: ${Object.keys(definition.outputs).join(', ') || '(none)'}`
+			)
 		delete definition.outputs[edit.name]
 		change = { path: `outputs.${edit.name}`, before, after: undefined }
 	} else if (edit.kind === 'set-public-parameter') {
@@ -123,14 +203,45 @@ export function editStudioSkillV2(rawDefinition: unknown, rawEdit: unknown): Stu
 	} else {
 		const properties = definition.parametersSchema.properties as Record<string, unknown>
 		const before = properties[edit.name]
-		if (before === undefined) throw new Error('STUDIO_EDIT_TARGET_UNAVAILABLE')
+		if (before === undefined)
+			throw new Error(
+				`Public parameter ${JSON.stringify(edit.name)} is absent. Current parameters: ${Object.keys(properties).join(', ') || '(none)'}`
+			)
 		delete properties[edit.name]
+		// Removing a public setting also removes its wires. Leaving references
+		// behind made optional settings impossible to remove through the editor.
+		// Required Actor/child parameters still fail the normal authoring preview;
+		// no replacement/default value is invented and nothing executes here.
+		const disconnected: Array<{ stepId: string; field: string; name: string }> = []
+		const disconnect = (steps: StudioSkillStep[]) => {
+			for (const step of steps) {
+				if (step.kind === 'invoke' || step.kind === 'skill') {
+					for (const [field, bindings] of Object.entries({
+						parameters: step.parameters,
+						...(step.kind === 'invoke' ? { configuration: step.configuration ?? {} } : {})
+					}))
+						for (const [name, binding] of Object.entries(bindings)) {
+							if (binding.kind === 'parameter' && binding.name === edit.name) {
+								disconnected.push({ stepId: step.id, field, name })
+								delete bindings[name]
+							}
+						}
+				} else if (step.kind === 'when') {
+					for (const branch of Object.values(step.branches)) disconnect(branch.steps)
+				}
+			}
+		}
+		disconnect(definition.steps)
 		definition.parametersSchema.required = (
 			definition.parametersSchema.required as string[]
 		).filter((name) => name !== edit.name)
-		change = { path: `parametersSchema.properties.${edit.name}`, before, after: undefined }
+		change = {
+			path: `parametersSchema.properties.${edit.name}`,
+			before: { schema: before, disconnected },
+			after: undefined
+		}
 	}
-	return { definition: parseStudioSkillV2(definition), change }
+	return change
 }
 
 function parseEdit(value: unknown): StudioV2SemanticEdit {
@@ -143,19 +254,29 @@ function parseEdit(value: unknown): StudioV2SemanticEdit {
 		'set-policy': ['kind', 'field', 'value'],
 		'set-step-label': ['kind', 'stepId', 'label'],
 		'remove-step': ['kind', 'stepId'],
+		'move-step': ['kind', 'stepId', 'beforeStepId'],
+		'set-after': ['kind', 'stepId', 'after'],
 		'set-port-binding': ['kind', 'stepId', 'port', 'binding'],
 		'set-parameter-binding': ['kind', 'stepId', 'parameter', 'binding'],
 		'set-output': ['kind', 'name', 'output'],
+		'expose-output': ['kind', 'name', 'stepId', 'port'],
+		'remove-input': ['kind', 'name'],
 		'remove-output': ['kind', 'name'],
 		'set-public-parameter': ['kind', 'name', 'schema', 'required'],
 		'remove-public-parameter': ['kind', 'name']
 	}
-	if (typeof kind !== 'string' || !keys[kind] || !exactKeys(edit, keys[kind]!))
-		throw new Error('STUDIO_EDIT_INVALID')
+	if (typeof kind !== 'string' || !keys[kind])
+		throw new Error(
+			'STUDIO_EDIT_INVALID: Every edit needs its own kind, e.g. set-parameter-binding with stepId, parameter and binding. Do not confuse edit.kind with action.kind or binding.kind.'
+		)
+	if (!exactKeys(edit, keys[kind]!))
+		throw new Error(`STUDIO_EDIT_INVALID: ${kind} accepts exactly: ${keys[kind]!.join(', ')}.`)
 	const name = (field: string): string => {
 		const candidate = edit[field]
 		if (typeof candidate !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(candidate))
-			throw new Error('STUDIO_EDIT_INVALID')
+			throw new Error(
+				`Invalid ${field}: use a lowercase identifier starting with a letter, followed by letters, digits, underscores or hyphens (up to 64 characters). The draft revision is unchanged.`
+			)
 		return candidate
 	}
 	if (kind === 'rename') {
@@ -177,6 +298,21 @@ function parseEdit(value: unknown): StudioV2SemanticEdit {
 		return { kind, stepId: name('stepId'), label: edit.label }
 	}
 	if (kind === 'remove-step') return { kind, stepId: name('stepId') }
+	if (kind === 'move-step')
+		return {
+			kind,
+			stepId: name('stepId'),
+			beforeStepId: edit.beforeStepId === null ? null : name('beforeStepId')
+		}
+	if (kind === 'set-after') {
+		if (
+			!Array.isArray(edit.after) ||
+			edit.after.length > 64 ||
+			edit.after.some((id) => typeof id !== 'string')
+		)
+			throw new Error('STUDIO_EDIT_INVALID')
+		return { kind, stepId: name('stepId'), after: edit.after as string[] }
+	}
 	if (kind === 'set-port-binding')
 		return { kind, stepId: name('stepId'), port: name('port'), binding: edit.binding as never }
 	if (kind === 'set-parameter-binding')
@@ -187,6 +323,9 @@ function parseEdit(value: unknown): StudioV2SemanticEdit {
 			binding: edit.binding
 		}
 	if (kind === 'set-output') return { kind, name: name('name'), output: edit.output }
+	if (kind === 'expose-output')
+		return { kind, name: name('name'), stepId: name('stepId'), port: name('port') }
+	if (kind === 'remove-input') return { kind, name: name('name') }
 	if (kind === 'remove-output') return { kind, name: name('name') }
 	if (kind === 'set-public-parameter') {
 		if (typeof edit.required !== 'boolean') throw new Error('STUDIO_EDIT_INVALID')

@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
 	testDir: '.',
+	outputDir: process.env.E2E_EVIDENCE_DIR ?? '../../test-results',
 	testMatch: ['platform.spec.ts', 'portal-layout.spec.ts'],
 	fullyParallel: false,
 	workers: 1,

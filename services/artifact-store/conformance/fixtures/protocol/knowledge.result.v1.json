@@ -1,0 +1,9 @@
+{
+ "typeKey":"knowledge.result","version":1,"schemaProfileId":"artifact-json-schema-profile-v1",
+ "payloadSchema":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+ "required":["version","query","data","text"],"properties":{
+ "version":{"const":1},"query":{"type":"object","maxProperties":12,"additionalProperties":true},
+ "data":{"type":"object","maxProperties":16,"additionalProperties":true},"text":{"type":"string","maxLength":1048576}
+ }},"blobPolicy":"forbidden",
+ "referenceRules":[{"role":"evidence","minimum":0,"maximum":2048,"allowedTargetTypes":{"kind":"any"},"attributesSchema":{"type":"object","additionalProperties":false,"properties":{},"required":[]}}]
+}

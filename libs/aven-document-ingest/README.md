@@ -50,9 +50,10 @@ actor manifest ID, so listing that directory is the authoritative at-a-glance ca
 | `page-signal-classifier/` | `document_classify_page` | Deterministic |
 | `document-assembler/` | `document_assemble` | Deterministic |
 | `content-aggregator/` | `document_aggregate_content` | Deterministic |
-| `visual-page-analyzer/` | `document_analyze_page` | Vision model |
+| `visual-page-analyzer/` | `document_analyze_page` | Vision for rendered pages; deterministic for text |
 | `document-kind-classifier/` | `document_classify_kind` | Vision model |
 | `csv-statement-detector/` | `document_detect_csv_statement` | Deterministic, strict profiles |
+| `csv-statement-mapper/` | `document_map_csv_statement` | Deterministic, explicit reusable column mapping |
 | `csv-statement-admitter/` | `document_admit_csv_statement` | Deterministic, requires human document confirmation |
 | `invoice-extractor/` | `document_extract_invoice` | Vision model |
 | `statement-extractor/` | `document_extract_statement` | Vision model |
@@ -62,14 +63,15 @@ actor manifest ID, so listing that directory is the authoritative at-a-glance ca
 | `statement-normalizer/` | `document_normalize_statement` | Deterministic |
 | `statement-transaction-fanout/` | `document_fanout_statement_transactions` | Deterministic |
 | `reconciliation-ranker/` | `reconciliation_rank_invoice_transactions` | Deterministic |
+| `document-merger/` | `document_merge_kinds`, `document_merge_invoice`, `document_merge_statement` | Deterministic, combines chunk results |
 
 Each directory exports its release-owned manifest as data and a named factory. The
-`DOCUMENT_ACTOR_MANIFESTS` list under `actors/registry` includes all 18 methods,
+`DOCUMENT_ACTOR_MANIFESTS` list under `actors/registry` includes 20 Actors with 22 methods,
 including model-backed methods when no model host is currently available. Listing it
 does not construct Actors or call a decoder/model. A conformance test compares these
-exports with the actual constructed manifests. These descriptors are not yet complete
-generic Studio installations: mode/retry, projector/procedure, authorization and
-durable publication contracts still need to be supplied before a method is runnable.
+exports with the actual constructed manifests. The runner's document runtime supplies
+the generic Studio installations: procedures, schemas, authorization and durable
+publication. A manifest alone does not grant execution authority.
 Factories can be imported directly, for example:
 
 ```ts
@@ -91,6 +93,25 @@ confirmation before admitting a statement candidate to the normal validation,
 normalization and matching path. Document confirmation never accepts an invoice match.
 The [CSV specimens and limits](../../fixtures/golden/bank-csv/README.md) distinguish
 formats that merely decode from those currently eligible for this human checkpoint.
+
+For other account-statement layouts, `src/csv-mapping.ts` provides the Studio Actor
+**Map CSV columns**. An agent can propose its named-column settings after reading the
+headers and clarifying ambiguous conventions. The Actor, not the model, parses every
+row and computes exact minor-unit amounts. UTF-8, Windows-1252 and UTF-16 LE/BE are
+supported. Dates, decimal/group separators and debit/credit signs are explicit;
+missing facts stay null. Every column must be mapped or acknowledged as ignored.
+Changed headers, mixed currencies, malformed rows and inexact amounts reject the
+whole file. Current bounds are 1 MiB, 64 columns and 128 transactions per file.
+
+The output is a reviewable detection, not a confirmed statement. Its artifact preview
+shows rows and a physical confirmation control. Approval is bound to that exact
+mapping result, not just the source file; changing the mapping requires another
+review. Source bytes and mapping parameters remain in provenance. The existing
+admission, validation, normalization and transaction Actors handle the next stage.
+Transaction fan-out requires an explicit zero-based offset and publishes at most
+64 rows per call; larger statements need successive batches, not a silent prefix.
+Confirmation is a separate human action, not an Actor that an agent can approve and
+not an automatic pause/resume node. No workflow should claim otherwise.
 
 A host supplies three concrete edges:
 
@@ -163,3 +184,10 @@ decision per pair prevents retries from recording contradictory choices. Reversa
 partial-payment allocation, global assignment and automatic acceptance are not
 implemented. The installed Actor catalog remains explicit; this does not claim
 arbitrary third-party skill discovery or per-step distributed leases.
+
+Text-only pages retain native text and UTF-8 layout offsets without a visual
+transcription request. Document-kind classification can still use the model. Rendered
+PDFs and images continue through vision, since embedded PDF text may disagree with
+what is printed. File content aggregation preserves homogeneous page kinds, ignores
+blank pages beside known content, reports mixed known content as `mixed`, and retains
+`unknown` whenever a page remains unknown.

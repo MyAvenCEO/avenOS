@@ -15,10 +15,18 @@ test('one multi-page model import uses independent actor lanes up to the adverti
 	const complete = model.complete.bind(model)
 	let active = 0
 	let peak = 0
+	let release!: () => void
+	const firstWave = new Promise<void>((resolve) => {
+		release = resolve
+	})
+	const watchdog = setTimeout(release, 10_000)
 	model.complete = async (request) => {
 		active++
 		peak = Math.max(peak, active)
-		await new Promise((resolve) => setTimeout(resolve, 12))
+		// Hold the first calls until all advertised lanes reach the provider.
+		// A millisecond sleep races PDF rendering and machine load.
+		if (active === 5) release()
+		await firstWave
 		try {
 			return await complete(request)
 		} finally {
@@ -46,6 +54,7 @@ test('one multi-page model import uses independent actor lanes up to the adverti
 		expect(result.metadata.completedChunks).toBe(5)
 		expect(result.state).not.toBe('failed')
 	} finally {
+		clearTimeout(watchdog)
 		await runtime.close()
 	}
 }, 120000)

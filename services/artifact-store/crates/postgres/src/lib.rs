@@ -3,9 +3,9 @@
 use std::collections::BTreeMap;
 
 use aven_artifact_store_contract::{
-    ArtifactEnvelope, ArtifactEvidence, ArtifactQueryPage, ArtifactResult, BlobAuthority,
-    CommittedRunMetadata, DeclaredBlob, FeedArtifact, OutputBinding, ProducerInputs,
-    PublicationBody, PublicationDetails, PublicationFeedItem, PublicationFeedPage,
+    ArtifactEnvelope, ArtifactEvidence, ArtifactQueryPage, ArtifactReference, ArtifactReferences,
+    ArtifactResult, BlobAuthority, CommittedRunMetadata, DeclaredBlob, FeedArtifact, OutputBinding,
+    ProducerInputs, PublicationBody, PublicationDetails, PublicationFeedItem, PublicationFeedPage,
     PublicationResult, RegisteredTypeDefinition, RunInput, StablePublisher, StoreContext,
     SupportingEvidence, TypeKey, UploadClaimResult, UploadDeclaration, COMMAND_VERSION,
     JSON_PROFILE_ID, SCHEMA_PROFILE_ID,
@@ -19,7 +19,10 @@ use uuid::Uuid;
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
+mod intake;
+mod knowledge;
 mod library;
+pub use knowledge::catalog as knowledge_catalog;
 pub use library::LibraryQuery;
 
 #[derive(Debug, Error)]
@@ -32,6 +35,10 @@ pub enum StoreError {
     Json(#[from] serde_json::Error),
     #[error("store is fenced for reconciliation")]
     Reconciling,
+    #[error(
+        "the workspace needs its current artifact catalog installed before uploads can continue"
+    )]
+    CatalogIncomplete,
     #[error("expected store epoch {expected}, current epoch is {actual}")]
     EpochChanged { expected: Uuid, actual: Uuid },
     #[error("publication identity is already bound to another publisher or intent")]
@@ -75,7 +82,26 @@ impl PostgresStore {
     ///
     /// Returns a database error when the pool cannot connect.
     pub async fn connect(database_url: &str, max_connections: u32) -> Result<Self, StoreError> {
-        let pool = PgPoolOptions::new()
+        let pool = Self::pool_options(max_connections)
+            .connect(database_url)
+            .await?;
+        Ok(Self { pool })
+    }
+
+    /// Allocate a bounded pool without opening a connection. Tenant registries can
+    /// install one shared pool atomically before any concurrent request acquires it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the database URL cannot be parsed. Connectivity and
+    /// credentials are checked by the first query, not by this constructor.
+    pub fn connect_lazy(database_url: &str, max_connections: u32) -> Result<Self, StoreError> {
+        let pool = Self::pool_options(max_connections).connect_lazy(database_url)?;
+        Ok(Self { pool })
+    }
+
+    fn pool_options(max_connections: u32) -> PgPoolOptions {
+        PgPoolOptions::new()
             .max_connections(max_connections)
             .acquire_timeout(std::time::Duration::from_secs(10))
             .after_connect(|connection, _metadata| {
@@ -89,9 +115,6 @@ impl PostgresStore {
                     Ok(())
                 })
             })
-            .connect(database_url)
-            .await?;
-        Ok(Self { pool })
     }
 
     #[must_use]
@@ -164,6 +187,43 @@ impl PostgresStore {
                         definition.type_key, definition.version
                     )));
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// Check provisioning before accepting bytes or writes. Runtime roles never
+    /// install schemas or repair a mismatched catalog on the request path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for missing or changed definitions, or a failed database read.
+    pub async fn verify_types<'a>(
+        &self,
+        definitions: impl IntoIterator<Item = &'a RegisteredTypeDefinition>,
+    ) -> Result<(), StoreError> {
+        let rows = sqlx::query(
+            "SELECT type_key, version, type_definition_sha256::text FROM artifact_store.artifact_type_versions",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        let installed: BTreeMap<(String, i32), String> = rows
+            .into_iter()
+            .map(|row| {
+                (
+                    (row.get("type_key"), row.get("version")),
+                    row.get("type_definition_sha256"),
+                )
+            })
+            .collect();
+        for registered in definitions {
+            let key = (
+                registered.definition.type_key.as_str().to_owned(),
+                i32::try_from(registered.definition.version)
+                    .map_err(|_| StoreError::CatalogIncomplete)?,
+            );
+            if installed.get(&key) != Some(&registered.type_definition_sha256) {
+                return Err(StoreError::CatalogIncomplete);
             }
         }
         Ok(())
@@ -439,6 +499,7 @@ impl PostgresStore {
             return Ok(result);
         }
         admit_publication(&mut transaction, intent.scope_id, prepared, admission).await?;
+        intake::admit(&mut transaction, prepared).await?;
         let excluded: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM artifact_store.publication_id_exclusions WHERE scope_id=$1 AND publication_id=$2)",
         )
@@ -521,7 +582,7 @@ impl PostgresStore {
         artifact_id: Uuid,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         Ok(sqlx::query_scalar(
-            "SELECT b.bytes FROM artifact_store.artifact_contents c JOIN artifact_store.artifact_blobs b ON b.sha256=c.blob_sha256 WHERE c.scope_id=$1 AND c.artifact_id=$2",
+            "SELECT b.bytes FROM artifact_store.artifact_contents c JOIN artifact_store.artifact_blobs b ON b.sha256=c.blob_sha256 WHERE c.scope_id=$1 AND c.artifact_id=$2 AND c.type_key<>'intake.upload'",
         )
         .bind(scope_id)
         .bind(artifact_id)
@@ -570,6 +631,46 @@ impl PostgresStore {
             artifact_id,
             producer_run_id,
             inputs,
+        }))
+    }
+
+    /// Retrieve all sealed structural references for one exact artifact occurrence.
+    /// Publication validation bounds this list; never truncate membership silently.
+    ///
+    /// # Errors
+    /// Returns an error for invalid retained data or a database failure.
+    pub async fn get_references(
+        &self,
+        scope_id: Uuid,
+        artifact_id: Uuid,
+    ) -> Result<Option<ArtifactReferences>, StoreError> {
+        if self.get_artifact(scope_id, artifact_id).await?.is_none() {
+            return Ok(None);
+        }
+        let rows = sqlx::query(
+            "SELECT role, ordinal, target_artifact_id, target_artifact_sha256::text, attributes \
+             FROM artifact_store.artifact_references \
+             WHERE scope_id=$1 AND source_artifact_id=$2 ORDER BY role, ordinal",
+        )
+        .bind(scope_id)
+        .bind(artifact_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut references = Vec::with_capacity(rows.len());
+        for row in rows {
+            references.push(ArtifactReference {
+                role: aven_artifact_store_contract::Role::new(row.try_get::<String, _>("role")?)
+                    .map_err(|error| StoreError::Integrity(error.to_string()))?,
+                ordinal: u32::try_from(row.try_get::<i32, _>("ordinal")?)
+                    .map_err(|_| StoreError::Integrity("invalid reference ordinal".into()))?,
+                artifact_id: row.try_get("target_artifact_id")?,
+                artifact_sha256: row.try_get("target_artifact_sha256")?,
+                attributes: serde_json::from_value(row.try_get("attributes")?)?,
+            });
+        }
+        Ok(Some(ArtifactReferences {
+            artifact_id,
+            references,
         }))
     }
 
@@ -692,12 +793,14 @@ impl PostgresStore {
         }
         let publication = item.expect("publication identity checked above");
         let run = if let Some(run_id) = publication.run_id {
-            let row = sqlx::query("SELECT procedure_key, procedure_version, parameters FROM artifact_store.production_runs WHERE scope_id=$1 AND id=$2")
+            let row = sqlx::query("SELECT procedure_key, procedure_version, parameters, implementation, receipt FROM artifact_store.production_runs WHERE scope_id=$1 AND id=$2")
                 .bind(scope_id).bind(run_id).fetch_one(&self.pool).await?;
             Some(CommittedRunMetadata {
                 procedure_key: row.get("procedure_key"),
                 procedure_version: row.get("procedure_version"),
                 parameters: serde_json::from_value(row.get("parameters"))?,
+                implementation: serde_json::from_value(row.get("implementation"))?,
+                receipt: serde_json::from_value(row.get("receipt"))?,
             })
         } else {
             None

@@ -3,6 +3,7 @@ FROM rust:1.98.0-bookworm AS build
 WORKDIR /repo
 COPY .cargo .cargo
 COPY services/artifact-store services/artifact-store
+COPY libs/aven-artifact-store/knowledge-catalog.json libs/aven-artifact-store/knowledge-catalog.json
 
 WORKDIR /repo/services/artifact-store
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

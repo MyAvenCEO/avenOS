@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
+import { pageMessages } from '@avenos/chat-engine/history-selection'
 import { generatePersonaCorpus } from '../e2e/corpus/persona-model'
-import { pageMessages } from '../src/lib/chat/history-selection'
 import { lookupIntents, selectContextIntents } from '../src/lib/intents/context-selection'
 
 const corpus = generatePersonaCorpus()

@@ -1,39 +1,30 @@
 import {
-	type ActorAuthorizer,
+	type ActorFactoryOffer,
 	ActorRegistry,
-	type PlanRunSecurityContext,
 	type TrustedActorInstallations
 } from '@avenos/actors'
 import { DOCUMENT_ACTOR_MANIFESTS } from '@avenos/document-ingest/actors/registry'
-import { createStudioRuntimeAuthorizer, studioRuntimeOffer } from './studio-runtime.js'
-import type { StudioCatalogSource } from './studio-service.js'
+import { installedAuthorizer } from './installed-runtime'
+import { studioRuntimeOffer } from './studio-runtime'
+import type { StudioCatalogSource } from './studio-service'
 
-/**
- * Release-owned document inventory plus the actually installed Studio runtime offer.
- * Manifest-only document methods stay discoverable but cannot be planned or invoked.
- */
+/** Inventory and executable offers are separate; only installed factories authorize execution. */
 export function createDocumentCatalogSource(
 	scopeId: string,
-	installations?: TrustedActorInstallations
+	installations?: TrustedActorInstallations,
+	offers: ActorFactoryOffer[] = [studioRuntimeOffer()]
 ): StudioCatalogSource {
 	const registry = new ActorRegistry()
 	for (const manifest of DOCUMENT_ACTOR_MANIFESTS) registry.registerManifest(manifest)
 	for (const installation of installations?.list() ?? [])
 		registry.registerDefinition(installation.definition)
-	const installedOffer = studioRuntimeOffer()
-	const runnable = !!installations
-		?.get(installedOffer.definitionRef)
-		?.descriptor.procedures.some((procedure) =>
-			installedOffer.capabilityIds.includes(procedure.capabilityId)
-		)
-	if (runnable) registry.publishOffer(installedOffer)
-	const permitted = new Set<string>(
-		registry.snapshot().definitions.map((definition) => definition.ref)
-	)
+	const installedOffers = offers.filter((offer) => installations?.get(offer.definitionRef))
+	for (const offer of installedOffers) registry.publishOffer(offer)
+	const visible = new Set<string>(registry.snapshot().definitions.map((d) => d.ref))
 	return {
 		registry: () => registry.snapshot(),
-		authorizer: (security: PlanRunSecurityContext): ActorAuthorizer => ({
-			decide: (request) => {
+		authorizer: (security) => ({
+			decide(request) {
 				const scoped =
 					security.principal.kind === 'user' &&
 					request.principal.kind === 'user' &&
@@ -41,13 +32,17 @@ export function createDocumentCatalogSource(
 					security.principal.sessionId === request.principal.sessionId &&
 					security.access.tenantId === scopeId &&
 					request.access.tenantId === scopeId &&
-					permitted.has(request.definitionRef)
-				if (scoped && runnable && request.definitionRef === installedOffer.definitionRef)
-					return createStudioRuntimeAuthorizer(scopeId).decide(request)
+					visible.has(request.definitionRef)
+				if (
+					scoped &&
+					installations &&
+					installedOffers.some((o) => o.definitionRef === request.definitionRef)
+				)
+					return installedAuthorizer(scopeId, installations).decide(request)
 				return scoped && request.action === 'discover'
-					? { allow: true as const, decisionId: 'document-contract-discover' }
+					? { allow: true, decisionId: 'document-contract-discover' }
 					: {
-							allow: false as const,
+							allow: false,
 							decisionId: 'document-contract-deny',
 							reasonCode: 'DOCUMENT_EXECUTION_UNAVAILABLE'
 						}
@@ -55,8 +50,8 @@ export function createDocumentCatalogSource(
 		}),
 		installationFor: (actorId) => installations?.get(actorId),
 		runtimeSupports: (actorId, capabilityId) =>
-			runnable &&
-			actorId === installedOffer.definitionRef &&
-			installedOffer.capabilityIds.some((id) => id === capabilityId)
+			installedOffers.some(
+				(o) => o.definitionRef === actorId && o.capabilityIds.some((id) => id === capabilityId)
+			)
 	}
 }

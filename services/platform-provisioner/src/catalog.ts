@@ -6,11 +6,12 @@ import {
 	customerComponentCatalog,
 	customerComponentManifestSchema
 } from '@avenos/aven-customer-contracts'
+import type { FunctionGrant, RuntimeGrants } from './runtime-grants.js'
 
 export interface ComponentCatalogEntry {
 	manifest: CustomerComponentManifest
 	migrations: { id: string; sql: string; digest: string }[]
-	grants: Record<string, { tables: Array<{ name: string; privileges: string[] }> }>
+	grants: Record<string, RuntimeGrants>
 	externalProvisioner?: 'artifact-store'
 	verifyTable?: string
 }
@@ -30,6 +31,7 @@ async function entry(input: {
 		kind: string
 		roleSuffix: string
 		tables: Array<string | { name: string; privileges: string[] }>
+		functions?: FunctionGrant[]
 	}[]
 }): Promise<ComponentCatalogEntry> {
 	const defaultId = `0001_${input.folder.replaceAll('-', '_')}`
@@ -64,7 +66,7 @@ async function entry(input: {
 		schema: input.schema,
 		targetSchemaVersion: input.targetSchemaVersion ?? 1,
 		migrationSetDigest: pinned.migrationSetDigest,
-		minimumRuntimeSchemaVersion: 1,
+		minimumRuntimeSchemaVersion: pinned.minimumRuntimeSchemaVersion,
 		maximumRuntimeSchemaVersion: input.targetSchemaVersion ?? 1,
 		ownerRoleSuffix: input.ownerRoleSuffix,
 		functionRoles: input.functionRoles.map((role) => ({
@@ -74,7 +76,7 @@ async function entry(input: {
 			connectionLimit: 4
 		})),
 		dependencies: [],
-		requiredByDefault: true
+		requiredByDefault: pinned.requiredByDefault
 	})
 	return {
 		manifest,
@@ -87,7 +89,8 @@ async function entry(input: {
 						typeof table === 'string'
 							? { name: table, privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] }
 							: table
-					)
+					),
+					...(role.functions && { functions: role.functions })
 				}
 			])
 		),
@@ -114,6 +117,78 @@ export async function loadCatalog(): Promise<Map<string, ComponentCatalogEntry>>
 	})
 	const entries = await Promise.all([
 		entry({
+			folder: 'credentials',
+			componentRef: 'ceo.aven:component:data:credentials@1',
+			schema: 'aven_credentials',
+			ownerRoleSuffix: 'cred_owner',
+			functionRoles: [
+				{
+					kind: 'ceo.aven:db-role:credentials:set@1',
+					roleSuffix: 'cred_set',
+					tables: [],
+					functions: [
+						{ name: 'admin_command', argumentTypes: ['uuid', 'uuid', 'int8', 'uuid', 'jsonb'] },
+						{ name: 'command_receipt', argumentTypes: ['uuid', 'uuid', 'int8', 'uuid'] }
+					]
+				},
+				{
+					kind: 'ceo.aven:db-role:credentials:metadata@1',
+					roleSuffix: 'cred_meta',
+					tables: [],
+					functions: [{ name: 'metadata', argumentTypes: ['uuid', 'uuid', 'int8'] }]
+				},
+				{
+					kind: 'ceo.aven:db-role:credentials:match@1',
+					roleSuffix: 'cred_match',
+					tables: [],
+					functions: [{ name: 'metadata', argumentTypes: ['uuid', 'uuid', 'int8'] }]
+				},
+				{
+					kind: 'ceo.aven:db-role:credentials:use-http@1',
+					roleSuffix: 'cred_http',
+					tables: [],
+					functions: [
+						{ name: 'claim_http', argumentTypes: ['jsonb', 'int4', 'text'] },
+						{
+							name: 'finish_http',
+							argumentTypes: ['uuid', 'uuid', 'uuid', 'int4', 'text', 'text']
+						},
+						{ name: 'settle_http', argumentTypes: ['uuid', 'uuid', 'uuid'] }
+					]
+				},
+				{
+					kind: 'ceo.aven:db-role:credentials:use-imap@1',
+					roleSuffix: 'cred_imap',
+					tables: [],
+					functions: [
+						{ name: 'claim_imap', argumentTypes: ['jsonb', 'int4', 'text'] },
+						{
+							name: 'finish_imap',
+							argumentTypes: ['uuid', 'uuid', 'uuid', 'int4', 'text', 'text']
+						},
+						{ name: 'settle_imap', argumentTypes: ['uuid', 'uuid', 'uuid'] }
+					]
+				}
+			]
+		}),
+		entry({
+			folder: 'productivity',
+			componentRef: 'ceo.aven:component:data:productivity@1',
+			schema: 'aven_productivity',
+			ownerRoleSuffix: 'prod_owner',
+			functionRoles: [
+				{
+					kind: 'ceo.aven:db-role:productivity:api@1',
+					roleSuffix: 'prod_api',
+					tables: [
+						{ name: 'tasks', privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+						{ name: 'task_commands', privileges: ['SELECT', 'INSERT'] },
+						{ name: 'task_revisions', privileges: ['SELECT', 'INSERT'] }
+					]
+				}
+			]
+		}),
+		entry({
 			folder: 'artifacts',
 			componentRef: 'ceo.aven:component:data:artifacts@1',
 			schema: 'artifact_store',
@@ -137,6 +212,16 @@ export async function loadCatalog(): Promise<Map<string, ComponentCatalogEntry>>
 		}),
 		entry({
 			folder: 'intents',
+			targetSchemaVersion: 4,
+			migrationFiles: [
+				'0001_intents',
+				'0002_input_admission',
+				'0003_turn_supervision',
+				'0004_input_replacements'
+			].map((id) => ({
+				id,
+				candidates: [resolve(process.cwd(), 'components', 'intents', `${id}.sql`)]
+			})),
 			componentRef: 'ceo.aven:component:data:intents@1',
 			schema: 'aven_intents',
 			ownerRoleSuffix: 'int_owner',
@@ -144,14 +229,29 @@ export async function loadCatalog(): Promise<Map<string, ComponentCatalogEntry>>
 				{
 					kind: 'ceo.aven:db-role:intents:api@1',
 					roleSuffix: 'int_api',
-					tables: ['intents', 'contributions', 'merge_commands', 'merge_relations']
+					tables: [
+						'intents',
+						'contributions',
+						'merge_commands',
+						'merge_relations',
+						{ name: 'input_admissions', privileges: ['SELECT', 'INSERT'] },
+						{ name: 'turn_outbox', privileges: ['SELECT', 'INSERT', 'UPDATE'] }
+					]
 				}
 			]
 		}),
 		entry({
 			folder: 'actor-runs',
-			targetSchemaVersion: 2,
-			migrationFiles: ['0001_actor_runs', '0002_studio'].map((id) => ({
+			targetSchemaVersion: 7,
+			migrationFiles: [
+				'0001_actor_runs',
+				'0002_studio',
+				'0003_studio_origin',
+				'0004_execution_journal',
+				'0005_studio_draft_receipts',
+				'0006_chat_progress_index',
+				'0007_reviews'
+			].map((id) => ({
 				id,
 				candidates: [resolve(process.cwd(), 'components', 'actor-runs', `${id}.sql`)]
 			})),
@@ -162,14 +262,38 @@ export async function loadCatalog(): Promise<Map<string, ComponentCatalogEntry>>
 				{
 					kind: 'os.aven:db-role:actors:api@1',
 					roleSuffix: 'act_api',
-					tables: ['runs', 'studio_drafts', 'studio_connections', 'studio_deliveries'].map(
-						(name) => ({ name, privileges: ['SELECT', 'INSERT', 'UPDATE'] })
-					)
+					functions: [
+						{ name: 'review_read', argumentTypes: ['uuid', 'int8', 'uuid', 'uuid', 'uuid'] },
+						{
+							name: 'review_decide',
+							argumentTypes: ['uuid', 'int8', 'uuid', 'text', 'uuid', 'uuid', 'jsonb']
+						}
+					],
+					tables: [
+						...['runs', 'studio_drafts', 'studio_connections', 'studio_deliveries'].map((name) => ({
+							name,
+							privileges: ['SELECT', 'INSERT', 'UPDATE']
+						})),
+						{ name: 'run_settlement', privileges: ['SELECT'] }
+					]
 				},
 				{
 					kind: 'os.aven:db-role:actors:worker@1',
 					roleSuffix: 'act_worker',
-					tables: [{ name: 'runs', privileges: ['SELECT', 'UPDATE'] }]
+					functions: [
+						{ name: 'review_read', argumentTypes: ['uuid', 'int8', 'uuid', 'uuid', 'uuid'] },
+						{
+							name: 'review_open',
+							argumentTypes: ['uuid', 'int8', 'uuid', 'uuid', 'uuid', 'jsonb']
+						}
+					],
+					tables: [
+						{ name: 'runs', privileges: ['SELECT', 'UPDATE'] },
+						{ name: 'run_steps', privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+						{ name: 'run_settlement', privileges: ['SELECT'] },
+						{ name: 'studio_drafts', privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+						{ name: 'studio_draft_receipts', privileges: ['SELECT', 'INSERT'] }
+					]
 				}
 			]
 		})

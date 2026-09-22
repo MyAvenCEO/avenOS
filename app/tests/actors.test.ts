@@ -182,7 +182,7 @@ describe('execution engine', () => {
 })
 
 describe('supervision', () => {
-	test('a handler that throws once is retried and succeeds silently', async () => {
+	test('a thrown handler is not silently replayed after a possible external effect', async () => {
 		let calls = 0
 		const actor = new Actor(
 			{
@@ -202,11 +202,15 @@ describe('supervision', () => {
 			}
 		)
 		const result = await actor.deliver('work', {})
-		expect(result.wire).toBe('geschafft')
-		expect(actor.failures).toBe(0)
+		expect(JSON.parse(result.record).ok).toBe(false)
+		expect(calls).toBe(1)
+		expect(actor.failures).toBe(1)
+		const retried = await actor.deliver('work', {})
+		expect(retried.wire).toBe('geschafft')
+		expect(calls).toBe(2)
 	})
 
-	test('a handler that keeps throwing is recorded after the retry', async () => {
+	test('a thrown handler records its failure immediately', async () => {
 		const actor = new Actor(
 			{
 				id: 'dead',
@@ -290,6 +294,18 @@ describe('registry actor (0128)', () => {
 		expect(result.wire).toContain('registry')
 	})
 
+	test('registry description accepts the canonical identity used by Studio', async () => {
+		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
+		const { bus, source } = pair()
+		bus.register(new RegistryActor(bus))
+		const result = await bus.dispatch('test', 'registry_describe', {
+			actor: 'ceo.aven:actor:tests.actors:source@1'
+		})
+		expect(JSON.parse(result.record)).toMatchObject({
+			ok: true,
+			manifest: { id: source.manifest.id }
+		})
+	})
 	test('the registry cannot create, change or delete actors', async () => {
 		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
 		const bus = new MessageBus()

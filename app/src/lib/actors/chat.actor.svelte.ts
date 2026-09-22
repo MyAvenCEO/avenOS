@@ -1,10 +1,12 @@
+import { anonymousSpeakerFromPayload } from '@avenos/chat-engine/speaker'
+import { invoke } from '@tauri-apps/api/core'
 import { artifactDescription, artifactProcessingProgress } from '$lib/artifacts/processing'
-import { anonymousSpeakerFromPayload, anonymousSpeakerTone } from '$lib/chat/anonymous-speaker'
-import { Chat } from '$lib/chat/chat.svelte'
+import { anonymousSpeakerTone } from '$lib/chat/anonymous-speaker'
 import { complete, extractJsonObject } from '$lib/chat/redpill'
+import { ChatThreads } from '$lib/chat/threads.svelte'
 import type { Activity } from './activity.svelte'
 import { activity } from './activity.svelte'
-import { Actor } from './actor'
+import { Actor, createCalculationActor, createKnowledgeActor } from './actor'
 import { bus } from './bus'
 import chatMachineSource from './chat-machine.pl?raw'
 import { LlmActor } from './llm.actor'
@@ -26,7 +28,7 @@ import { chatStyle, chatView } from './views/chat/view'
  *   registry — register an actor and the model can call it.
  */
 export class ChatActor extends Actor {
-	readonly core: Chat
+	readonly core: ChatThreads
 
 	/**
 	 * The window projection: the conversation as renderable state for the
@@ -53,9 +55,11 @@ export class ChatActor extends Actor {
 					: attachment.status === 'failed'
 						? `${attachment.originalName} · upload failed`
 						: `${attachment.originalName} · ${attachment.progress}%`
-				: t.content === ''
+				: (t.pending ? this.core.routingReply : t.content) === ''
 					? '…'
-					: t.content
+					: t.pending
+						? this.core.routingReply
+						: t.content
 			return {
 				id: t.id,
 				content,
@@ -89,7 +93,7 @@ export class ChatActor extends Actor {
 			style: chatStyle
 		})
 
-		this.core = new Chat(
+		this.core = new ChatThreads(
 			{
 				onDelta: (text) => {
 					this.#project()
@@ -110,19 +114,26 @@ export class ChatActor extends Actor {
 					this.#project()
 				}
 			},
-			{
+			(thread) => ({
 				// A getter, not a snapshot: the registry grows at runtime (created
 				// actors, their windows), and a list frozen at construction would
 				// hide every late arrival from the model — which is exactly how
 				// "zeig den Kalender" once had no tool to call.
 				get specs() {
-					return bus.toolSpecs().map(({ name, description, parameters }) => ({
-						name,
-						description,
-						parameters
-					}))
+					return bus
+						.toolSpecs()
+						.filter((tool) => !['intent_create', 'intent_switch'].includes(tool.name))
+						.map(({ name, description, parameters }) => ({
+							name,
+							description,
+							parameters
+						}))
 				},
 				run: async (name, args) => {
+					if (['intent_create', 'intent_switch'].includes(name))
+						throw Error(
+							'Conversation destinations are chosen in the input widget before execution.'
+						)
 					let payload: Record<string, unknown> = {}
 					try {
 						payload = args.trim() === '' ? {} : JSON.parse(args)
@@ -130,22 +141,74 @@ export class ChatActor extends Actor {
 						const record = JSON.stringify({ ok: false, error: `unreadable arguments: ${args}` })
 						return { record, wire: 'unreadable arguments' }
 					}
-					const result = await bus.dispatch('chat', name, payload)
-					activity.show(summarizeCall(name, result.record))
+					const result = await bus.dispatch('chat', name, payload, {
+						intentId: thread.session,
+						signal: thread.signal,
+						canPresent: () => this.core.session === thread.session,
+						routeConversation: () => {
+							throw Error('This message is already assigned to an Intent.')
+						}
+					})
+					if (this.core.session === thread.session)
+						activity.show(summarizeCall(name, result.record))
 					return result
 				}
-			}
+			})
 		)
 
+		this.core.assignInput = async (target, requestId) => {
+			if (target.kind === 'existing') {
+				// The Intent Actor validates ownership/existence and hydrates its history.
+				let session = ''
+				const result = await bus.dispatch(
+					'chat',
+					'intent_switch',
+					{ intent: target.id },
+					{
+						routeConversation: (id) => {
+							session = id
+						},
+						canPresent: () => false
+					}
+				)
+				if (!session || JSON.parse(result.record).ok !== true)
+					throw Error('That Intent could not be opened. Your message has not been sent.')
+				return { session }
+			}
+			let session = ''
+			const startedAt = Date.now()
+			const started = performance.now()
+			const payload = { id: requestId, title: target.title, type: 'conversation', source: 'Chat' }
+			const result = await bus.dispatch('chat', 'intent_create', payload, {
+				routeConversation: (id) => {
+					session = id
+				},
+				canPresent: () => false
+			})
+			if (!session || JSON.parse(result.record).ok !== true) throw Error(result.wire)
+			return {
+				session,
+				call: {
+					id: crypto.randomUUID(),
+					name: 'intent_create',
+					arguments: JSON.stringify(payload),
+					status: 'completed',
+					result: result.record,
+					startedAt,
+					durationMs: performance.now() - started
+				}
+			}
+		}
+
 		this.bind({
-			// Not awaited: a turn runs long, and the mailbox must stay free for
-			// the barge-in that interrupts it.
+			// Admission does not hold the mailbox: other Intents and queued
+			// follow-ups remain available while agents work.
 			utterance: (p) => {
 				void this.core.send(String(p.text ?? ''), anonymousSpeakerFromPayload(p) ?? undefined)
 				return { record: '{"ok":true}', wire: 'ok' }
 			},
 			interrupted: () => {
-				this.core.stop()
+				this.core.silence()
 				return { record: '{"ok":true}', wire: 'ok' }
 			}
 		})
@@ -211,6 +274,12 @@ bus.register(llmActor)
 bus.extractJson = extractJsonObject
 
 bus.register(todoActor)
+export const calculationActor = singleton('aven.calculator', () => createCalculationActor())
+bus.register(calculationActor)
+export const knowledgeActor = singleton('aven.knowledge', () =>
+	createKnowledgeActor((query) => invoke('artifact_library', { query }))
+)
+bus.register(knowledgeActor)
 export const studioActor = singleton('aven.studio', () => new StudioActor())
 bus.register(studioActor)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))

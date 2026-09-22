@@ -12,13 +12,18 @@ export interface CsvConfirmation {
 	}
 }
 
-export function csvConfirmationIdentity(sourceArtifactId: string, sourceSha256: string) {
+export function csvConfirmationIdentity(
+	sourceArtifactId: string,
+	sourceSha256: string,
+	mappedDetectionId?: string
+) {
 	return clientRunIdentity(
 		JSON.stringify([
 			CSV_DETECTOR_VERSION,
 			'human-document-confirmation',
 			sourceArtifactId,
-			sourceSha256
+			sourceSha256,
+			...(mappedDetectionId ? [mappedDetectionId] : [])
 		])
 	)
 }
@@ -26,9 +31,10 @@ export function csvConfirmationIdentity(sourceArtifactId: string, sourceSha256: 
 export async function readCsvConfirmation(
 	gateway: ClientArtifactGateway,
 	sourceArtifactId: string,
-	sourceSha256: string
+	sourceSha256: string,
+	mappedDetectionId?: string
 ): Promise<CsvConfirmation | null> {
-	const id = await csvConfirmationIdentity(sourceArtifactId, sourceSha256)
+	const id = await csvConfirmationIdentity(sourceArtifactId, sourceSha256, mappedDetectionId)
 	const run = await gateway.lookup?.(id)
 	if (!run) return null
 	const draft = run.artifacts[0],
@@ -47,7 +53,8 @@ export async function readCsvConfirmation(
 		draft.payload.sourceSha256 !== sourceSha256 ||
 		draft.payload.detectorVersion !== CSV_DETECTOR_VERSION ||
 		!['accepted', 'rejected'].includes(String(draft.payload.decision)) ||
-		typeof draft.payload.detectionArtifactId !== 'string'
+		typeof draft.payload.detectionArtifactId !== 'string' ||
+		(mappedDetectionId !== undefined && draft.payload.detectionArtifactId !== mappedDetectionId)
 	)
 		throw new Error('Stored CSV confirmation does not match this source revision.')
 	return { artifactId: receipt.artifactId, payload: draft.payload as CsvConfirmation['payload'] }
@@ -69,7 +76,8 @@ export async function confirmCsvStatement(
 	const previous = await readCsvConfirmation(
 		gateway,
 		detection.sourceArtifactId,
-		detection.sourceSha256
+		detection.sourceSha256,
+		detection.profile === 'explicit-column-mapping' ? detectionArtifactId : undefined
 	)
 	if (previous) {
 		if (
@@ -82,7 +90,8 @@ export async function confirmCsvStatement(
 	const receipt = await gateway.publish({
 		publicationId: await csvConfirmationIdentity(
 			detection.sourceArtifactId,
-			detection.sourceSha256
+			detection.sourceSha256,
+			detection.profile === 'explicit-column-mapping' ? detectionArtifactId : undefined
 		),
 		procedureKey: 'client.confirm-csv-statement',
 		procedureVersion: 'client-v1',

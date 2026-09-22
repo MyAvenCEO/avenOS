@@ -34,13 +34,12 @@ import type {
 } from './protocol'
 
 const PROTOCOL_VERSION = 1
-let nextRequest = 0
 
 function meta(): { protocol_version: number; request_id: RequestId } {
-	nextRequest++
 	return {
 		protocol_version: PROTOCOL_VERSION,
-		request_id: `web-${nextRequest.toString(36)}`
+		// The native request ledger outlives webview reloads and frontend instances.
+		request_id: crypto.randomUUID()
 	}
 }
 

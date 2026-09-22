@@ -1,4 +1,5 @@
 <script lang="ts">
+import type { CsvDetection } from '@avenos/document-ingest/csv'
 import {
 	type ArtifactEvidence,
 	arrayValue,
@@ -10,15 +11,24 @@ import {
 	objectValue,
 	stringValue
 } from './artifact-view'
+import CalculationCard from './CalculationCard.svelte'
+import CsvMappingReview from './CsvMappingReview.svelte'
+import KnowledgeCard from './KnowledgeCard.svelte'
 
 let {
 	typeKey,
+	artifactId = null,
+	displayTitle,
+	showTypeKey = true,
 	payload,
 	evidence = [],
 	activeEvidence = null,
 	onEvidence = () => undefined
 }: {
 	typeKey: string
+	artifactId?: string | null
+	displayTitle?: string
+	showTypeKey?: boolean
 	payload: unknown
 	evidence?: ArtifactEvidence[]
 	activeEvidence?: ArtifactEvidence | null
@@ -110,7 +120,15 @@ function title(): string {
 </script>
 
 <div class="min-h-0 flex-1 overflow-auto bg-surface-sunken/25 p-3 sm:p-5">
-	{#if candidateInvoice || detailedInvoice}
+	{#if typeKey === 'values.calculation'}
+		<CalculationCard value={payload} />
+	{:else if typeKey === 'banking.csv-statement-detection'}
+		{#key artifactId}
+			<CsvMappingReview {artifactId} detection={payload as CsvDetection} />
+		{/key}
+	{:else if typeKey === 'knowledge.result'}
+		<KnowledgeCard value={payload} />
+	{:else if candidateInvoice || detailedInvoice}
 		<article
 			class="mx-auto max-w-3xl overflow-hidden rounded-sm border border-border bg-white text-foreground shadow-[0_12px_40px_rgba(30,41,59,0.10)] dark:bg-surface-raised"
 		>
@@ -373,12 +391,14 @@ function title(): string {
 			<header class="surface surface--raised surface--size-lg">
 				<div class="flex items-start justify-between gap-4">
 					<div>
-						<p
-							class="text-[length:var(--fs-micro)] text-foreground/35 uppercase tracking-[var(--tracking-wider)]"
-						>
-							{typeKey}
-						</p>
-						<h3 class="mt-1 font-semibold text-xl capitalize">{title()}</h3>
+						{#if showTypeKey}
+							<p
+								class="text-[length:var(--fs-micro)] text-foreground/35 uppercase tracking-[var(--tracking-wider)]"
+							>
+								{typeKey}
+							</p>
+						{/if}
+						<h3 class="mt-1 font-semibold text-xl capitalize">{displayTitle ?? title()}</h3>
 					</div>
 					{#if classification}
 						<span class="rounded-full bg-primary/8 px-3 py-1 font-semibold text-primary text-xs"

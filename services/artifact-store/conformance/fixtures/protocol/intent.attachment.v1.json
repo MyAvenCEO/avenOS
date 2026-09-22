@@ -1,0 +1,16 @@
+{
+  "typeKey": "intent.attachment", "version": 1, "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "additionalProperties": false,
+    "required": ["intentId", "sourceArtifactId", "documentArtifactId", "declarationArtifactId", "title"],
+    "properties": {
+      "intentId": { "type": "string", "minLength": 36, "maxLength": 36 },
+      "sourceArtifactId": { "type": "string", "minLength": 36, "maxLength": 36 },
+      "documentArtifactId": { "type": "string", "minLength": 36, "maxLength": 36 },
+      "declarationArtifactId": { "type": "string", "minLength": 36, "maxLength": 36 },
+      "title": { "type": "string", "minLength": 1, "maxLength": 512 }
+    }
+  },
+  "blobPolicy": "forbidden", "referenceRules": []
+}

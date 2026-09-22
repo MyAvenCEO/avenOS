@@ -332,8 +332,9 @@ describe('client document actors', () => {
 			name: 'document_aggregate_content',
 			produces: ['ceo.aven.docs.content_classification(F, C)'],
 			inputSlots: [
+				expect.objectContaining({ role: 'source', cardinality: 'one' }),
 				expect.objectContaining({ role: 'page-classification', cardinality: 'many' }),
-				expect.objectContaining({ role: 'text', cardinality: 'one' })
+				expect.objectContaining({ role: 'text', cardinality: 'many' })
 			],
 			outputSlots: [expect.objectContaining({ role: 'classification', cardinality: 'one' })]
 		})

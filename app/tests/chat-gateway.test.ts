@@ -20,13 +20,23 @@ const tools: ToolSpec[] = [
 ]
 
 describe('Tauri OpenAI gateway parity', () => {
+	test('keeps host answer-review policy outside the provider function schema', () => {
+		const request = openAiGatewayRequest({
+			messages,
+			tools: [{ ...tools[0], answerReview: 'required' }]
+		})
+		expect(request.tools).toEqual([{ type: 'function', function: tools[0] }])
+		expect(JSON.stringify(request)).not.toContain('answerReview')
+	})
+
 	test('preserves the tuned streaming voice lane and OpenAI function tools', () => {
 		expect(openAiGatewayRequest({ messages, tools })).toEqual({
 			model: CHAT_MODEL,
 			messages,
 			stream: true,
+			stream_options: { include_usage: true },
 			chat_template_kwargs: { enable_thinking: false },
-			frequency_penalty: 0.3,
+			temperature: 0.2,
 			max_tokens: 16_384,
 			tools: [{ type: 'function', function: tools[0] }]
 		})
@@ -46,6 +56,7 @@ describe('Tauri OpenAI gateway parity', () => {
 			model: DESIGN_MODEL,
 			messages,
 			stream: true,
+			stream_options: { include_usage: true },
 			max_tokens: 32_768,
 			response_format: { type: 'json_object' },
 			temperature: 2

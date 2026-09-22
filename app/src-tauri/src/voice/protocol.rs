@@ -398,8 +398,8 @@ pub async fn voice_e2e_begin_narration(
 }
 
 /// Injects a PCM-derived, lexically confirmed first speaker. The pause after
-/// confirmation gives the real actor bus time to abort the in-flight streamed
-/// reply before the final utterance is submitted as the next turn.
+/// confirmation gives the real actor bus time to silence narration before the
+/// final utterance is submitted. The independent Intent continues processing.
 #[tauri::command]
 pub async fn voice_e2e_inject_interruption(
 	app: tauri::AppHandle,

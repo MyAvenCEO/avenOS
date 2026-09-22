@@ -1,0 +1,13 @@
+[package]
+name = "aven-mail-parser"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.93"
+publish = false
+
+[dependencies]
+mail-parser = "=0.11.9"
+serde_json = "1"
+base64 = "0.22"
+sha2 = "0.10"
+libc = "0.2"

@@ -564,13 +564,22 @@ page and transaction-batch collections drive fan-out/gathers. Extraction revisio
 bindings prevent candidate, details and validation from different runs being joined.
 Successful invocation publications replay before an Actor is invoked again.
 
-CSV files have an earlier, mandatory human checkpoint. Only exact reviewed export
-profiles with unambiguous account, currency, dates and valid complete rows may reach
-document-type review; a model's confidence score cannot substitute for these checks.
+CSV files have an earlier, mandatory human checkpoint. Exact reviewed export profiles
+or the Studio's explicit column mapper must validate every row before document-type
+review; a model's confidence score cannot substitute for these checks. The mapper
+can leave absent account and period facts unknown, but cannot invent them. Its
+settings explicitly define date, currency-column and amount-sign meanings.
 The solver requires a committed human confirmation bound to the original file digest
 and detection revision before producing financial statement candidates or bookings.
 This decision is separate from accepting an invoice-to-booking relationship. Unknown
-formats and ambiguous rows stay blocked, with no manual override into reconciliation.
+formats without a validated mapping and ambiguous rows stay blocked, with no manual
+override into reconciliation. The mapper's artifact preview shows a compact transaction
+table, with expandable column assignments, parsing conventions and provenance facts.
+Assignments are loaded from the saved producer settings, not parsed from generated
+notes. Confirmation stays blocked if those settings cannot be loaded. A user checks
+the values and explicitly confirms that the transactions belong to their account;
+the admitted result uses the same validation and normalization Actors as other
+statements. See the [mapper contract and bounds](../libs/aven-document-ingest/README.md#host-adapters).
 The [CSV corpus](../fixtures/golden/bank-csv/README.md) records eight synthetic layouts
 and their sources; only one checked-in layout currently passes every admission check.
 That narrow coverage is not a measured near-100% recognition rate or proof of origin.
@@ -595,6 +604,19 @@ admits an explicit effect and stores exactly three evidence inputs. Publication
 identity is fixed to the invoice/transaction pair, so duplicate acknowledgement and
 contradictory retries cannot create a second decision for that pair. Rejection can
 show the next candidate. Reversing a saved decision is not yet supported.
+
+Background comparisons appear in a collapsed **Workspace reviews** queue, separate
+from the selected Intent's confirmations. Opening it shows one comparison with
+previous/next navigation, a scrolling evidence body and fixed decision buttons.
+**Later** only closes the panel; it does not reject or discard a proposal. Starting
+a chat collapses the review, leaving the Intent's native conversation available.
+
+Ranking still exposes all candidates for inspection. Unsolicited review requires a
+positive signal: a matching reference, IBAN, counterparty, or exact amount with the
+expected sign. Being the top result, sharing a date or merely being a debit is not
+enough. This filter controls attention, not financial acceptance. An agent may still
+explicitly request comparison of a weaker candidate; only a physical decision records
+the relationship.
 
 The snapshot freezes published occurrences, not real-world bank coverage. Queries
 currently use the publication sequence without a restore epoch token; do not span
@@ -682,9 +704,8 @@ with the real provider; both retained the 180-second journey limit.
 A live run also hit the 60-second remote-statement wait without a terminal result;
 the original run had no intermediate server progress, so its cause was not established.
 Subsequent proof includes live stage/attempt progress and a regression preventing
-monitoring errors from leaving a permanently active desktop status. The overall
-journey remains limited to 180 seconds; busy or unavailable providers can still
-make an opt-in run fail. No expected finance values were loosened to pass a model.
+monitoring errors from leaving a permanently active desktop status. The current native proof splits the journey into five serial stages, each limited to
+180 seconds; busy or unavailable providers can still make an opt-in run fail. No expected finance values were loosened to pass a model.
 
 The full repository lint command is not green: 1,295 pre-existing errors remain,
 including existing formatting in `GatePreview.svelte`. No new lint errors remain

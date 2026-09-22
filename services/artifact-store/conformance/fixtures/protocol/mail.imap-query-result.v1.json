@@ -1,0 +1,193 @@
+{
+  "typeKey": "mail.imap-query-result",
+  "version": 1,
+  "schemaProfileId": "artifact-json-schema-profile-v1",
+  "payloadSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "accountRef": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "mailbox": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "uidValidity": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4294967295
+      },
+      "bindingRef": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "queryDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "upperUidExclusive": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4294967296
+      },
+      "scanFromUid": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4294967296
+      },
+      "nextUid": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4294967296
+      },
+      "scanned": {
+        "maxItems": 128,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "first": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            },
+            "last": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            }
+          },
+          "required": [
+            "first",
+            "last"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "messages": {
+        "maxItems": 1000,
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "uid": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "state": {
+                  "type": "string",
+                  "const": "present"
+                },
+                "internalDate": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4294967295
+                },
+                "flags": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                }
+              },
+              "required": [
+                "uid",
+                "state"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "uid": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "state": {
+                  "type": "string",
+                  "const": "missing"
+                }
+              },
+              "required": [
+                "uid",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "coverage": {
+        "type": "string",
+        "enum": [
+          "complete",
+          "truncated",
+          "incomplete"
+        ]
+      },
+      "stopReason": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "match-limit",
+              "command-limit",
+              "time-limit",
+              "result-byte-limit",
+              "missing-metadata"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "observedFrom": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+      },
+      "observedUntil": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+      }
+    },
+    "required": [
+      "accountRef",
+      "mailbox",
+      "uidValidity",
+      "bindingRef",
+      "queryDigest",
+      "upperUidExclusive",
+      "scanFromUid",
+      "nextUid",
+      "scanned",
+      "messages",
+      "coverage",
+      "stopReason",
+      "observedFrom",
+      "observedUntil"
+    ],
+    "additionalProperties": false
+  },
+  "blobPolicy": "forbidden",
+  "referenceRules": []
+}

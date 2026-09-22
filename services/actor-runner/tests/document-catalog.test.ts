@@ -43,7 +43,7 @@ describe('production document Studio inventory policy', () => {
 		const source = createDocumentCatalogSource(scope)
 		const registry = await source.registry()
 		const authorizer = await source.authorizer(security)
-		expect(registry.definitions).toHaveLength(18)
+		expect(registry.definitions).toHaveLength(20)
 		expect(registry.instances).toHaveLength(0)
 		expect(registry.offers).toHaveLength(0)
 		const page = await new StudioCatalog().page({
@@ -54,10 +54,10 @@ describe('production document Studio inventory policy', () => {
 			installationFor: source.installationFor,
 			runtimeSupports: source.runtimeSupports
 		})
-		expect(page.visibleCount).toBe(18)
-		expect(page.actorVisibleCount).toBe(18)
+		expect(page.visibleCount).toBe(22)
+		expect(page.actorVisibleCount).toBe(20)
 		expect(
-			page.actors.every((actor) => actor.kind === 'operations' && actor.visibleOperationCount === 1)
+			page.actors.every((actor) => actor.kind === 'operations' && actor.visibleOperationCount >= 1)
 		).toBe(true)
 		expect(page.readyVisibleCount).toBe(0)
 		expect(page.entries.every((entry) => entry.readiness === 'contract-incomplete')).toBe(true)
@@ -65,7 +65,9 @@ describe('production document Studio inventory policy', () => {
 			page.entries.every((entry) => entry.reasonCodes.includes('INSTALLATION_UNAVAILABLE'))
 		).toBe(true)
 		expect(
-			page.entries.every((entry) => !entry.canAuthor && !entry.canPlan && !entry.canInvokeNow)
+			page.entries.every(
+				(entry) => !entry.canAuthor && !entry.canPlan && entry.invocationStatus === 'not-evaluated'
+			)
 		).toBe(true)
 		const capability = registry.definitions[0]!.capabilities[0]!
 		const plan = await authorizer.decide({
@@ -86,7 +88,7 @@ describe('production document Studio inventory policy', () => {
 			runtimeSupports: source.runtimeSupports
 		})
 		expect(ready.entries).toEqual([])
-		expect(ready.totalVisibleCount).toBe(18)
+		expect(ready.totalVisibleCount).toBe(22)
 	})
 
 	test('a different customer or unauthenticated principal cannot enumerate the package', async () => {

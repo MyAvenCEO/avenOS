@@ -71,6 +71,8 @@ docker build --file "$root/services/static-site-host/Dockerfile" --tag aven-e2e-
 
 docker compose --project-name "$project" --file "$base" --file "$override" config --quiet
 docker compose --project-name "$project" --file "$base" --file "$override" up --detach --wait --wait-timeout 360
+docker compose --project-name "$project" --file "$base" --file "$override" \
+  exec --no-TTY platform-provisioner bun build/ops.js upgrade-runtime
 
 echo "Local platform is ready:"
 echo "  identity  http://localhost:13100"

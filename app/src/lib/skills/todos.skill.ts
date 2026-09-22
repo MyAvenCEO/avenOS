@@ -1,12 +1,11 @@
-import todoMachineSource from '../actors/todo-machine.pl?raw'
+import { TASK_MANIFEST } from '@avenos/productivity/actor'
 import type { SkillDef } from './skill'
 
 /**
- * The todos skill — LIVE: every node here is backed by the running todo
- * actor (its sandbox reducer, its machine, its windows). Two workflows:
- * capture (intent → task → views) and sweep (clear the done). The recipe
- * interfaces are the `.pl` contract predicates.
+ * Capability diagram, not a published executable Skill. The actual task
+ * result contract comes from the same manifest as chat and the saved views.
  */
+const result = TASK_MANIFEST.methods.find((method) => method.name === 'todo_create')!.produces!
 export const todosSkill: SkillDef = {
 	id: 'todos',
 	name: 'Todos',
@@ -40,18 +39,17 @@ export const todosSkill: SkillDef = {
 					about: 'The intent becomes a task: title, tags, due (date or range), responsible.',
 					type: 'op:create',
 					requires: ['todo_intent(I)'],
-					provides: ['todo(T)'],
-					machine: todoMachineSource,
+					provides: result,
 					live: true,
-					config: { fields: ['title', 'tags', 'due', 'responsible', 'spark'] }
+					config: { fields: ['title', 'tags', 'due', 'responsible', 'group'] }
 				},
 				{
 					id: 'list-view',
 					kind: 'output',
 					name: 'List',
-					about: 'Every task in one flat list.',
+					about: 'Saved tasks in the selected group, with more pages available when needed.',
 					type: 'view:list',
-					requires: ['todo(T)'],
+					requires: result,
 					provides: ['listed'],
 					live: true
 				},
@@ -59,36 +57,36 @@ export const todosSkill: SkillDef = {
 					id: 'board-view',
 					kind: 'output',
 					name: 'Kanban board',
-					about: 'The three states as columns; the machine gates every move.',
+					about: 'The same saved tasks as three columns; changes check the displayed revision.',
 					type: 'view:board',
-					requires: ['todo(T)'],
+					requires: result,
 					provides: ['boarded'],
 					live: true
 				}
 			]
 		},
 		{
-			id: 'sweep',
-			name: 'Sweep',
-			about: 'Clear everything done, on request.',
+			id: 'archive',
+			name: 'Archive',
+			about: 'Archive selected tasks on request. Restore them without losing history.',
 			nodes: [
 				{
-					id: 'sweep-trigger',
+					id: 'archive-trigger',
 					kind: 'trigger',
 					name: 'Manual',
-					about: '"Clear done" — the button or the spoken request.',
+					about: 'A request to archive explicitly selected tasks.',
 					type: 'trigger:manual',
-					provides: ['sweep_request(S)'],
+					provides: ['task_archive_request(S)'],
 					live: true
 				},
 				{
-					id: 'clear-done',
+					id: 'archive',
 					kind: 'op',
-					name: 'Clear done',
-					about: 'Every done task of the active spark leaves the list.',
-					type: 'op:clear',
-					requires: ['sweep_request(S)'],
-					provides: ['swept'],
+					name: 'Archive selected tasks',
+					about: 'Revision-checked change with a saved receipt. No tasks are deleted.',
+					type: 'op:archive',
+					requires: ['task_archive_request(S)'],
+					provides: result,
 					live: true
 				}
 			]

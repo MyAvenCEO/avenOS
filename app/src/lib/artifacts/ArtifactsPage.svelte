@@ -2,6 +2,7 @@
 import { presentSkillArtifact, type SkillPresentation } from '@avenos/actors/studio/presentation'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
+import { screenContext } from '$lib/chat/screen-context.svelte'
 import { shell } from '$lib/intents/talk.svelte'
 import { studio, studioRequest } from '$lib/skills/studio.svelte'
 import ArtifactCard from './ArtifactCard.svelte'
@@ -64,7 +65,9 @@ const FIXTURE_ID = '33333333-3333-4333-8333-333333333333'
 const FIXTURE_CHILD_ID = '55555555-5555-4555-8555-555555555555'
 /** Which uploaded file the grid has selected — the subject of the whole pane. */
 let rootId = $state<string | null>(null)
-let filter = $state<'all' | 'files' | 'skills'>('all')
+let { skillsOnly = false }: { skillsOnly?: boolean } = $props()
+let chosenFilter = $state<'all' | 'files' | 'skills'>('all')
+const filter = $derived(skillsOnly ? 'skills' : chosenFilter)
 let queriedSkills = $state<QueriedSkill[]>([])
 let skillSnapshot = $state<number | null>(null)
 let skillNextAfter = $state<string | null>(null)
@@ -78,6 +81,10 @@ let loading = $state(true)
 let failure = $state<string | null>(null)
 let query = $state('')
 let selectedId = $state<string | null>(null)
+$effect(() => {
+	screenContext.title = 'Artifact provenance'
+	screenContext.selection = { rootArtifactId: rootId, artifactId: selectedId, pane, filter }
+})
 let envelope = $state<Record<string, unknown> | null>(null)
 let envelopeLoading = $state(false)
 let envelopeFailure = $state<string | null>(null)
@@ -508,7 +515,7 @@ onMount(() => {
 
 <div class="flex min-h-0 flex-1 flex-col gap-3">
 	<header class="flex items-center gap-3 px-1">
-		<h1 class="font-semibold text-sm">Artefakte</h1>
+		<h1 class="font-semibold text-sm">{skillsOnly ? 'Skills' : 'Artefakte'}</h1>
 		{#if result}
 			<span class="text text--mono-meta">
 				{visibleArtifacts.length + visibleSkills.length}
@@ -527,18 +534,20 @@ onMount(() => {
 			Aktualisieren
 		</button>
 	</header>
-	<div class="flex items-center gap-1 px-1" role="group" aria-label="Artifact filter">
-		{#each [{ key: 'all', label: 'All' }, { key: 'files', label: 'Files' }, { key: 'skills', label: 'Skills' }] as choice}
-			<button
-				type="button"
-				onclick={() => (filter = choice.key as typeof filter)}
-				aria-pressed={filter === choice.key}
-				class="rounded-full px-3 py-1.5 text-xs {filter === choice.key ? 'bg-primary text-primary-foreground' : 'text-foreground/50 hover:bg-surface-sunken'}"
-			>
-				{choice.label}
-			</button>
-		{/each}
-	</div>
+	{#if !skillsOnly}
+		<div class="flex items-center gap-1 px-1" role="group" aria-label="Artifact filter">
+			{#each [{ key: 'all', label: 'All' }, { key: 'files', label: 'Files' }, { key: 'skills', label: 'Skills' }] as choice}
+				<button
+					type="button"
+					onclick={() => (chosenFilter = choice.key as typeof chosenFilter)}
+					aria-pressed={filter === choice.key}
+					class="rounded-full px-3 py-1.5 text-xs {filter === choice.key ? 'bg-primary text-primary-foreground' : 'text-foreground/50 hover:bg-surface-sunken'}"
+				>
+					{choice.label}
+				</button>
+			{/each}
+		</div>
+	{/if}
 
 	<div class="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row">
 		<!-- LEFT — authorized artifacts and an independently paged Skill index. -->
@@ -558,7 +567,7 @@ onMount(() => {
 				</p>
 			{:else if visibleArtifacts.length + visibleSkills.length === 0}
 				<p class="px-1 text-foreground/35 text-sm">
-					{filter === 'skills' ? 'No saved Skills yet. Create one in Studio and it will appear here.' : 'Noch keine Artefakte. Zieh eine Datei ins Fenster — sie wird als Intent aufgenommen.'}
+					{filter === 'skills' ? 'No saved Skills yet. Create one in Studio and it will appear here.' : 'Noch keine Artefakte. Zieh Dateien in den Posteingang und ordne sie einem Intent zu.'}
 				</p>
 			{:else}
 				<div class="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -667,6 +676,7 @@ onMount(() => {
 						</div>
 					{:else if envelope && selectedId === rootId}
 						<ArtifactSemanticViewer
+							artifactId={selectedId}
 							typeKey={String(envelope.typeKey ?? rootArtifact?.typeKey ?? '')}
 							payload={envelope.payload}
 						/>
@@ -907,6 +917,7 @@ onMount(() => {
 												class="flex min-h-[18rem] min-w-0 flex-1 flex-col {sourceContent || content || sourceLoading || contentLoading ? 'border-border lg:border-r' : ''}"
 											>
 												<ArtifactSemanticViewer
+													artifactId={selectedId}
 													typeKey={selected.typeKey}
 													payload={envelope.payload}
 													{evidence}

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { loadMachine } from '../src/lib/actors/machine'
-import machineSource from '../src/lib/actors/todo-machine.pl?raw'
 import { layoutMachine } from '../src/lib/mesh/machine-layout'
+import machineSource from './fixtures/sandbox-tasks/machine.pl?raw'
 
 /**
  * The machine and its diagram. `todo-machine.pl` is the source of truth; the

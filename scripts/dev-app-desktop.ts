@@ -15,6 +15,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 import { freeDevServerPort } from './free-dev-server-port.ts'
+import { desktopRenderingEnv } from './lib/desktop-rendering.ts'
 import { ensureLinuxNativeDeps } from './linux-native-deps.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -35,16 +36,14 @@ function currentDesktopPlatform(): DesktopPlatform {
 }
 
 function desktopEnv(platform: DesktopPlatform): Record<string, string> {
-	const env = { ...process.env } as Record<string, string>
+	const env = desktopRenderingEnv(
+		process.env,
+		platform,
+		process.env.AVENOS_DESKTOP_RENDERING ?? 'auto'
+	) as Record<string, string>
 	env.PATH = env.PATH?.split(path.delimiter).includes(bunDir)
 		? env.PATH
 		: [bunDir, env.PATH].filter(Boolean).join(path.delimiter)
-	if (platform === 'linux') {
-		// Fix blank/flickering WebKitGTK on Wayland + mesa drivers.
-		env.WEBKIT_DISABLE_DMABUF_RENDERER ??= '1'
-		// Fix broken compositing on some older Intel GPUs / nouveau.
-		env.WEBKIT_DISABLE_COMPOSITING_MODE ??= '1'
-	}
 	return env
 }
 

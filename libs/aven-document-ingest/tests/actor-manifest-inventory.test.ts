@@ -24,11 +24,11 @@ describe('document Actor release inventory', () => {
 			}
 		)
 		try {
-			expect(DOCUMENT_ACTOR_MANIFESTS).toHaveLength(18)
-			expect(actors.all).toHaveLength(18)
+			expect(DOCUMENT_ACTOR_MANIFESTS).toHaveLength(20)
+			expect(actors.all).toHaveLength(20)
 			expect(externalCalls).toBe(0)
 			const constructed = new Map(actors.all.map((actor) => [actor.manifest.id, actor.manifest]))
-			expect(new Set(DOCUMENT_ACTOR_MANIFESTS.map((manifest) => manifest.id)).size).toBe(18)
+			expect(new Set(DOCUMENT_ACTOR_MANIFESTS.map((manifest) => manifest.id)).size).toBe(20)
 			for (const manifest of DOCUMENT_ACTOR_MANIFESTS)
 				expect(constructed.get(manifest.id)).toEqual(manifest)
 
@@ -42,13 +42,13 @@ describe('document Actor release inventory', () => {
 					procedures: []
 				})
 			const inventory = installations.inventory()
-			expect(inventory).toHaveLength(18)
+			expect(inventory).toHaveLength(22)
 			expect(inventory.every((entry) => entry.disposition === 'contract-incomplete')).toBe(true)
 			expect(inventory.every((entry) => entry.reasonCodes.includes('PROCEDURE_UNDECLARED'))).toBe(
 				true
 			)
 			expect(
-				inventory.every((entry) => entry.reasonCodes.includes('PARAMETERS_SCHEMA_UNSUPPORTED'))
+				inventory.every((entry) => !entry.reasonCodes.includes('PARAMETERS_SCHEMA_UNSUPPORTED'))
 			).toBe(true)
 			expect(externalCalls).toBe(0)
 		} finally {

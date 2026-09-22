@@ -4,13 +4,23 @@ import {
 	editStudioSkillV2,
 	newStudioSkillV2,
 	type PlanRunRecord,
+	parseStudioSkillParameters,
 	parseStudioSkillV2,
+	STUDIO_SKILL_ARTIFACT_VERSION,
 	type StudioCatalogEntry,
 	type StudioSkillPort,
 	type StudioSkillV2
 } from '@avenos/actors'
+import { composeAuthorizedStudioOperation } from '@avenos/actors/studio/compose-authorized'
 import { onMount } from 'svelte'
+import { screenContext } from '$lib/chat/screen-context.svelte'
+import { composer } from '$lib/intents/composer.svelte'
+import ArtifactPicker from './ArtifactPicker.svelte'
+import RunReview from './RunReview.svelte'
+import StudioCase from './StudioCase.svelte'
 import StudioOperations from './StudioOperations.svelte'
+import StudioParameterField from './StudioParameterField.svelte'
+import StudioStepDetails from './StudioStepDetails.svelte'
 import {
 	refreshStudio,
 	type StudioArtifact,
@@ -20,12 +30,20 @@ import {
 	type StudioPreview,
 	studio,
 	studioName,
-	studioRequest,
-	synchronizeStudio
+	studioRequest
 } from './studio.svelte'
-import { composeAuthorizedStudioOperation } from './studio-compose'
+import { studioCaseContext, studioCaseRequest, studioCaseSeed } from './studio-case-context'
+import { sameStudioJson } from './studio-equality'
+import { readPendingStudio, savePendingStudio } from './studio-pending'
+import { studioErrorMessage } from './studio-request'
 
-let tab = $state<'explore' | 'compose' | 'activity'>('explore')
+let tab = $state<'explore' | 'case' | 'compose' | 'activity'>('explore')
+$effect(() => {
+	if (studio.requestedTab) {
+		tab = studio.requestedTab
+		studio.requestedTab = null
+	}
+})
 let busy = $state(false)
 let error = $state('')
 let notice = $state('')
@@ -35,7 +53,7 @@ let exploration = $state<StudioExploration | null>(null)
 let draft = $state<StudioDraft | null>(null)
 let definition = $state<StudioSkillV2 | null>(null)
 let preview = $state<StudioPreview | null>(null)
-let bindings = $state<Record<string, string>>({})
+let bindings = $state<Record<string, string | string[] | null>>({})
 let parameters = $state<Record<string, unknown>>({})
 let showOperations = $state(false)
 let raw = $state('')
@@ -44,9 +62,14 @@ let inspectorDialog: HTMLDialogElement | undefined = $state()
 let showConnection = $state(false)
 let watchPort = $state('')
 let sourceFilter = $state('')
+let collectionMode = $state<'each' | 'accumulate'>('each')
+let matchExampleProducer = $state(false)
+let stepSelection = $state<{ stepId: string; childArtifactId: string | null } | null>(null)
 let openedPublishedSkillId = $state<string | null>(null)
 let workspaceKey = ''
 let pendingSample: { requestId: string; observedAt: string } | null = null
+let pendingRun = $state<Record<string, unknown> | null>(null)
+let pendingConnection = $state<Record<string, unknown> | null>(null)
 
 const snapshot = $derived(studio.snapshot)
 const artifacts = $derived(
@@ -56,7 +79,7 @@ const artifacts = $derived(
 )
 const savedSkills = $derived(
 	(snapshot?.skills ?? []).flatMap((artifact) => {
-		if (artifact.typeVersion !== 2) return []
+		if (artifact.typeVersion !== STUDIO_SKILL_ARTIFACT_VERSION) return []
 		try {
 			return [{ artifact, definition: parseStudioSkillV2($state.snapshot(artifact.payload)) }]
 		} catch {
@@ -64,18 +87,29 @@ const savedSkills = $derived(
 		}
 	})
 )
-const dirty = $derived(
-	!!definition && JSON.stringify(definition) !== JSON.stringify(draft?.definition)
-)
+const repeatedNames = $derived.by(() => {
+	const counts = new Map<string, number>()
+	for (const item of artifacts)
+		counts.set(studioName(item), (counts.get(studioName(item)) ?? 0) + 1)
+	return counts
+})
+const dirty = $derived(!!definition && !sameStudioJson(definition, draft?.definition))
 const conflict = $derived(
 	!!draft &&
 		!!snapshot?.drafts.some((item) => item.id === draft!.id && item.revision !== draft!.revision)
 )
+// Another surface can publish an already-open saved revision without changing its
+// definition revision. Pick up that publication while preserving unsaved edits.
+const publishedDraft = $derived(
+	snapshot?.drafts.find(
+		(item) => item.id === draft?.id && item.publishedRevision === draft?.revision
+	) ?? draft
+)
 const publishedArtifactId = $derived(
 	!dirty && openedPublishedSkillId
 		? openedPublishedSkillId
-		: !dirty && draft?.publishedRevision === draft?.revision
-			? (draft?.publishedArtifactId ?? null)
+		: !dirty && publishedDraft?.publishedRevision === draft?.revision
+			? (publishedDraft?.publishedArtifactId ?? null)
 			: null
 )
 const inputNames = $derived(Object.keys(definition?.inputs ?? {}))
@@ -87,6 +121,25 @@ const parameterSchemas = $derived(
 		| Record<string, Record<string, unknown>>
 		| undefined) ?? {}
 )
+const runHint = $derived.by(() => {
+	if (!definition) return ''
+	const missing = inputNames.find(
+		(name) => definition!.inputs[name]!.cardinality === 'one' && !bindings[name]
+	)
+	if (missing) return `Choose ${missing} to run this skill.`
+	const setting = requiredParameters.find((name) => !Object.hasOwn(parameters, name))
+	if (setting) return `Set ${setting} below to continue.`
+	if (!parameterReady())
+		return 'Check the run settings. Complete each item and stay within the shown limits.'
+	if (!publishedArtifactId) return 'Publish this version first. Publishing does not run it.'
+	return 'Ready to run. Results are saved with their history.'
+})
+const missingCompanion = $derived(
+	inputNames.find(
+		(name) =>
+			name !== watchPort && definition!.inputs[name]!.cardinality === 'one' && !bindings[name]
+	)
+)
 
 async function act(work: () => Promise<void>) {
 	if (busy) return
@@ -96,13 +149,14 @@ async function act(work: () => Promise<void>) {
 	try {
 		await work()
 	} catch (cause) {
-		error = cause instanceof Error ? cause.message : String(cause)
+		error = studioErrorMessage(cause)
 	} finally {
 		busy = false
 	}
 }
 
-function fresh(next: StudioSkillV2) {
+function fresh(next: StudioSkillV2, originArtifactId?: string) {
+	stepSelection = null
 	openedPublishedSkillId = null
 	const exact = parseStudioSkillV2($state.snapshot(next))
 	definition = exact
@@ -111,6 +165,7 @@ function fresh(next: StudioSkillV2) {
 		subjectId: snapshot?.subjectId ?? '',
 		revision: 0,
 		definition: structuredClone(exact),
+		originArtifactId,
 		publishedArtifactId: null,
 		publishedRevision: null,
 		updatedAt: new Date().toISOString()
@@ -126,6 +181,7 @@ function createBlank() {
 	showOperations = true
 }
 function openDraft(value: StudioDraft) {
+	stepSelection = null
 	openedPublishedSkillId = null
 	draft = structuredClone($state.snapshot(value))
 	definition = parseStudioSkillV2($state.snapshot(value.definition))
@@ -135,14 +191,14 @@ function openDraft(value: StudioDraft) {
 	tab = 'compose'
 }
 async function openSkill(artifact: StudioArtifact, action: 'open' | 'use' | 'prepare' = 'open') {
-	if (artifact.typeKey !== 'studio.skill' || artifact.typeVersion !== 2)
+	if (artifact.typeKey !== 'studio.skill' || artifact.typeVersion !== STUDIO_SKILL_ARTIFACT_VERSION)
 		throw new Error('This exact Skill version is unavailable in the current runtime.')
 	const exact = parseStudioSkillV2($state.snapshot(artifact.payload))
 	if (action === 'use') {
 		fresh(newStudioSkillV2(`${exact.name} workflow`))
 		addChild(artifact, exact)
 	} else {
-		fresh(exact)
+		fresh(exact, artifact.artifactId)
 		openedPublishedSkillId = artifact.artifactId
 		notice =
 			action === 'prepare'
@@ -158,6 +214,11 @@ async function exploreId(artifactId: string) {
 	tab = 'explore'
 }
 async function explore(artifact: StudioArtifact) {
+	if (artifact.typeKey === 'studio.case') {
+		studioCaseRequest.set(artifact.artifactId)
+		tab = 'case'
+		return
+	}
 	await exploreId(artifact.artifactId)
 }
 async function addOperation(entry: StudioCatalogEntry) {
@@ -237,7 +298,8 @@ async function save() {
 	draft = await studioRequest<StudioDraft>('draft', {
 		id: draft.id,
 		revision: draft.revision,
-		definition: $state.snapshot(definition)
+		definition: $state.snapshot(definition),
+		...(draft.originArtifactId ? { originArtifactId: draft.originArtifactId } : {})
 	})
 	await refreshStudio()
 	openedPublishedSkillId = null
@@ -267,16 +329,55 @@ async function publishSkill() {
 	notice = 'Immutable Skill published.'
 }
 function parameterReady() {
-	return requiredParameters.every((name) => Object.hasOwn(parameters, name))
+	if (!definition) return false
+	try {
+		parseStudioSkillParameters($state.snapshot(definition), $state.snapshot(parameters))
+		return true
+	} catch {
+		return false
+	}
 }
 async function run() {
 	if (!publishedArtifactId) return
-	await studioRequest('start', {
-		requestId: crypto.randomUUID(),
+	pendingRun = readPendingStudio(workspaceKey, 'start')
+	const command = {
 		skillArtifactId: publishedArtifactId,
-		inputs: $state.snapshot(bindings),
+		inputs: Object.fromEntries(
+			Object.entries(definition!.inputs).map(([name, port]) => [
+				name,
+				bindings[name] || (port.cardinality === 'many' ? [] : null)
+			])
+		),
 		parameters: $state.snapshot(parameters)
-	})
+	}
+	if (pendingRun) {
+		const { requestId: _id, ...previous } = pendingRun
+		if (!sameStudioJson(previous, command))
+			throw new Error(
+				'An earlier run has an uncertain outcome. Use “Check previous run” before starting a different one.'
+			)
+	} else
+		pendingRun = { ...structuredClone($state.snapshot(command)), requestId: crypto.randomUUID() }
+	savePendingStudio(workspaceKey, 'start', $state.snapshot(pendingRun))
+	await retryPendingRun()
+}
+async function retryPendingRun() {
+	if (!pendingRun) return
+	const key = workspaceKey
+	const command = $state.snapshot(pendingRun)
+	savePendingStudio(key, 'start', command)
+	try {
+		await studioRequest('start', command)
+	} catch (error) {
+		if (rejectedBeforeAdmission(error)) {
+			savePendingStudio(key, 'start', null)
+			if (workspaceKey === key) pendingRun = null
+		}
+		throw error
+	}
+	savePendingStudio(key, 'start', null)
+	if (workspaceKey !== key) return
+	pendingRun = null
 	tab = 'activity'
 	await refreshStudio()
 	notice = 'Run accepted · provenance will be retained.'
@@ -294,22 +395,83 @@ async function inspect(artifactId: string) {
 }
 async function connect() {
 	if (!publishedArtifactId || !definition || !watchPort) return
-	await studioRequest('connect', {
+	pendingConnection = readPendingStudio(workspaceKey, 'connect')
+	if (pendingConnection)
+		throw new Error('Check the previous connection request before enabling another one.')
+	const exampleBinding = bindings[watchPort]
+	const example = Array.isArray(exampleBinding) ? exampleBinding[0] : exampleBinding
+	if (matchExampleProducer && !example)
+		throw new Error('Choose a processed example first to match its producing operation.')
+	const production =
+		matchExampleProducer && example
+			? await studioRequest<{
+					production: { run: { procedureKey: string; procedureVersion: string } | null } | null
+				}>('inspect', { artifactId: example })
+			: null
+	const producer = production?.production?.run
+	if (matchExampleProducer && !producer)
+		throw new Error(
+			'This item is an original upload, not an operation result. Choose a processed example, or turn off matching its producing operation.'
+		)
+	pendingConnection = {
 		id: crypto.randomUUID(),
 		name: definition.name,
 		skillArtifactId: publishedArtifactId,
 		sourceArtifactId: sourceFilter || null,
 		inputPort: watchPort,
+		origin: producer
+			? {
+					procedureKey: producer.procedureKey,
+					procedureVersion: '*'
+				}
+			: null,
+		collection: {
+			mode: definition.inputs[watchPort]?.cardinality === 'many' ? collectionMode : 'each',
+			initial:
+				collectionMode === 'accumulate' &&
+				definition.inputs[watchPort]?.cardinality === 'many' &&
+				Array.isArray(bindings[watchPort])
+					? bindings[watchPort]
+					: []
+		},
 		fixedInputs: Object.fromEntries(
 			Object.entries(bindings).filter(([name]) => name !== watchPort)
 		),
 		parameters: $state.snapshot(parameters),
 		enabled: true
-	})
+	}
+	pendingConnection = structuredClone($state.snapshot(pendingConnection))
+	savePendingStudio(workspaceKey, 'connect', $state.snapshot(pendingConnection))
+	await retryPendingConnection()
+}
+async function retryPendingConnection() {
+	if (!pendingConnection) return
+	const key = workspaceKey
+	const command = $state.snapshot(pendingConnection)
+	savePendingStudio(key, 'connect', command)
+	try {
+		await studioRequest('connect', command)
+	} catch (error) {
+		if (rejectedBeforeAdmission(error)) {
+			savePendingStudio(key, 'connect', null)
+			if (workspaceKey === key) pendingConnection = null
+		}
+		throw error
+	}
+	savePendingStudio(key, 'connect', null)
+	if (workspaceKey !== key) return
+	pendingConnection = null
 	showConnection = false
 	tab = 'activity'
 	await refreshStudio()
 	notice = 'Connection enabled.'
+}
+function rejectedBeforeAdmission(error: unknown): boolean {
+	// Losing authentication on a retry says nothing about whether the original
+	// attempt ran. Keep its identity through sign-in rather than risking a duplicate.
+	return /"code"\s*:\s*"(?:COMMAND_INVALID|STUDIO_INVALID|STUDIO_ADMISSION_REJECTED)"/.test(
+		String(error)
+	)
 }
 async function control(connection: StudioConnection) {
 	await studioRequest('control', {
@@ -329,20 +491,38 @@ const readableType = (key: string) =>
 			'studio.email': 'Email',
 			'studio.brief': 'Brief',
 			'studio.skill': 'Skill',
+			'studio.case': 'Case',
 			'core.file': 'File'
 		}) as Record<string, string>
 	)[key] ?? key
 const runArtifact = (run: PlanRunRecord): StudioArtifact | null =>
 	(run.checkpoints.at(-1)?.output as { artifact?: StudioArtifact } | undefined)?.artifact ?? null
+const runOutputs = (run: PlanRunRecord) =>
+	Object.entries(
+		(run.checkpoints.at(-1)?.output as { outputs?: Record<string, string[]> } | undefined)
+			?.outputs ?? {}
+	).flatMap(([port, ids]) =>
+		ids.map((artifactId, index) => ({
+			artifactId,
+			label: ids.length > 1 ? `${port} · ${index + 1}` : port
+		}))
+	)
 
 $effect(() => {
-	if (inspector && inspectorDialog && !inspectorDialog.open) inspectorDialog.showModal()
+	if (inspector && inspectorDialog && !inspectorDialog.open) inspectorDialog.show()
 })
 $effect(() => {
 	const key = snapshot ? `${snapshot.scopeId}/${snapshot.subjectId}` : ''
 	if (!key || key === workspaceKey) return
 	if (workspaceKey) {
+		pendingSample = null
+		pendingRun = null
+		pendingConnection = null
 		openedPublishedSkillId = null
+		studioCaseRequest.set('')
+		studioCaseSeed.set(null)
+		studioCaseContext.artifactId = ''
+		studioCaseContext.summary = ''
 		selected = null
 		exploration = null
 		draft = null
@@ -352,6 +532,12 @@ $effect(() => {
 		tab = 'explore'
 	}
 	workspaceKey = key
+	try {
+		pendingRun = readPendingStudio(key, 'start')
+		pendingConnection = readPendingStudio(key, 'connect')
+	} catch (failure) {
+		error = failure instanceof Error ? failure.message : String(failure)
+	}
 })
 $effect(() => {
 	const id = studio.requestedArtifactId
@@ -400,15 +586,31 @@ $effect(() => {
 	})
 })
 onMount(() => {
-	const tick = () => {
-		if (!busy && document.visibilityState === 'visible')
-			void synchronizeStudio().catch((cause) => {
-				error = String(cause)
-			})
+	studioCaseContext.active = true
+	return () => {
+		studioCaseContext.active = false
 	}
-	tick()
-	const timer = setInterval(tick, 7000)
-	return () => clearInterval(timer)
+})
+$effect(() => {
+	if ($studioCaseRequest) tab = 'case'
+})
+$effect(() => {
+	studioCaseContext.view = tab
+	screenContext.title =
+		definition && tab === 'compose'
+			? definition.name
+			: selected
+				? studioName(selected)
+				: 'Skill Studio'
+	screenContext.selection = {
+		view: tab,
+		artifactId: selected?.artifactId ?? null,
+		draftId: draft?.id ?? null,
+		draftRevision: draft?.revision ?? null,
+		unsaved: dirty,
+		step: stepSelection,
+		definition: definition ? $state.snapshot(definition) : null
+	}
 })
 </script>
 
@@ -436,7 +638,7 @@ onMount(() => {
 		</div>
 	</header>
 	<nav class="tabs" aria-label="Studio views">
-		{#each [{ id: 'explore', label: 'Explore', icon: '◈' }, { id: 'compose', label: 'Compose', icon: '⌘' }, { id: 'activity', label: 'Activity', icon: '↗' }] as item}
+		{#each [{ id: 'explore', label: 'Explore', icon: '◈' }, { id: 'case', label: 'Real cases', icon: '◎' }, { id: 'compose', label: 'Compose', icon: '⌘' }, { id: 'activity', label: 'Activity', icon: '↗' }] as item}
 			<button
 				class:active={tab === item.id}
 				aria-current={tab === item.id ? 'page' : undefined}
@@ -455,31 +657,61 @@ onMount(() => {
 	{#if notice}
 		<div class="banner success" role="status">✓ {notice}</div>
 	{/if}
+	{#if !busy && (pendingRun || pendingConnection)}
+		<div class="banner" role="status">
+			<span
+				>The previous request is not confirmed yet. Checking repeats its original ID, not the work.</span
+			>
+			{#if pendingRun}
+				<button onclick={() => void act(retryPendingRun)}>Check previous run</button>
+			{/if}
+			{#if pendingConnection}
+				<button onclick={() => void act(retryPendingConnection)}>Check previous connection</button>
+			{/if}
+		</div>
+	{/if}
 
 	<div class="workspace">
 		<aside class="rail">
 			<div class="rail-title">
-				<span>Artifacts</span><small>{snapshot?.artifacts.length ?? '—'}</small>
+				<span>Recent artifacts</span><small>{snapshot?.artifacts.length ?? '—'}</small>
 			</div>
 			<label class="search"
 				><span>⌕</span>
-				<input bind:value={search} placeholder="Find anything" aria-label="Find artifact"></label
+				<input
+					bind:value={search}
+					placeholder="Filter recent items"
+					aria-label="Find artifact"
+				></label
 			>
 			<div class="artifact-list">
 				{#each artifacts as artifact (artifact.artifactId)}
 					<button
 						class:chosen={selected?.artifactId === artifact.artifactId}
+						title={[studioName(artifact), artifact.payload.from, artifact.committedAt, artifact.artifactId].filter(Boolean).join(' · ')}
 						onclick={() => void act(() => explore(artifact))}
 					>
 						<b
 							>{artifact.typeKey === 'studio.email' ? '✉' : artifact.typeKey === 'studio.skill' ? '⌘' : '▤'}</b
 						><span
 							><strong>{studioName(artifact)}</strong
-							><small>{readableType(artifact.typeKey)}</small></span
+							><small
+								>{readableType(artifact.typeKey)}
+								{#if (repeatedNames.get(studioName(artifact)) ?? 0) > 1}
+									· {artifact.artifactId.slice(0, 8)}
+								{/if}</small
+							></span
 						><i>›</i>
 					</button>
 				{:else}
-					<p class="empty">Capture a sample email to begin.</p>
+					<p class="empty">
+						{search ? 'Nothing here matches yet.' : 'Start with a file, a conversation, or a sample.'}
+					</p>
+					<button
+						onclick={() => composer.focus(`Help me find the real case or artifact I need${search ? `: ${search}` : '. Ask me what I worked on before'}. Search relevant history and stored artifacts, then show me the evidence to confirm.`)}
+					>
+						Ask Aven to find it ↗
+					</button>
 				{/each}
 			</div>
 			<div class="rail-title programs">
@@ -496,14 +728,27 @@ onMount(() => {
 		</aside>
 
 		<main class="canvas">
-			{#if tab === 'explore'}
+			{#key `${snapshot?.scopeId}/${snapshot?.subjectId}`}
+				<div hidden={tab !== 'case'}><StudioCase onbuild={openDraft} /></div>
+			{/key}
+			{#if tab === 'case'}
+			<!-- The case panel stays mounted above so tab changes retain unsaved work. -->
+			{:else if tab === 'explore'}
 				<div class="heading">
 					<span>01 / Possibilities</span>
 					<h2>{selected ? 'What could this become?' : 'Start with something real.'}</h2>
-					<p>{selected ? studioName(selected) : 'Choose an artifact or try the sample.'}</p>
+					<p>
+						{selected ? studioName(selected) : 'Choose an artifact, or start from something you did before.'}
+					</p>
+					<button
+						class="secondary"
+						onclick={() => { if (selected) studioCaseSeed.set({ artifactId: selected.artifactId, title: studioName(selected), payload: $state.snapshot(selected.payload) }); tab = 'case' }}
+					>
+						◎ {selected ? 'Build a case around this' : 'Find a real case'} →
+					</button>
 				</div>
 				{#if !selected}
-					<div class="hero">
+					<div class="studio-empty-card">
 						<div class="orbit"><span>✉</span><i>→</i><span>⌘</span><i>→</i><span>◇</span></div>
 						<h3>Small pieces. Useful programs.</h3>
 						<p>Explore an artifact, choose an outcome, and let the Studio wire the named ports.</p>
@@ -521,31 +766,66 @@ onMount(() => {
 							Trace ↗
 						</button>
 					</div>
-					<div class="opportunities">
-						{#each exploration?.opportunities ?? [] as opportunity, index}
+					<div class="directions" aria-label="Explore outcomes">
+						{#each exploration?.directions ?? [] as direction}
 							<button
-								onclick={() => { fresh(opportunity.definition); const port = Object.keys(opportunity.definition.inputs)[0]; if (port) bindings[port] = selected!.artifactId }}
+								class="direction"
+								onclick={() => composer.focus(`${composer.draft ? '\n' : ''}${direction.request}`)}
 							>
-								<span>0{index + 1}</span>
-								<div>
-									<h3>{opportunity.label}</h3>
-									<p>{opportunity.steps.map((step) => step.label).join(' → ')}</p>
-									<small>✓ Installed and authorable</small>
-								</div>
-								<b>↗</b>
+								<b>{direction.label} ↗</b><span>{direction.description}</span
+								><small>Explore with Aven</small>
 							</button>
-						{:else}
-							<div class="hero compact">
-								<h3>No direct route yet.</h3>
-								<p>A new installed Actor can extend this space without a Studio edit.</p>
-								{#if selected.typeKey === 'studio.skill' && selected.typeVersion === 2}
-									<button class="primary" onclick={() => void act(() => openSkill(selected!))}>
-										Open Skill ↗
-									</button>
-								{/if}
-							</div>
 						{/each}
 					</div>
+					<details class="building-blocks">
+						<summary>
+							Build step by step · {exploration?.opportunities.length ?? 0} matching actions
+						</summary>
+						<div class="opportunities">
+							{#each exploration?.opportunities ?? [] as opportunity, index}
+								<button
+									onclick={() => { fresh(opportunity.definition); const match = Object.entries(opportunity.definition.inputs).find(([, port]) => compatible(selected!, port)); if (match) bindings[match[0]] = match[1].cardinality === 'many' ? [selected!.artifactId] : selected!.artifactId }}
+								>
+									<span>{String(index + 1).padStart(2, '0')}</span>
+									<div>
+										<h3>{opportunity.label}</h3>
+										<p>
+											{opportunity.description ?? opportunity.steps.map((step) => step.label).join(' → ')}
+										</p>
+										<small
+											>{opportunity.conditional ? 'More inputs or settings needed' : 'Ready to compose'}
+											· does not run yet</small
+										>
+									</div>
+									<b>↗</b>
+								</button>
+							{:else}
+								<div class="studio-empty-card compact">
+									<h3>Let's find the next step.</h3>
+									<p>
+										No direct route was found in the current catalog. Explore the available actions
+										or inspect this item.
+									</p>
+									<div class="empty-actions">
+										<button class="primary" onclick={() => showOperations = true}>
+											Browse actions
+										</button>
+										<button
+											class="secondary"
+											onclick={() => void act(() => inspect(selected!.artifactId))}
+										>
+											Inspect item
+										</button>
+									</div>
+									{#if selected.typeKey === 'studio.skill' && selected.typeVersion === STUDIO_SKILL_ARTIFACT_VERSION}
+										<button class="primary" onclick={() => void act(() => openSkill(selected!))}>
+											Open Skill ↗
+										</button>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</details>
 				{/if}
 			{:else if tab === 'compose'}
 				{#if definition}
@@ -560,7 +840,7 @@ onMount(() => {
 							>
 						</div>
 						<div class="status" class:ready={preview?.ok}>
-							{preview?.ok ? '✓ Ready to publish' : preview ? '◌ Needs attention' : '◌ Checking'}
+							{publishedArtifactId ? '◆ Published' : preview?.ok ? '✓ Ready to publish' : preview ? '◌ Needs attention' : '◌ Checking'}
 						</div>
 					</div>
 					<div class="flow">
@@ -569,8 +849,14 @@ onMount(() => {
 							{#each Object.entries(definition.inputs) as [name, port]}
 								<div>
 									<b>IN</b><strong>{name}</strong
-									><small>{readableType(port.type.key)} · {port.cardinality}</small>
+									><small
+										>{readableType(port.type.key)}
+										·
+										{port.cardinality === 'one' ? 'one item' : port.cardinality === 'many' ? 'list' : 'optional'}</small
+									>
 								</div>
+							{:else}
+								<p class="boundary-hint">No input needed</p>
 							{/each}
 						</div>
 						<div class="line"></div>
@@ -587,9 +873,14 @@ onMount(() => {
 											value={step.label}
 											onblur={(event) => labelStep(step.id, event.currentTarget.value)}
 										><small
-											>{step.kind === 'invoke' ? step.capabilityId.split(':').at(-1) : step.kind === 'skill' ? 'Exact nested Skill' : step.kind}</small
+											>{step.kind === 'invoke' ? 'Action' : step.kind === 'skill' ? 'Exact nested Skill' : step.kind === 'forEach' ? 'Repeat for each item' : step.kind === 'when' ? 'Decision' : 'Planning only'}</small
 										>
 									</div>
+									<StudioStepDetails
+										{step}
+										siblings={definition.steps}
+										oninspect={selection => stepSelection = selection}
+									/>
 								</article>
 							{:else}
 								<button class="drop" onclick={() => showOperations = true}>
@@ -608,18 +899,30 @@ onMount(() => {
 						</div>
 					</div>
 					<div class="tool-row">
-						<button onclick={() => showOperations = true}>＋ Operation</button
-						><button
-							title="Draft and inspect now; runtime support is not installed yet."
-							onclick={addGoal}
-						>
-							◈ Open goal · draft
-						</button><button
-							title="Draft and inspect now; runtime support is not installed yet."
-							onclick={addReview}
-						>
-							✓ Review · draft
-						</button><span></span
+						<button disabled={busy || conflict} onclick={() => void act(save)}>Save draft</button>
+						{#if definition.caseArtifactId}
+							<button
+								onclick={() => { studioCaseRequest.set(definition!.caseArtifactId!); tab = 'case' }}
+							>
+								◎ Original case
+							</button>
+						{/if}
+						<button onclick={() => showOperations = true}>＋ Add step</button>
+						<details class="planning-options">
+							<summary>Planning options</summary>
+							<button
+								title="Draft and inspect now; runtime support is not installed yet."
+								onclick={addGoal}
+							>
+								◈ Open goal · draft
+							</button><button
+								title="Pause here until you approve the selected inputs."
+								onclick={addReview}
+							>
+								✓ Review
+							</button>
+						</details>
+						<span></span
 						><button
 							class:on={definition.policy.allowModel}
 							onclick={() => definition!.policy.allowModel = !definition!.policy.allowModel}
@@ -628,12 +931,13 @@ onMount(() => {
 						</button>
 					</div>
 					{#if savedSkills.length}
-						<section class="reuse">
+						<details class="reuse">
+							<summary>⌘ Reuse a skill <small>{savedSkills.length} available</small></summary>
 							<header>
-								<div>
-									<b>Reusable Skills</b>
-									<p>Exact immutable children, available everywhere.</p>
-								</div>
+								<p>
+									Add a saved skill as one step. Its version stays pinned until you choose to update
+									it.
+								</p>
 							</header>
 							<div>
 								{#each savedSkills as saved}
@@ -644,71 +948,58 @@ onMount(() => {
 										<span>⌘</span>
 										<div>
 											<b>{saved.definition.name}</b
-											><small>{saved.definition.steps.length} steps · v2</small>
+											><small title={saved.artifact.artifactId}
+												>{saved.definition.steps.length}
+												steps · {saved.artifact.artifactId.slice(0, 8)}</small
+											>
 										</div>
 										<i>＋</i>
 									</button>
 								{/each}
 							</div>
-						</section>
+						</details>
 					{/if}
 					<div class="run-form">
 						<header>
 							<div>
 								<b>Run settings</b>
-								<p>Only choices required by this Skill appear here.</p>
+								<p>{runHint}</p>
 							</div>
 							<small>{publishedArtifactId ? 'Published revision' : 'Publish first'}</small>
 						</header>
 						<div class="fields">
 							{#each Object.entries(definition.inputs) as [name, port]}
-								<label
-									><span>{name}<small>{readableType(port.type.key)}</small></span
-									><select
-										aria-label={`Input ${name}`}
-										value={bindings[name] ?? ''}
-										onchange={(event) => bindings[name] = event.currentTarget.value}
-									>
-										<option value="">Choose an artifact…</option>
-										{#each candidates(port) as candidate}
-											<option value={candidate.artifactId}>{studioName(candidate)}</option>
-										{/each}
-									</select></label
-								>
+								<div class="input-field">
+									<span>{name}<small>{readableType(port.type.key)}</small></span>
+									<ArtifactPicker
+										{name}
+										type={port.type}
+										items={candidates(port)}
+										multiple={port.cardinality === 'many'}
+										optional={port.cardinality === 'optional'}
+										value={bindings[name]}
+										onchange={value => bindings[name] = value}
+									/>
+								</div>
 							{/each}
 							{#each Object.entries(parameterSchemas) as [name, schema]}
-								<label
-									><span
+								<div
+									class="input-field"
+									class:wide={schema.type === 'object' || schema.type === 'array' || Number(schema.maxLength) > 1024}
+								>
+									<span
 										>{name}
 										<small
 											>{requiredParameters.includes(name) ? 'Required' : 'Optional'}</small
 										></span
 									>
-									{#if Array.isArray(schema.enum)}
-										<select
-											aria-label={`Setting ${name}`}
-											onchange={(event) => parameters[name] = event.currentTarget.value}
-										>
-											<option value="">Choose…</option>
-											{#each schema.enum as choice}
-												<option value={String(choice)}>{String(choice)}</option>
-											{/each}
-										</select>
-									{:else if schema.type === 'boolean'}
-										<input
-											type="checkbox"
-											aria-label={`Setting ${name}`}
-											onchange={(event) => parameters[name] = event.currentTarget.checked}
-										>
-									{:else}
-										<input
-											aria-label={`Setting ${name}`}
-											type={schema.type === 'integer' || schema.type === 'number' ? 'number' : 'text'}
-											maxlength={Number(schema.maxLength ?? 1024)}
-											oninput={(event) => parameters[name] = schema.type === 'integer' || schema.type === 'number' ? Number(event.currentTarget.value) : event.currentTarget.value}
-										>
-									{/if}</label
-								>
+									<StudioParameterField
+										{name}
+										{schema}
+										value={parameters[name]}
+										onchange={value => { const next = { ...parameters }; if (value === undefined) delete next[name]; else next[name] = value; parameters = next }}
+									/>
+								</div>
 							{/each}
 						</div>
 					</div>
@@ -736,7 +1027,8 @@ onMount(() => {
 					<div class="actions">
 						<button
 							class="quiet"
-							disabled={!publishedArtifactId}
+							disabled={!publishedArtifactId || !inputNames.length}
+							title={!inputNames.length ? 'Add an input before connecting this skill to arrivals.' : ''}
 							onclick={() => { watchPort = inputNames[0] ?? ''; showConnection = !showConnection }}
 						>
 							Connect arrivals
@@ -749,7 +1041,7 @@ onMount(() => {
 							{publishedArtifactId ? 'Publish new revision' : 'Publish Skill'}
 						</button><button
 							class="primary"
-							disabled={!publishedArtifactId || inputNames.some((name) => !bindings[name]) || !parameterReady()}
+							disabled={!publishedArtifactId || inputNames.some((name) => definition!.inputs[name]!.cardinality === 'one' && !bindings[name]) || !parameterReady()}
 							onclick={() => void act(run)}
 						>
 							Run Skill ↗
@@ -772,12 +1064,34 @@ onMount(() => {
 									{/each}
 								</select></label
 							>
-							<p>Future artifacts only. The exact Skill and causal source are retained.</p>
-							<button class="primary" onclick={() => void act(connect)}>Enable connection ↗</button>
+							<p>
+								{missingCompanion ? `Choose ${missingCompanion} in run settings first.` : !parameterReady() ? 'Complete the run settings first.' : collectionMode === 'accumulate' && definition?.inputs[watchPort]?.cardinality === 'many' ? 'Each arrival creates a new report from the selected items and every later arrival. Previous reports and sources are preserved. Runs while this workspace is open.' : 'One run per new item. Other selected inputs stay fixed. Runs while this workspace is open.'}
+							</p>
+							{#if definition?.inputs[watchPort]?.cardinality === 'many'}
+								<label
+									>Include<select bind:value={collectionMode}>
+										<option value="each">Only the new item</option>
+										<option value="accumulate">A growing collection</option>
+									</select></label
+								>
+							{/if}
+							{#if [bindings[watchPort]].flat().some(Boolean)}
+								<label
+									><input type="checkbox" bind:checked={matchExampleProducer}>Only from the same
+									processing step as the first selected item, on device or server</label
+								>
+							{/if}
+							<button
+								class="primary"
+								disabled={!!missingCompanion || !parameterReady() || !watchPort}
+								onclick={() => void act(connect)}
+							>
+								Enable connection ↗
+							</button>
 						</div>
 					{/if}
 				{:else}
-					<div class="hero">
+					<div class="studio-empty-card">
 						<div class="symbol">⌘</div>
 						<h3>Compose without a blank page.</h3>
 						<p>Pick an artifact or start with an operation.</p>
@@ -793,11 +1107,35 @@ onMount(() => {
 				<section class="activity">
 					<h3>Connections <small>{snapshot?.connections.length ?? 0}</small></h3>
 					{#each snapshot?.connections ?? [] as connection (connection.id)}
+						{@const pending = snapshot?.deliveries.filter(item => item.connection_id === connection.id) ?? []}
+						{@const admissionError = pending.find(item => item.last_error)?.last_error}
+						{@const blocked = connection.blocked_run}
 						<article>
 							<i class:paused={!connection.enabled}></i>
 							<div>
 								<b>{connection.record.name}</b>
-								<p>{connection.enabled ? 'Watching' : 'Paused'} · exact Skill</p>
+								<p>
+									{connection.last_error || admissionError || blocked ? 'Needs attention' : connection.enabled ? 'Watching' : 'Paused'}
+									·
+									{connection.record.collection.mode === 'accumulate' ? 'Growing collection' : 'One new item'}
+								</p>
+								{#if pending.length}
+									<p>
+										{pending.length}
+										{pending.length === 1 ? 'arrival' : 'arrivals'}
+										waiting{connection.record.collection.mode === 'accumulate' ? ' · earlier runs finish first' : ' for processing'}
+									</p>
+								{/if}
+								{#if connection.last_error || admissionError || blocked}
+									<p role="alert">
+										{connection.last_error ?? admissionError ?? (blocked!.state === 'cancelled' ? 'An earlier run was cancelled. Ask Aven to prepare a new connection from the retained items; resuming cannot undo cancellation.' : `An earlier run is ${blocked!.state.replaceAll('_', ' ')}. Later arrivals are retained and will wait for it to succeed.`)}
+									</p>
+									<button
+										onclick={() => composer.focus(`Help me inspect the blocked connection ${connection.id}${blocked ? ` and its earlier run ${blocked.runId}` : ''}. Explain the cause and propose a correction; do not retry or change it yet.`)}
+									>
+										Ask Aven for help
+									</button>
+								{/if}
 							</div>
 							<button onclick={() => void act(() => control(connection))}>
 								{connection.enabled ? 'Pause' : 'Resume'}
@@ -820,6 +1158,41 @@ onMount(() => {
 								<p>
 									{output ? String(output.payload.summary ?? 'Result committed.') : run.state.replaceAll('_', ' ')}
 								</p>
+								{#if run.failure}
+									<p role="alert">{run.failure.message}</p>
+									<button
+										onclick={() => composer.focus(`Inspect failed Skill run ${run.runId}. Explain which steps committed and what remains. Propose the safe next step without retrying or changing anything yet.`)}
+									>
+										Ask Aven for help
+									</button>
+								{/if}
+								{#if runOutputs(run).length}
+									<details>
+										<summary>Outputs · {runOutputs(run).length}</summary>
+										<div class="run-outputs">
+											{#each runOutputs(run) as result (`${result.label}/${result.artifactId}`)}
+												<button onclick={() => void act(() => inspect(result.artifactId))}>
+													{result.label}
+													↗
+												</button>
+											{/each}
+										</div>
+									</details>
+								{/if}
+								{#if run.state === 'waiting_for_input' && snapshot}
+									{#each run.continuations.filter(c => c.review && ['open', 'postponed'].includes(c.state)) as continuation (continuation.continuationId)}
+										{#key `${snapshot.scopeId}/${snapshot.subjectId}/${continuation.review!.id}`}
+											<RunReview
+												environmentId={snapshot.scopeId}
+												subjectId={snapshot.subjectId}
+												runId={run.runId}
+												reviewId={continuation.review!.id}
+												artifacts={snapshot.artifacts}
+												inspect={(id) => void act(() => inspect(id))}
+											/>
+										{/key}
+									{/each}
+								{/if}
 							</div>
 							{#if output}
 								<button onclick={() => void act(() => inspect(output.artifactId))}>Trace ↗</button>
@@ -839,6 +1212,7 @@ onMount(() => {
 			class="inspector"
 			aria-label="Artifact provenance"
 			onclose={() => inspector = null}
+			onkeydown={event => { if (event.key === 'Escape') inspector = null }}
 		>
 			<header>
 				<div>
@@ -871,13 +1245,26 @@ onMount(() => {
 </section>
 
 <style>
+.run-outputs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+	max-height: 12rem;
+	overflow-y: auto;
+	padding-top: 0.5rem;
+}
 :global(body) {
 	--ink: var(--color-foreground, #233b33);
 	--green: var(--color-primary, #2f6652);
 	--paper: var(--color-surface, #f5f2e9);
 }
 .studio {
-	min-height: 100%;
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+	height: 100%;
+	overflow: hidden;
 	background: var(--paper);
 	color: var(--ink);
 	font:
@@ -927,6 +1314,10 @@ textarea:focus-visible {
 }
 .brand {
 	gap: 12px;
+}
+.brand > div {
+	display: grid;
+	gap: 2px;
 }
 .brand > span {
 	width: 42px;
@@ -1047,9 +1438,12 @@ button:disabled {
 .workspace {
 	display: grid;
 	grid-template-columns: 245px minmax(0, 1fr);
-	min-height: calc(100vh - 128px);
+	flex: 1;
+	min-height: 0;
 }
 .rail {
+	min-height: 0;
+	overflow-y: auto;
 	padding: 22px 14px;
 	border-right: 1px solid #233b3315;
 	background: #ebe8de66;
@@ -1145,7 +1539,32 @@ button:disabled {
 }
 .canvas {
 	padding: 34px clamp(24px, 5vw, 74px) 70px;
-	overflow: hidden;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+.directions {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+	gap: 12px;
+	margin: 20px 0;
+}
+.direction {
+	display: grid;
+	gap: 8px;
+	text-align: left;
+	padding: 20px;
+	border: 1px solid #233b3315;
+	border-radius: 18px;
+	background: #fffdf8;
+}
+.direction span,
+.direction small {
+	color: #526760;
+}
+.building-blocks > summary {
+	padding: 16px 0;
+	cursor: pointer;
 }
 .heading > span,
 .compose-head > div > span,
@@ -1165,7 +1584,7 @@ button:disabled {
 	margin: 0 0 30px;
 	color: #71827c;
 }
-.hero {
+.studio-empty-card {
 	max-width: 540px;
 	margin: 70px auto;
 	padding: 44px;
@@ -1175,8 +1594,15 @@ button:disabled {
 	box-shadow: 0 22px 60px #2b453b0c;
 	text-align: center;
 }
-.hero.compact {
+.studio-empty-card.compact {
 	margin: 20px 0;
+}
+.empty-actions {
+	display: flex;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 18px;
 }
 .orbit {
 	display: flex;
@@ -1197,14 +1623,14 @@ button:disabled {
 	color: #9cab9f;
 	font-style: normal;
 }
-.hero h3 {
+.studio-empty-card h3 {
 	margin: 20px 0 7px;
 	font-size: 20px;
 }
-.hero p {
+.studio-empty-card p {
 	color: #71827c;
 }
-.hero small {
+.studio-empty-card small {
 	display: block;
 	margin-top: 12px;
 	color: #93a09b;
@@ -1321,6 +1747,10 @@ button:disabled {
 .boundary small {
 	display: block;
 }
+.boundary-hint {
+	font-size: 11px;
+	color: #687973;
+}
 .boundary small {
 	color: #82908b;
 	font-size: 9px;
@@ -1390,6 +1820,8 @@ button:disabled {
 }
 .tool-row {
 	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
 	gap: 7px;
 	margin: 17px 0;
 }
@@ -1403,6 +1835,26 @@ button:disabled {
 }
 .reuse {
 	margin: 22px 0;
+}
+.reuse > summary,
+.planning-options > summary {
+	cursor: pointer;
+	font-size: 12px;
+	padding: 10px 0;
+	color: #596d65;
+}
+.reuse > summary small {
+	margin-left: 8px;
+	color: #82908b;
+}
+.planning-options {
+	position: relative;
+}
+.planning-options[open] {
+	padding: 0 10px 10px;
+	border: 1px solid #233b3315;
+	border-radius: 12px;
+	background: #fffdf8;
 }
 .reuse p,
 .run-form p {
@@ -1454,26 +1906,31 @@ button:disabled {
 }
 .fields {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-	gap: 10px;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+	gap: 16px;
 	margin-top: 14px;
 }
-.fields label {
+.fields .input-field {
 	display: grid;
-	grid-template-columns: 80px 1fr;
-	align-items: center;
+	min-width: 0;
+	grid-template-columns: minmax(0, 1fr);
+	align-content: start;
 	gap: 8px;
 }
-.fields label > span {
+.fields .input-field.wide {
+	grid-column: 1 / -1;
+}
+.input-field > span {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
 	font-weight: 600;
 }
-.fields label small {
+.input-field > span small {
 	display: block;
 	color: #8a9893;
 	font-size: 9px;
 }
-.fields select,
-.fields input:not([type="checkbox"]),
 .connection-editor select {
 	width: 100%;
 	border: 1px solid #233b3320;
@@ -1588,6 +2045,12 @@ button:disabled {
 	color: #ad4a3c;
 }
 .inspector {
+	position: fixed;
+	z-index: 40;
+	top: 8vh;
+	left: 50%;
+	transform: translateX(-50%);
+	margin: 0;
 	width: min(720px, 90vw);
 	max-height: 85vh;
 	padding: 24px;
@@ -1634,6 +2097,38 @@ button:disabled {
 	padding: 6px 10px;
 }
 @media (max-width: 820px) {
+	.topbar {
+		height: auto;
+		min-height: 72px;
+		padding: 12px;
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+	.brand {
+		min-width: 0;
+	}
+	.brand > span {
+		width: 32px;
+		height: 32px;
+		flex-shrink: 0;
+	}
+	.top-actions {
+		flex-wrap: wrap;
+	}
+	.tabs {
+		padding: 0 8px;
+		max-width: 100%;
+		overflow-x: auto;
+	}
+	.tabs button {
+		flex: 1;
+		padding: 0 8px;
+		white-space: nowrap;
+		font-size: 12px;
+	}
+	.tabs button span {
+		display: none;
+	}
 	.workspace {
 		grid-template-columns: 1fr;
 	}

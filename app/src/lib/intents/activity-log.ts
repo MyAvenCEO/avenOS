@@ -14,7 +14,12 @@ import type { Contribution, LogEntry } from './intents.svelte'
  */
 export function persistentLogEntries(contributions: Contribution[]): LogEntry[] {
 	return contributions
-		.filter((entry) => entry.kind !== 'message')
+		.filter(
+			(entry) =>
+				entry.kind !== 'message' &&
+				entry.kind !== 'response-feedback' &&
+				entry.kind !== 'feedback-assessment'
+		)
 		.map((entry) => ({
 			step:
 				entry.kind === 'file-upload'

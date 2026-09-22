@@ -1,5 +1,5 @@
 -- Parameters: scope, snapshot, collection, category, search, source, sort, direction,
--- cursor sort value, cursor key, page size. All joins remain in the authorized scope.
+-- cursor sort value, cursor key, page size, predicates, measure. All joins stay scoped.
 WITH files AS MATERIALIZED (
  SELECT r.id, p.scope_sequence, p.committed_at, c.payload, c.blob_length,
         jsonb_build_object('artifactId',r.id,'typeKey',c.type_key,'typeVersion',c.type_version,
@@ -19,7 +19,7 @@ WITH files AS MATERIALIZED (
  ORDER BY CASE WHEN $8='asc' THEN p.committed_at END ASC,
   CASE WHEN $8='desc' THEN p.committed_at END DESC,
   CASE WHEN $8='asc' THEN r.id END ASC, CASE WHEN $8='desc' THEN r.id END DESC
- LIMIT CASE WHEN $3='documents' AND $4='all' AND $5='' AND $7='date' THEN $11 ELSE NULL END
+ LIMIT CASE WHEN $3='documents' AND $4='all' AND $5='' AND $7='date' AND $12::jsonb='[]'::jsonb AND $13::text IS NULL AND $11>0 THEN $11 ELSE NULL END
 ), unit_heads AS MATERIALIZED (
  SELECT DISTINCT ON (i.input_artifact_id) i.input_artifact_id AS source_id, COALESCE(c.payload->>'resolutionKey',r.publication_id::text) AS resolution_key
  FROM artifact_store.artifact_contents c
@@ -160,11 +160,16 @@ WITH files AS MATERIALIZED (
 
 ) , matching_rows AS (
  SELECT item,sort_value,key FROM observation_rows
- WHERE $5='' OR strpos(lower(COALESCE(item->>'name','')||' '||(item->'data')::text),lower($5))>0
+ WHERE ($5='' OR strpos(lower(COALESCE(item->>'name','')||' '||(item->'data')::text),lower($5))>0)
+ AND NOT EXISTS (
+  SELECT 1 FROM jsonb_array_elements($12::jsonb) predicate
+  CROSS JOIN LATERAL (SELECT CASE WHEN predicate->>'field'='status' THEN item->'status' ELSE item->'data'->(predicate->>'field') END AS value) observed
+  WHERE NOT COALESCE(
+   jsonb_typeof(observed.value) IN ('string','number') AND observed.value NOT IN ('""'::jsonb,'"unknown"'::jsonb)
+   AND CASE predicate->>'op'
+    WHEN 'present' THEN true
+    WHEN 'eq' THEN observed.value#>>'{}'=predicate->'values'->>0
+    WHEN 'not-in' THEN NOT (predicate->'values' @> jsonb_build_array(observed.value#>>'{}'))
+    ELSE false END, false)
+ )
 )
-SELECT item,sort_value,key FROM matching_rows
-WHERE $10::text IS NULL OR
- CASE WHEN $8='asc' THEN (sort_value,key)>($9::jsonb,$10) ELSE (sort_value,key)<($9::jsonb,$10) END
-ORDER BY CASE WHEN $8='asc' THEN sort_value END ASC, CASE WHEN $8='desc' THEN sort_value END DESC,
- CASE WHEN $8='asc' THEN key END ASC, CASE WHEN $8='desc' THEN key END DESC
-LIMIT $11

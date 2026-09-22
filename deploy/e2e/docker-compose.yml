@@ -201,7 +201,7 @@ services:
       LLM_GATEWAY_ALLOW_INSECURE_HTTP: "true"
       LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN: actor-runner-llm-gateway-token-e2e-01
       DOWNSTREAMS_JSON: '[{"prefix":"/api/billing","baseUrl":"http://checkout:13200","targetPrefix":"/api/billing","bearerToken":"checkout-facade-token-for-e2e-only","roles":["user","admin"]},{"prefix":"/api/names","baseUrl":"http://checkout:13200","targetPrefix":"/api/names","bearerToken":"checkout-facade-token-for-e2e-only","roles":["user","admin"]}]'
-      CUSTOMER_DOWNSTREAMS_JSON: '[{"segment":"artifacts","baseUrl":"http://artifact-store:8087","targetPrefix":"/v1","bearerToken":"artifact-store-service-token-for-e2e-0001","componentRef":"ceo.aven:component:data:artifacts@1","readAction":"artifacts:read","writeAction":"artifacts:write","roles":["user","admin"]},{"segment":"intents","baseUrl":"http://intent-service:3010","targetPrefix":"/api/intents","bearerToken":"intent-service-token-for-e2e-0001","componentRef":"ceo.aven:component:data:intents@1","readAction":"intents:read","writeAction":"intents:write","deleteAction":"intents:delete","mergeAction":"intents:merge","roles":["user","admin"]},{"segment":"actor-runs","baseUrl":"http://actor-runner:3010","targetPrefix":"/api/actor-runs","bearerToken":"actor-runner-token-for-e2e-000001","componentRef":"os.aven:component:actors:run-repository@1","readAction":"actor-runs:read","writeAction":"actor-runs:write","roles":["user","admin"]}]'
+      CUSTOMER_DOWNSTREAMS_JSON: '[{"segment":"artifacts","baseUrl":"http://artifact-store:8087","targetPrefix":"/v1","bearerToken":"artifact-store-service-token-for-e2e-0001","componentRef":"ceo.aven:component:data:artifacts@1","readAction":"artifacts:read","writeAction":"artifacts:write","roles":["user","admin"]},{"segment":"intents","baseUrl":"http://intent-service:3010","targetPrefix":"/api/intents","bearerToken":"intent-service-token-for-e2e-0001","componentRef":"ceo.aven:component:data:intents@1","readAction":"intents:read","writeAction":"intents:write","deleteAction":"intents:delete","mergeAction":"intents:merge","roles":["user","admin"]},{"segment":"actor-runs","baseUrl":"http://actor-runner:3010","targetPrefix":"/api/actor-runs","bearerToken":"actor-runner-token-for-e2e-000001","componentRef":"os.aven:component:actors:run-repository@1","readAction":"actor-runs:read","writeAction":"actor-runs:write","roles":["user","admin"]},{"segment":"productivity","baseUrl":"http://intent-service:3010","targetPrefix":"/api/productivity","bearerToken":"intent-service-token-for-e2e-0001","componentRef":"ceo.aven:component:data:productivity@1","readAction":"productivity:read","writeAction":"productivity:write","roles":["user","admin"]}]'
     networks: [platform-private, public-test]
 
   checkout:
@@ -275,6 +275,7 @@ services:
       CLUSTER_DATABASE_URL: postgres://aven_customer_provisioner:customer-provisioner-e2e@platform-database/postgres
       CONTROL_DATABASE_URL: postgres://aven_api_reconciler:api-reconciler-e2e@platform-database/aven_api
       INTENTS_API_DB_CREDENTIAL_ROOT: intent-root-00000000000000000000000000000001
+      PRODUCTIVITY_API_DB_CREDENTIAL_ROOT: productivity-root-00000000000000000000000001
       ACTOR_API_DB_CREDENTIAL_ROOT: actor-api-root-000000000000000000000000000001
       ACTOR_WORKER_DB_CREDENTIAL_ROOT: actor-worker-root-000000000000000000000000001
       ARTIFACT_API_DB_CREDENTIAL_ROOT: BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ
@@ -363,6 +364,7 @@ services:
     command: [bun, /repo/deploy/e2e/llm-mock.ts]
     volumes:
       - ./llm-mock.ts:/repo/deploy/e2e/llm-mock.ts:ro
+      - ./studio-agent-fixture.ts:/repo/deploy/e2e/studio-agent-fixture.ts:ro
       - ../../services/actor-runner/tests/support/golden-document-model.ts:/repo/services/actor-runner/tests/support/golden-document-model.ts:ro
     healthcheck:
       test: [CMD, bun, -e, "fetch('http://127.0.0.1:8090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -384,6 +386,7 @@ services:
       CUSTOMER_DATABASE_PORT: "5432"
       CUSTOMER_DATABASE_SSL: "false"
       INTENT_DATABASE_CREDENTIAL_ROOT: intent-root-00000000000000000000000000000001
+      PRODUCTIVITY_DATABASE_CREDENTIAL_ROOT: productivity-root-00000000000000000000000001
       INTENT_SERVICE_BEARER_TOKEN: intent-service-token-for-e2e-0001
       IDENTITY_ISSUER: http://localhost:${E2E_IDENTITY_HOST_PORT:-13100}
       IDENTITY_JWKS_URL: http://identity:13100/api/auth/jwks
@@ -417,6 +420,7 @@ services:
       LLM_GATEWAY_BASE_URL: http://api:13000/internal/v1/llm
       LLM_GATEWAY_BEARER_TOKEN: actor-runner-llm-gateway-token-e2e-01
       ACTOR_RUNNER_MAX_PARALLELISM: ${E2E_LLM_MAX_PARALLELISM:-5}
+      CUSTOMER_RUNTIME_ID: primary
     networks: [platform-private, public-test]
 
   mailpit:

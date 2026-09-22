@@ -257,6 +257,13 @@ remain available to the consumer. Public model identity is supplied in
 `x-aven-request-key` headers. Individual SSE chunks may still contain the provider's
 private model name because rewriting those chunks would require parsing the stream.
 
+After authentication and bounded body receipt, model routes disable the HTTP server's
+short idle timer for that request. A quiet model prefill or reasoning interval must not
+truncate the response. The model deadline still bounds both permit waiting and provider
+execution; disconnects cancel that work. Other requests and incomplete uploads retain
+the normal HTTP idle limit. Provider stream failures produce an explicit SSE error rather
+than a silently truncated chunked response.
+
 For a non-streaming call, the response remains OpenAI-shaped. Its top-level `model` is
 rewritten to the public model ID and an `aven` object records the label, capabilities,
 provider-reported model, and request key.
@@ -478,12 +485,21 @@ LLM_GATEWAY_CREDENTIALS_JSON='{"openai":"replace-with-provider-secret"}'
 LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN=replace-with-a-distinct-generated-service-secret
 ```
 
-`LLM_GATEWAY_MAX_PARALLELISM` accepts 1–32 and defaults to 5. One FIFO permit
-pool bounds all structured and OpenAI-compatible completion routes in each API
-process, including chat and document work from both hosts. Streaming requests hold
-a permit until the stream completes or is cancelled. Size this value for the
-provider's simultaneous-request capacity; multiple API replicas each have their own
-pool and must be accounted for when sizing a shared provider.
+`LLM_GATEWAY_MAX_PARALLELISM` accepts 1–32 and defaults to 5. One bounded priority
+queue controls all structured and OpenAI-compatible completions in each API process.
+With two or more slots, one is reserved for input routing and destination replies;
+ordinary work uses the remaining slots. With one slot, routing takes precedence but
+waiting work receives a turn after at most three routing grants. Requests remain FIFO
+within each lane. The queues allow 32 interactive and 96 work waiters, at most 16 per
+owner in each lane, so a full work queue cannot consume routing admission.
+
+Only the fixed route/reply endpoint chooses interactive priority. Feedback assessment,
+chat, review, document processing and Actor calls use work capacity. Routing has a
+five-second total deadline; feedback has twenty seconds and runs after admission.
+Cancellation removes a waiting request. Streaming holds its permit until completion
+or cancellation. Already-dispatched provider work is never preempted. Size the limit
+for the provider; replicas and other applications have independent queues, so this
+does not guarantee provider-wide priority or a speech latency bound.
 
 The mixed HTTPS/local example additionally requires:
 
@@ -537,8 +553,8 @@ The gateway enforces:
 - provider timeout from 5 through 900 seconds;
 - no forwarding of provider error bodies.
 
-The gateway does not currently provide per-user quotas, rate limiting, cost ceilings,
-concurrency limits, or provider health probes. Opening it to every
+The gateway has a process-wide concurrency limit, shared by the model routes. It does
+not currently provide per-user quotas, rate limiting, cost ceilings, or provider health probes. Opening it to every
 authenticated user therefore requires deployment-level rate/cost controls before using
 expensive provider credentials at scale.
 
@@ -564,12 +580,24 @@ Errors use the normal Aven API shape:
 | 413 | `LLM_TEXT_TOO_LARGE` | Combined text exceeds 2 MiB |
 | 413 | `LLM_IMAGE_TOO_LARGE` | One image exceeds 12 MiB |
 | 413 | `LLM_IMAGES_TOO_LARGE` | Image count/total exceeds limits |
-| 429 | `LLM_UPSTREAM_ERROR` | Provider returned HTTP 429 |
-| 502 | `LLM_UPSTREAM_ERROR` | Provider returned another non-success status |
+| 422 | `LLM_CONTEXT_LIMIT` | Provider rejected an exhausted context window |
+| 422 | `LLM_INVALID_REQUEST` | Provider rejected the request for another input reason |
+| 429 | `LLM_CAPACITY` | Provider capacity or local admission is exhausted |
+| 499 | `LLM_CANCELLED` | Caller cancelled the model request |
+| 502 | `LLM_PROVIDER_FAILURE` | Provider returned another non-success status |
+| 502 | `LLM_INCOMPLETE` | A required model response was incomplete |
 | 502 | `LLM_INVALID_RESPONSE` | Provider response or requested JSON output is malformed |
 | 502 | `LLM_RESPONSE_TOO_LARGE` | Provider response exceeds 2 MiB |
 | 503 | `LLM_GATEWAY_UNAVAILABLE` | Completion gateway is disabled |
-| 503 | `LLM_UNAVAILABLE` | Network failure or provider timeout |
+| 503 | `LLM_TRANSPORT` | Connection to the provider failed |
+| 504 | `LLM_TIMEOUT` | Admission/provider deadline expired |
+
+Context exhaustion is recognized from explicit provider codes and SGLang's exact
+numeric input-only and combined input/output diagnostics. Their reported bounds and
+arithmetic must demonstrate the overflow. Arbitrary provider prose is not a classifier
+and is never forwarded to the user. An overflow releases the admission permit; it
+does not trigger an unchanged retry or discard completed tool receipts. This is not
+automatic token-budget management: hosts must still bound their supplied context.
 
 `GET /api/llm/models` returns an empty list when the gateway is disabled. It is catalog
 discovery, not a health check. Provider connectivity is exercised only by a completion.
@@ -615,6 +643,12 @@ returns an async generator of raw SSE text delivered through a Tauri IPC channel
 accepts an `AbortSignal`; abort requests set the Rust stream's cancellation flag. The
 desktop chat and design lanes use this transport. The static browser build has no chat
 proxy and no provider credential; interactive product chat runs through the native host.
+
+The shared desktop/server Chat request asks for the final streamed usage record with
+`stream_options.include_usage`. The gateway records provider-reported input/output
+token totals when supplied; unknown totals remain null, not estimated zeros. Usage
+frames are separate from visible answer text. This does not estimate an unfinished
+request's context size or expose hidden reasoning to the interface.
 
 The desktop's existing behavior is therefore retained server-side: the voice lane can
 disable provider thinking, apply a frequency penalty, stream text and function-call

@@ -11,6 +11,7 @@ import { singleton } from '$lib/actors/singleton'
  */
 class ShellState {
 	tab = $state<'intents' | 'skills' | 'artifacts'>('intents')
+	inboxOpen = $state(false)
 	/**
 	 * Mobile only: whether an intent has been OPENED. Below `lg` the intents
 	 * workspace is list-first — the rail and the intent stream fill the

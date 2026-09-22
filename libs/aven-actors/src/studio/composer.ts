@@ -1,9 +1,11 @@
+import { cardinalityFits } from './cardinality'
 import type { StudioCatalogEntry, StudioCatalogPort } from './catalog'
 import {
 	parseStudioSkillV2,
 	type StudioParameterBinding,
 	type StudioPortBinding,
 	type StudioSkillPort,
+	type StudioSkillStep,
 	type StudioSkillV2
 } from './v2'
 
@@ -11,6 +13,7 @@ export interface StudioCompositionCue {
 	kind: 'connected' | 'new-input' | 'optional' | 'protected' | 'new-parameter'
 	name: string
 	from?: string
+	collectionAlternative?: { binding: StudioPortBinding; label: string }
 }
 
 export interface StudioCompositionResult {
@@ -31,6 +34,7 @@ export function composeCatalogOperation(
 	if (!entry.canAuthor || !entry.installationDigest)
 		throw new Error('STUDIO_OPERATION_NOT_AUTHORABLE')
 	const definition = parseStudioSkillV2(rawDefinition)
+	const followLastOutput = followsLastStep(definition)
 	const stepId = uniqueName(
 		definition.steps.map((step) => step.id),
 		operationName(entry)
@@ -60,7 +64,24 @@ export function composeCatalogOperation(
 		const inputName = uniqueName(Object.keys(definition.inputs), port.name)
 		definition.inputs[inputName] = target
 		inputs[port.name] = { kind: 'input', port: inputName }
-		cues.push({ kind: 'new-input', name: port.name, from: inputName })
+		const collection =
+			target.cardinality === 'one'
+				? availablePorts(definition)
+						.reverse()
+						.find(
+							(candidate) =>
+								candidate.port.cardinality === 'many' &&
+								compatible({ ...candidate.port, cardinality: 'one' }, target)
+						)
+				: undefined
+		cues.push({
+			kind: 'new-input',
+			name: port.name,
+			from: inputName,
+			...(collection
+				? { collectionAlternative: { binding: collection.binding, label: collection.label } }
+				: {})
+		})
 	}
 
 	const parameters: Record<string, StudioParameterBinding> = {}
@@ -107,12 +128,14 @@ export function composeCatalogOperation(
 		parameters,
 		outputs
 	})
-	if (!Object.keys(definition.outputs).length)
+	if (followLastOutput) {
+		definition.outputs = {}
 		for (const [name, port] of Object.entries(outputs))
 			definition.outputs[uniqueName(Object.keys(definition.outputs), name)] = {
 				...port,
 				from: { kind: 'step', stepId, port: name }
 			}
+	}
 	return { definition: parseStudioSkillV2(definition), stepId, cues }
 }
 
@@ -127,6 +150,7 @@ export function composeSkillArtifact(
 	)
 		throw new Error('STUDIO_CHILD_ID_INVALID')
 	const definition = parseStudioSkillV2(rawDefinition)
+	const followLastOutput = followsLastStep(definition)
 	const child = parseStudioSkillV2(rawChild)
 	const stepId = uniqueName(
 		definition.steps.map((step) => step.id),
@@ -192,13 +216,162 @@ export function composeSkillArtifact(
 		parameters,
 		outputs
 	})
-	if (!Object.keys(definition.outputs).length)
+	if (followLastOutput) {
+		definition.outputs = {}
 		for (const [name, port] of Object.entries(outputs))
 			definition.outputs[uniqueName(Object.keys(definition.outputs), name)] = {
 				...port,
 				from: { kind: 'step', stepId, port: name }
 			}
+	}
 	return { definition: parseStudioSkillV2(definition), stepId, cues }
+}
+
+/** Map an exact reusable child over a sealed collection; no inferred execution or hidden loop. */
+export function composeSkillCollection(
+	rawDefinition: unknown,
+	skillArtifactId: string,
+	rawChild: unknown,
+	collection: StudioPortBinding,
+	itemPort: string
+): StudioCompositionResult {
+	const before = parseStudioSkillV2(rawDefinition)
+	const child = parseStudioSkillV2(rawChild)
+	if (Object.keys(child.parametersSchema.properties as object).length)
+		throw new Error(
+			'Bind the child settings before mapping it over a collection; collection children cannot expose public parameters yet.'
+		)
+	const target = child.inputs[itemPort]
+	const source = availablePorts(before).find((p) => canonical(p.binding) === canonical(collection))
+	if (
+		!target ||
+		target.cardinality !== 'one' ||
+		!source ||
+		source.port.cardinality !== 'many' ||
+		!compatible({ ...source.port, cardinality: 'one' }, target)
+	)
+		throw new Error('Select a many-valued collection and a matching single-item child input.')
+	const result = composeSkillArtifact(before, skillArtifactId, child)
+	const step = result.definition.steps.at(-1)!
+	if (step.kind !== 'skill') throw new Error('STUDIO_COLLECTION_CHILD_INVALID')
+	const oldBinding = step.inputs[itemPort]
+	step.inputs[itemPort] = { kind: 'item', loopId: step.id }
+	const outputs = Object.fromEntries(
+		Object.entries(step.outputs).map(([name, port]) => [
+			name,
+			{ ...port, cardinality: 'many' as const }
+		])
+	)
+	result.definition.steps[result.definition.steps.length - 1] = {
+		id: step.id,
+		label: `For each item · ${child.name}`,
+		kind: 'forEach',
+		collection,
+		itemName: itemPort,
+		childSkillArtifactId: skillArtifactId,
+		childInputs: step.inputs,
+		concurrency: Math.min(2, before.policy.maxConcurrentChildren),
+		failureMode: 'fail-fast',
+		outputs
+	}
+	if (oldBinding?.kind === 'input' && !before.inputs[oldBinding.port])
+		delete result.definition.inputs[oldBinding.port]
+	for (const output of Object.values(result.definition.outputs))
+		if (output.from.kind === 'step' && output.from.stepId === step.id) output.cardinality = 'many'
+	result.definition = parseStudioSkillV2(result.definition)
+	result.cues = result.cues.filter((cue) => cue.name !== itemPort)
+	result.cues.push({ kind: 'connected', name: itemPort, from: `Each item in ${source.label}` })
+	return result
+}
+
+/** Replace a provisional single-item step with a pinned child loop, retaining downstream wires. */
+export function repeatSkillStep(
+	rawDefinition: unknown,
+	stepId: string,
+	skillArtifactId: string,
+	rawChild: unknown,
+	collection: StudioPortBinding,
+	itemPort: string
+): StudioCompositionResult {
+	const before = parseStudioSkillV2(rawDefinition)
+	const index = before.steps.findIndex((step) => step.id === stepId)
+	const previous = before.steps[index]
+	if (!previous || !['invoke', 'skill'].includes(previous.kind))
+		throw new Error('Select a top-level single-item action to repeat.')
+	const child = parseStudioSkillV2(rawChild)
+	for (const [name, port] of Object.entries(previous.outputs)) {
+		const output = child.outputs[name]
+		if (!output || !compatible(output, port))
+			throw new Error(
+				`Cannot replace ${stepId}: output ${name} requires ${port.schema}, but the child provides ${output?.schema ?? 'no such output'}. Do not change a port's declared type to force a match. repeat-step replaces the SAME single-item action; it does not replace a downstream aggregator with its producer. To add missing per-item processing before this step, append the child using for-each, then in one edit batch move-step before ${stepId} and set-port-binding for this step's matching inputs to the loop outputs. Remove only the now-unused public inputs.`
+			)
+	}
+	// Only earlier bindings may feed the loop; later steps must not introduce a cycle.
+	const prefix = { ...structuredClone(before), steps: before.steps.slice(0, index), outputs: {} }
+	const composed = composeSkillCollection(prefix, skillArtifactId, child, collection, itemPort)
+	const loop = composed.definition.steps.at(-1)!
+	if (loop.kind !== 'forEach') throw new Error('Expected a collection step.')
+	loop.id = stepId
+	for (const binding of Object.values(loop.childInputs))
+		if (binding.kind === 'item') binding.loopId = stepId
+	loop.after = previous.after
+	before.steps[index] = loop
+	before.inputs = composed.definition.inputs
+	for (const output of Object.values(before.outputs))
+		if (output.from.kind === 'step' && output.from.stepId === stepId) output.cardinality = 'many'
+	// Remove only the replaced step's orphaned single-item input, never unrelated user inputs.
+	if (previous.kind === 'invoke' || previous.kind === 'skill') {
+		const old = previous.inputs[itemPort]
+		if (
+			old?.kind === 'input' &&
+			!allBindings(before).some((binding) => binding.kind === 'input' && binding.port === old.port)
+		)
+			delete before.inputs[old.port]
+	}
+	return { definition: parseStudioSkillV2(before), stepId, cues: composed.cues }
+}
+
+function allBindings(definition: StudioSkillV2): StudioPortBinding[] {
+	const result = Object.values(definition.outputs).map((port) => port.from)
+	function visit(steps: StudioSkillStep[]) {
+		for (const step of steps) {
+			if (step.kind === 'invoke' || step.kind === 'skill')
+				result.push(...Object.values(step.inputs))
+			else if (step.kind === 'forEach')
+				result.push(step.collection, ...Object.values(step.childInputs))
+			else if (step.kind === 'review') result.push(...Object.values(step.subjects))
+			else if (step.kind === 'achieve') result.push(...step.ingredients)
+			else {
+				result.push(step.condition.from)
+				for (const branch of Object.values(step.branches)) {
+					result.push(...Object.values(branch.outputs))
+					visit(branch.steps)
+				}
+			}
+		}
+	}
+	visit(definition.steps)
+	return result
+}
+
+function followsLastStep(definition: StudioSkillV2): boolean {
+	if (!Object.keys(definition.outputs).length) return true
+	const last = definition.steps.at(-1)
+	return (
+		!!last &&
+		Object.keys(last.outputs).length === Object.keys(definition.outputs).length &&
+		Object.entries(last.outputs).every(([name, port]) => {
+			const output = definition.outputs[name]
+			if (!output) return false
+			const { from, ...descriptor } = output
+			return (
+				from.kind === 'step' &&
+				from.stepId === last.id &&
+				from.port === name &&
+				canonical(port) === canonical(descriptor)
+			)
+		})
+	)
 }
 
 function exactPort(port: StudioCatalogPort): StudioSkillPort {
@@ -240,9 +413,7 @@ function compatible(source: StudioSkillPort, target: StudioSkillPort): boolean {
 		source.type.key === target.type.key &&
 		source.type.version === target.type.version &&
 		source.predicate === target.predicate &&
-		source.role === target.role &&
-		(source.cardinality === target.cardinality ||
-			(source.cardinality === 'one' && target.cardinality === 'optional'))
+		cardinalityFits(source.cardinality, target.cardinality)
 	)
 }
 

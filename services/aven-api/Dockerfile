@@ -15,5 +15,7 @@ COPY --from=build /repo/services/aven-api/build ./build
 COPY --from=build /repo/services/aven-api/migrations ./migrations
 COPY --from=build /repo/node_modules /repo/node_modules
 ENV NODE_ENV=production
+# Service addresses can change on restart; do not retain the default 30-second DNS entry.
+ENV BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS=5
 USER bun
 CMD ["bun", "build/index.js"]

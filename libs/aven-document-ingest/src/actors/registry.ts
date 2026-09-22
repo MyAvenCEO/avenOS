@@ -10,6 +10,10 @@ import {
 	CSV_STATEMENT_DETECTOR_MANIFEST,
 	createCsvStatementDetectorActor
 } from './csv-statement-detector'
+import {
+	CSV_STATEMENT_MAPPER_MANIFEST,
+	createCsvStatementMapperActor
+} from './csv-statement-mapper'
 import { createDocumentAssemblerActor, DOCUMENT_ASSEMBLER_MANIFEST } from './document-assembler'
 import { createDocumentDecomposerActor, DOCUMENT_DECOMPOSER_MANIFEST } from './document-decomposer'
 import { createDocumentInspectorActor, DOCUMENT_INSPECTOR_MANIFEST } from './document-inspector'
@@ -17,6 +21,7 @@ import {
 	createDocumentKindClassifierActor,
 	DOCUMENT_KIND_CLASSIFIER_MANIFEST
 } from './document-kind-classifier'
+import { createDocumentMergerActor, DOCUMENT_MERGER_MANIFEST } from './document-merger'
 import { createInvoiceExtractorActor, INVOICE_EXTRACTOR_MANIFEST } from './invoice-extractor'
 import { createInvoiceValidatorActor, INVOICE_VALIDATOR_MANIFEST } from './invoice-validator'
 import {
@@ -52,6 +57,8 @@ import {
 
 /** Release-owned data inventory. Importing it does not decode, infer, or spawn. */
 export const DOCUMENT_ACTOR_MANIFESTS: readonly Manifest[] = Object.freeze([
+	CSV_STATEMENT_MAPPER_MANIFEST,
+	DOCUMENT_MERGER_MANIFEST,
 	CSV_STATEMENT_DETECTOR_MANIFEST,
 	CSV_STATEMENT_ADMITTER_MANIFEST,
 	DOCUMENT_INSPECTOR_MANIFEST,
@@ -139,6 +146,8 @@ export function createDocumentActors(
 		fanoutStatementTransactions,
 		rankReconciliation,
 		all: [
+			createCsvStatementMapperActor(),
+			createDocumentMergerActor(),
 			csvDetector,
 			csvAdmitter,
 			inspect,

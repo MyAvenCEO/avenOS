@@ -7,7 +7,11 @@ export const CONTENT_AGGREGATOR_MANIFEST = manifest(
 	'Content aggregator',
 	'Combines every page classification without inventing missing knowledge.',
 	'document_aggregate_content',
-	['ceo.aven.docs.content_classification(P, C)', 'ceo.aven.docs.document_text(F, T)'],
+	[
+		'ceo.aven.docs.file(F)',
+		'ceo.aven.docs.content_classification(P, C)',
+		'ceo.aven.docs.document_text(F, T)'
+	],
 	['ceo.aven.docs.content_classification(F, C)']
 )
 
@@ -16,12 +20,16 @@ export function createContentAggregatorActor(): Actor {
 		document_aggregate_content: (payload) => {
 			try {
 				const pages = payload.pages as unknown as PageClassification[]
-				const kinds = pages.map((page) => page.primaryKind)
-				const primaryKind = kinds.includes('document')
-					? 'document'
-					: kinds.length > 0 && kinds.every((kind) => kind === 'image')
-						? 'image'
-						: 'unknown'
+				const kinds = new Set(pages.map((page) => page.primaryKind))
+				// Blank pages do not change a known content kind. Preserve explicit
+				// uncertainty; heterogeneous known page kinds form mixed content.
+				if (kinds.size > 1) kinds.delete('blank')
+				const primaryKind =
+					kinds.size === 0 || kinds.has('unknown')
+						? 'unknown'
+						: kinds.size === 1
+							? [...kinds][0]!
+							: 'mixed'
 				const complete = pages.length > 0 && pages.every((page) => page.complete)
 				const facets = [...new Set(pages.flatMap((page) => page.facets))].sort()
 				return success(

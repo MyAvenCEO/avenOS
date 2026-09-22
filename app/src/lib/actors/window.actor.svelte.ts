@@ -1,3 +1,4 @@
+import type { Component } from 'svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
 import windowMachineSource from './window-machine.pl?raw'
@@ -24,14 +25,18 @@ export interface WindowView {
 	open?: boolean
 }
 
-export class WindowActor extends Actor {
+export class WindowActor<Subject extends Actor = Actor> extends Actor {
 	open = $state(true)
-	readonly subject: Actor
+	readonly subject: Subject
 	/** The Svelte component painting this window; receives { actor: subject, ...props }. */
-	readonly component: unknown
+	readonly component: Component<{ actor: Subject } & Record<string, unknown>>
 	readonly props: Record<string, unknown>
 
-	constructor(subject: Actor, component: unknown, view: WindowView = {}) {
+	constructor(
+		subject: Subject,
+		component: Component<{ actor: Subject } & Record<string, unknown>>,
+		view: WindowView = {}
+	) {
 		const key = view.key ?? subject.manifest.id
 		const id = `${key}-window`
 		const name = view.name ?? `${subject.manifest.name} Window`
@@ -72,7 +77,12 @@ export class WindowActor extends Actor {
 		this.props = view.props ?? {}
 		this.open = view.open ?? true
 		this.bind({
-			[`${key}_window_toggle`]: (p) => {
+			[`${key}_window_toggle`]: (p, context) => {
+				if (context?.canPresent?.() === false)
+					return {
+						record: '{"ok":false,"error":"The user changed screens; no view was opened."}',
+						wire: 'The user changed screens; no view was opened. Continue in the original Intent without navigating.'
+					}
 				this.open = typeof p.open === 'boolean' ? p.open : !this.open
 				// One view at a time, like a window manager showing one screen:
 				// opening this window closes every other. "Zeig mir den Kalender"
@@ -99,6 +109,8 @@ export class WindowActor extends Actor {
 }
 
 /** Duck-typed check that survives HMR generations (instanceof would not). */
-export function isWindow(actor: Actor): actor is WindowActor {
+// The registry contains different subjects. Construction checks their component
+// pairing; renderers must keep that pair together when reading the registry.
+export function isWindow(actor: Actor): actor is WindowActor<any> {
 	return actor.manifest.tags.includes('window') && 'component' in actor
 }

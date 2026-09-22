@@ -87,12 +87,14 @@ def prepare(bundle, destination, runtime_id, target, database_port, provisioner_
         'database-roles': {'PGPASSWORD': 'admin', 'CUSTOMER_PROVISIONER_PASSWORD': 'provisioner',
                            'ARTIFACT_STORE_PROVISIONER_DB_PASSWORD': 'artifact_database', 'PLATFORM_BACKUP_PASSWORD': 'backup'},
         'platform-provisioner': {'INTENTS_API_DB_CREDENTIAL_ROOT': 'intent_root', 'ACTOR_API_DB_CREDENTIAL_ROOT': 'actor_api_root',
+                                 'PRODUCTIVITY_API_DB_CREDENTIAL_ROOT': 'productivity_root',
                                  'ACTOR_WORKER_DB_CREDENTIAL_ROOT': 'actor_worker_root', 'ARTIFACT_API_DB_CREDENTIAL_ROOT': 'artifact_root',
                                  'ARTIFACT_STORE_PROVISIONER_TOKEN': 'artifact_provisioning'},
         'artifact-store-provisioner': {'ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN': 'artifact_provisioning'},
         'artifact-store': {'ARTIFACT_STORE_API_DB_CREDENTIAL_ROOT': 'artifact_root', 'ARTIFACT_STORE_BEARER_TOKEN': 'artifact_token',
                            'ARTIFACT_STORE_ACTOR_RUNNER_BEARER_TOKEN': 'artifact_actor_token'},
-        'intent-service': {'INTENT_DATABASE_CREDENTIAL_ROOT': 'intent_root', 'INTENT_SERVICE_BEARER_TOKEN': 'intent_token'},
+        'intent-service': {'INTENT_DATABASE_CREDENTIAL_ROOT': 'intent_root', 'INTENT_SERVICE_BEARER_TOKEN': 'intent_token',
+                           'PRODUCTIVITY_DATABASE_CREDENTIAL_ROOT': 'productivity_root'},
         'actor-runner': {'ACTOR_API_DB_CREDENTIAL_ROOT': 'actor_api_root', 'ACTOR_WORKER_DB_CREDENTIAL_ROOT': 'actor_worker_root',
                          'ACTOR_RUNNER_SERVICE_BEARER_TOKEN': 'actor_token', 'ARTIFACT_STORE_BEARER_TOKEN': 'artifact_actor_token'},
         'backup': {'PGPASSWORD': 'backup'}, 'restore': {'PGPASSWORD': 'admin'}
@@ -174,7 +176,7 @@ def prepare(bundle, destination, runtime_id, target, database_port, provisioner_
 
     api = source['services']['api']['environment']
     targets = rewrite(json.loads(api['CUSTOMER_DOWNSTREAMS_JSON']))
-    target_credentials = {'artifacts': 'artifact_token', 'intents': 'intent_token', 'actor-runs': 'actor_token'}
+    target_credentials = {'artifacts': 'artifact_token', 'intents': 'intent_token', 'productivity': 'intent_token', 'actor-runs': 'actor_token'}
     for route in targets:
         if route['segment'] not in target_credentials:
             raise ValueError('runtime composition does not implement a configured customer route')

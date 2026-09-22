@@ -1,5 +1,6 @@
 import {
 	parseStudioSkillV2,
+	STUDIO_SKILL_ARTIFACT_VERSION,
 	type StudioSkillPort,
 	type StudioSkillStep,
 	StudioSkillV2Error
@@ -8,7 +9,7 @@ import {
 export interface SkillPresentationStep {
 	id: string
 	label: string
-	kind: string
+	kind: StudioSkillStep['kind']
 	depth: number
 	context?: string
 	childArtifactId?: string
@@ -67,7 +68,7 @@ function structure(steps: SkillPresentationStep[]): SkillPresentation['structure
 	return {
 		branches: steps.filter((step) => step.kind === 'when').length,
 		reviews: steps.filter((step) => step.kind === 'review').length,
-		openGoals: steps.filter((step) => step.kind === 'achieve' || step.kind === 'goal').length,
+		openGoals: steps.filter((step) => step.kind === 'achieve').length,
 		collections: steps.filter((step) => step.kind === 'forEach').length
 	}
 }
@@ -80,7 +81,7 @@ export function presentSkillArtifact(
 	payload: unknown
 ): SkillPresentation {
 	const base = { artifactId, artifactDigest, effectCoverage: 'unknown' as const }
-	if (typeVersion === 2) {
+	if (typeVersion === STUDIO_SKILL_ARTIFACT_VERSION) {
 		try {
 			const definition = parseStudioSkillV2(payload)
 			const steps = v2Steps(definition.steps)

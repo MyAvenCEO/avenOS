@@ -12,7 +12,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::Emitter;
 
 use crate::auth::{
@@ -42,8 +42,8 @@ struct UploadProgress {
 #[serde(rename_all = "camelCase")]
 pub struct UploadedArtifact {
     publication_id: String,
-    intent_id: String,
-    intent_declaration_artifact_id: String,
+    intent_id: Option<String>,
+    intent_declaration_artifact_id: Option<String>,
     artifact_id: String,
     original_name: String,
     media_type: String,
@@ -221,7 +221,7 @@ fn response_error(response: ureq::Response, fallback: &str) -> String {
     serde_json::json!({"status":status,"code":body.as_ref().and_then(|b|b.code.clone()).unwrap_or_else(||"REQUEST_REJECTED".to_string()),"message":body.and_then(|b|b.message).unwrap_or_else(||fallback.to_string()),"retryable":status==408 || status==429 || status>=500}).to_string()
 }
 
-fn valid_artifact_id(value: &str) -> bool {
+pub(crate) fn valid_artifact_id(value: &str) -> bool {
     value.len() == 36
         && value.bytes().enumerate().all(|(index, byte)| {
             if matches!(index, 8 | 13 | 18 | 23) {
@@ -274,6 +274,7 @@ fn processing_status(
 }
 
 const INTENT_COMPONENT: &str = "ceo.aven:component:data:intents@1";
+const PRODUCTIVITY_COMPONENT: &str = "ceo.aven:component:data:productivity@1";
 const ARTIFACT_COMPONENT: &str = "ceo.aven:component:data:artifacts@1";
 const ACTOR_RUN_COMPONENT: &str = "os.aven:component:actors:run-repository@1";
 
@@ -341,7 +342,7 @@ fn customer_json(
     api_json_with_timeout(token, method, path, body, Duration::from_secs(20))
 }
 
-fn intent_json(
+pub(crate) fn intent_json(
     session: CustomerSession,
     method: &str,
     path: String,
@@ -350,20 +351,98 @@ fn intent_json(
     customer_json(session, INTENT_COMPONENT, "intents", method, path, body)
 }
 
+pub(crate) fn chat_progress_json(
+    session: CustomerSession,
+    turn_id: &str,
+) -> Result<serde_json::Value, String> {
+    customer_json(
+        session,
+        ACTOR_RUN_COMPONENT,
+        "actor-runs",
+        "GET",
+        format!("/api/actor-runs/chat-turns/{turn_id}"),
+        None,
+    )
+}
+
+fn task_scope(session: &CustomerSession, subject: &str) -> String {
+    search_scope_key(&api_endpoint(&format!("/api/environments/{}/productivity", session.environment_id)), subject)
+}
+
+#[tauri::command]
+pub async fn task_context(state: tauri::State<'_, AuthState>) -> Result<serde_json::Value, String> {
+    let (session, subject) = customer_session_identity(&state)?;
+    Ok(serde_json::json!({"scope":task_scope(&session, &subject),"subjectId":subject}))
+}
+
+#[tauri::command]
+pub async fn task_request(
+    scope: String, method: String, path: String, body: Option<serde_json::Value>,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let (session, subject) = customer_session_identity(&state)?;
+    if scope != task_scope(&session, &subject) {
+        return Err("The task workspace changed. Reopen the task list before continuing.".into());
+    }
+    let url = tauri::Url::parse(&format!("http://task.invalid{path}")).map_err(|_| "Invalid task path.")?;
+    let canonical_path = format!("{}{}", url.path(), url.query().map(|value| format!("?{value}")).unwrap_or_default());
+    let allowed = path == canonical_path && url.host_str() == Some("task.invalid") && url.fragment().is_none() &&
+        match method.as_str() {
+            "GET" => body.is_none() && (url.path() == "/tasks" ||
+                (url.query().is_none() && url.path().strip_prefix("/commands/").is_some_and(valid_artifact_id))),
+            "POST" => url.path() == "/commands" && url.query().is_none() && body.is_some(),
+            _ => false,
+        };
+    if !allowed { return Err("This task operation is not available.".into()); }
+    let encoded = body.map(|value| serde_json::to_string(&value)).transpose().map_err(|_| "Invalid task request.")?;
+    if encoded.as_ref().is_some_and(|value| value.len() > 128 * 1024) {
+        return Err("Choose a smaller task batch.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        customer_json(session, PRODUCTIVITY_COMPONENT, "productivity", &method,
+            format!("/api/productivity{path}"), encoded)
+    }).await.map_err(|error| format!("Task request failed: {error}"))?
+}
+
 fn studio_path(operation: &str) -> Option<&'static str> {
     if matches!(
         operation,
-        "catalog" | "present" | "state" | "inspect" | "explore" | "preview" | "compare"
+        "catalog"
+            | "present"
+            | "state"
+            | "items"
+            | "inspect"
+            | "explore"
+            | "preview"
+            | "compare"
+            | "case-what-if"
+            | "run-status"
     ) {
         return Some("/api/actor-runs/studio/query");
     }
     if matches!(
         operation,
-        "draft" | "publish" | "start" | "sample" | "connect" | "control" | "sync" | "run-control"
+        "draft"
+            | "case-propose"
+            | "case-confirm"
+            | "case-build"
+            | "publish"
+            | "start"
+            | "sample"
+            | "connect"
+            | "control"
+            | "sync"
+            | "run-control"
     ) {
         return Some("/api/actor-runs/studio/command");
     }
     None
+}
+
+fn studio_request_timeout(operation: &str) -> Duration {
+    // The server accepts a bounded 30-second status wait. Keep transport alive
+    // for that wait plus response overhead; ordinary commands retain their limit.
+    Duration::from_secs(if operation == "run-status" { 40 } else { 20 })
 }
 
 #[tauri::command]
@@ -376,20 +455,15 @@ pub async fn studio_request(
         .and_then(|v| v.as_str())
         .ok_or("A Studio operation is required.")?;
     let path = studio_path(operation).ok_or("Unknown Studio operation.")?;
+    let timeout = studio_request_timeout(operation);
     let body = serde_json::to_string(&command).map_err(|e| e.to_string())?;
     if body.len() > 256 * 1024 {
         return Err("The Studio request is too large.".into());
     }
     let token = customer_session(&state)?;
     tauri::async_runtime::spawn_blocking(move || {
-        customer_json(
-            token,
-            ACTOR_RUN_COMPONENT,
-            "actor-runs",
-            "POST",
-            path.into(),
-            Some(body),
-        )
+        let (token, path) = customer_access(&token, ACTOR_RUN_COMPONENT, "actor-runs", path)?;
+        api_json_with_timeout(token, "POST", path, Some(body), timeout)
     })
     .await
     .map_err(|e| format!("Studio request failed: {e}"))?
@@ -466,6 +540,96 @@ pub async fn actor_run_control(
     })
     .await
     .map_err(|error| format!("Run control task failed: {error}"))?
+}
+
+/// Capture the connection form's workspace without exposing a session token.
+#[tauri::command]
+pub fn credential_context(state: tauri::State<'_, AuthState>) -> Result<serde_json::Value, String> {
+    let (session, subject) = customer_session_identity(&state)?;
+    Ok(serde_json::json!({"environmentId": session.environment_id, "subjectId": subject}))
+}
+
+/// Set-only customer settings. Never registered as an Actor or chat tool.
+#[tauri::command]
+pub async fn credential_request(
+    environment_id: String,
+    subject_id: String,
+    action: String,
+    command_id: Option<String>,
+    command: Option<serde_json::Value>,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let (session, subject) = customer_session_identity(&state)?;
+    if session.environment_id != environment_id || subject != subject_id {
+        return Err("The workspace changed. Open connection settings again.".into());
+    }
+    let (method, path, body) = match action.as_str() {
+        "metadata" if command.is_none() && command_id.is_none() => ("GET", "/api/credentials".to_string(), None),
+        "receipt" if command.is_none() => {
+            let id = command_id.filter(|id| valid_artifact_id(id)).ok_or("Invalid command identifier.")?;
+            ("GET", format!("/api/credentials/commands/{id}"), None)
+        },
+        "command" if command.as_ref().is_some_and(serde_json::Value::is_object) => {
+            let id = command_id.filter(|id| valid_artifact_id(id)).ok_or("Invalid command identifier.")?;
+            let body = serde_json::json!({"commandId": id, "command": command}).to_string();
+            if body.len() > 96 * 1024 { return Err("Connection settings are too large.".into()); }
+            ("POST", "/api/credentials/commands".to_string(), Some(body))
+        },
+        _ => return Err("Invalid connection operation.".into()),
+    };
+    let result = tauri::async_runtime::spawn_blocking(move ||
+        customer_json(session, "ceo.aven:component:data:credentials@1", "credentials", method, path, body)
+    ).await.map_err(|_| "The connection request could not finish.")?;
+    let (current, current_subject) = customer_session_identity(&state)?;
+    if current.environment_id != environment_id || current_subject != subject_id {
+        return Err("The workspace changed. Check the saved connection in its original workspace.".into());
+    }
+    result
+}
+
+/// Interactive review only; deliberately not part of the model's Studio tools.
+#[tauri::command]
+pub async fn actor_review_request(
+    environment_id: String,
+    subject_id: String,
+    run_id: String,
+    review_id: String,
+    action: String,
+    command: Option<serde_json::Value>,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let (session, subject) = customer_session_identity(&state)?;
+    if session.environment_id != environment_id || subject != subject_id {
+        return Err("The workspace changed. Open this review again.".into());
+    }
+    if !valid_artifact_id(&run_id) || !valid_artifact_id(&review_id) {
+        return Err("Invalid review identifier.".into());
+    }
+    let (method, path, body) = match action.as_str() {
+        "read" if command.is_none() => ("GET", format!("/api/actor-runs/{run_id}/reviews/{review_id}"), None),
+        "decide" if command.as_ref().is_some_and(serde_json::Value::is_object) =>
+            ("POST", format!("/api/actor-runs/{run_id}/reviews/{review_id}"), command.map(|v| v.to_string())),
+        "resume" => {
+            let request_id = command.as_ref().and_then(|v| v.get("requestId")).and_then(|v| v.as_str())
+                .filter(|id| valid_artifact_id(id)).ok_or("A request identifier is required.")?;
+            ("POST", format!("/api/actor-runs/{run_id}/continuations/{review_id}"), Some(serde_json::json!({
+                "requestId": request_id, "continuationId": review_id,
+                "action": "submit", "kind": "approval", "value": null
+            }).to_string()))
+        },
+        _ => return Err("Invalid review operation.".into()),
+    };
+    if body.as_ref().is_some_and(|value| value.len() > 2048) {
+        return Err("The review decision is too large.".into());
+    }
+    let result = tauri::async_runtime::spawn_blocking(move ||
+        customer_json(session, ACTOR_RUN_COMPONENT, "actor-runs", method, path, body)
+    ).await.map_err(|_| "The review request could not finish.")?;
+    let (current, current_subject) = customer_session_identity(&state)?;
+    if current.environment_id != environment_id || current_subject != subject_id {
+        return Err("The workspace changed. Reopen the original review to check its saved decision.".into());
+    }
+    result
 }
 
 fn artifact_json(
@@ -594,7 +758,7 @@ fn upload(
     app: tauri::AppHandle,
     upload_id: String,
     publication_id: String,
-    intent_id: String,
+    intent_id: Option<String>,
     observed_at: String,
     execution_environment: String,
     path: PathBuf,
@@ -665,7 +829,7 @@ fn upload(
         .set("content-length", &length.to_string())
         .set("x-expected-sha256", &sha256)
         .set("x-aven-original-name", &encoded_name)
-        .set("x-aven-intent-id", &intent_id)
+        .set("x-aven-intent-id", intent_id.as_deref().unwrap_or(""))
         .set("x-aven-observed-at", &observed_at)
         .set("x-aven-source-kind", "client-actor-ingest")
         .set("x-aven-execution-environment", &execution_environment)
@@ -686,7 +850,7 @@ fn upload(
 pub async fn artifact_upload(
     upload_id: String,
     publication_id: String,
-    intent_id: String,
+    intent_id: Option<String>,
     observed_at: String,
     execution_environment: String,
     path: PathBuf,
@@ -713,6 +877,9 @@ pub async fn artifact_upload(
             .as_ref()
             .is_err_and(|error| retryable_transport_error(error))
         {
+            // Let a busy upload slot drain before re-reading the file. Reuse the
+            // publication identity so an uncertain receipt cannot duplicate work.
+            std::thread::sleep(std::time::Duration::from_millis(500));
             upload(
                 app,
                 upload_id,
@@ -804,8 +971,26 @@ pub async fn llm_complete(
     .map_err(|error| format!("LLM completion task failed: {error}"))?
 }
 
-/// Executes one non-streaming OpenAI-compatible chat completion. The public
-/// model id is resolved by Aven API; provider coordinates stay server-side.
+/// Bounded input-only decision; prompts and capacity policy stay server-side.
+#[tauri::command]
+pub async fn input_decision(
+    request: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&state)?;
+    // Background feedback recovery uses ordinary capacity; it must not take the
+    // reserved routing slot or hold the speech input while waiting for it.
+    let timeout = Duration::from_secs(if request.get("kind").and_then(|v| v.as_str()) == Some("feedback") { 22 } else { 7 });
+    let body = serde_json::to_string(&request)
+        .map_err(|_| "Invalid input decision request.".to_string())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        service_json(token, "POST", "/api/llm/input-decision".into(), Some(body), timeout)
+    })
+    .await
+    .map_err(|_| "The destination check could not finish.".to_string())?
+}
+
+/// Executes one non-streaming completion through the authenticated model gateway.
 #[tauri::command]
 pub async fn llm_openai_complete(
     request: serde_json::Value,
@@ -835,13 +1020,13 @@ fn valid_request_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
 }
 
-/// Streams raw OpenAI-compatible SSE lines over a Tauri channel. The command
-/// promise settles when the stream ends; channel messages arrive meanwhile.
+/// Streams raw SSE lines and an ordered end marker over one channel. Command
+/// completion and channel delivery are separate IPC paths; completion is not EOF.
 #[tauri::command]
 pub async fn llm_openai_stream(
     request_id: String,
     request: serde_json::Value,
-    on_chunk: tauri::ipc::Channel<String>,
+    on_chunk: tauri::ipc::Channel<Option<String>>,
     auth: tauri::State<'_, AuthState>,
     streams: tauri::State<'_, LlmStreamState>,
 ) -> Result<(), String> {
@@ -869,6 +1054,7 @@ pub async fn llm_openai_stream(
     }
 
     let result = tauri::async_runtime::spawn_blocking(move || {
+        let started = Instant::now();
         let agent = ureq::AgentBuilder::new()
             .timeout(Duration::from_secs(MODEL_REQUEST_TIMEOUT_SECONDS))
             .build();
@@ -885,21 +1071,36 @@ pub async fn llm_openai_stream(
                 ureq::Error::Transport(_) => network_error(),
             })?;
         let mut reader = BufReader::new(response.into_reader());
+        let mut received_bytes = 0usize;
+        let mut last_chunk = Instant::now();
         loop {
             if cancelled.load(Ordering::Relaxed) {
                 break;
             }
             let mut line = String::new();
-            let count = reader
-                .read_line(&mut line)
-                .map_err(|error| format!("Could not read the LLM stream: {error}"))?;
+            let count = reader.read_line(&mut line).map_err(|error| {
+                serde_json::json!({
+                    "code": "LLM_STREAM_INTERRUPTED",
+                    "message": format!("Could not read the LLM stream: {error}"),
+                    "retryable": true,
+                    "receivedBytes": received_bytes,
+                    "elapsedMs": started.elapsed().as_millis(),
+                    "quietForMs": last_chunk.elapsed().as_millis()
+                })
+                .to_string()
+            })?;
             if count == 0 {
                 break;
             }
+            received_bytes += count;
+            last_chunk = Instant::now();
             on_chunk
-                .send(line)
+                .send(Some(line))
                 .map_err(|error| format!("Could not deliver the LLM stream: {error}"))?;
         }
+        on_chunk
+            .send(None)
+            .map_err(|error| format!("Could not finish delivery of the LLM stream: {error}"))?;
         Ok(())
     })
     .await
@@ -1019,7 +1220,9 @@ pub async fn intent_search(
             .map_err(|_| "Invalid query base")?;
         let mut query = query_url.query_pairs_mut();
         for (key, value) in object {
-            if !["query", "cursor", "limit", "intent", "state"].contains(&key.as_str()) {
+            if !["query", "cursor", "limit", "intent", "state"].contains(&key.as_str())
+                && !(messages.unwrap_or(false) && ["role", "order"].contains(&key.as_str()))
+            {
                 return Err("Unknown search field.".into());
             }
             if value.is_null() {
@@ -1065,6 +1268,22 @@ pub async fn intent_message_get(
     tauri::async_runtime::spawn_blocking(move || intent_json(token, "GET", path, None))
         .await
         .map_err(|error| format!("Message read task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn intent_preview(
+    intent_id: String,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !valid_artifact_id(&intent_id) {
+        return Err("The intent ID is invalid.".to_string());
+    }
+    let token = customer_session(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(token, "GET", format!("/api/intents/{intent_id}/preview"), None)
+    })
+    .await
+    .map_err(|error| format!("Intent preview task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -1180,7 +1399,7 @@ async fn intent_command(
     .map_err(|error| format!("Intent command task failed: {error}"))?
 }
 
-fn search_scope_key(endpoint: &str, subject: &str) -> String {
+pub(crate) fn search_scope_key(endpoint: &str, subject: &str) -> String {
     let mut digest = Sha256::new();
     digest.update(b"aven-research-v2\0");
     digest.update(endpoint.as_bytes());
@@ -1311,6 +1530,11 @@ fn library_query_path(query: &serde_json::Value) -> Result<String, String> {
             }
             if ![
                 "collection",
+                "where",
+                "view",
+                "measure",
+                "snapshotSequence",
+                "storeEpoch",
                 "category",
                 "search",
                 "sourceId",
@@ -1348,6 +1572,45 @@ pub async fn artifact_library(
     tauri::async_runtime::spawn_blocking(move || artifact_json(token, "GET", path, None))
         .await
         .map_err(|error| format!("Library query task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn artifact_inbox(
+    after: Option<String>,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let token = customer_session(&state)?;
+    let path = match after {
+        Some(value) => {
+            if !valid_artifact_id(&value) {
+                return Err("Invalid inbox cursor.".into());
+            }
+            format!("/api/artifacts/inbox?after={value}")
+        }
+        None => "/api/artifacts/inbox".into(),
+    };
+    tauri::async_runtime::spawn_blocking(move || artifact_json(token, "GET", path, None))
+        .await
+        .map_err(|e| format!("Inbox read failed: {e}"))?
+}
+
+#[tauri::command]
+pub async fn artifact_inbox_promote(
+    artifact_id: String,
+    intent_id: String,
+    execution_environment: String,
+    expected_imap_scope: Option<String>,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !valid_artifact_id(&artifact_id) || !valid_artifact_id(&intent_id) {
+        return Err("Invalid upload or Intent ID.".into());
+    }
+    let source = artifact_id;
+    if !["local", "server"].contains(&execution_environment.as_str()) {
+        return Err("Choose local or server processing.".into());
+    }
+    let token = crate::imap::session_for_scope(&state, expected_imap_scope.as_deref())?;
+    tauri::async_runtime::spawn_blocking(move||artifact_json(token,"POST",format!("/api/artifacts/inbox/{source}/promote"),Some(serde_json::json!({"intentId":intent_id,"executionEnvironment":execution_environment}).to_string()))).await.map_err(|e|format!("Inbox admission failed: {e}"))?
 }
 
 #[cfg(test)]
@@ -1464,7 +1727,16 @@ mod tests {
     #[test]
     fn studio_routes_catalog_and_presentation_through_the_read_boundary() {
         for operation in [
-            "catalog", "present", "state", "inspect", "explore", "preview", "compare",
+            "catalog",
+            "present",
+            "state",
+            "items",
+            "inspect",
+            "explore",
+            "preview",
+            "compare",
+            "case-what-if",
+            "run-status",
         ] {
             assert_eq!(studio_path(operation), Some("/api/actor-runs/studio/query"));
         }
@@ -1473,6 +1745,20 @@ mod tests {
             Some("/api/actor-runs/studio/command")
         );
         assert_eq!(studio_path("caller-selected-path"), None);
+        for operation in ["case-propose", "case-confirm", "case-build"] {
+            assert_eq!(
+                studio_path(operation),
+                Some("/api/actor-runs/studio/command")
+            );
+        }
+    }
+
+    #[test]
+    fn studio_status_transport_outlives_the_server_long_poll() {
+        assert!(studio_request_timeout("run-status") > Duration::from_secs(30));
+        for operation in ["catalog", "publish", "start", "connect"] {
+            assert_eq!(studio_request_timeout(operation), Duration::from_secs(20));
+        }
     }
 }
 

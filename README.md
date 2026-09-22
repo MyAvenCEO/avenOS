@@ -212,7 +212,7 @@ workflows. Public installer distribution follows verification of the complete jo
 | `services/aven-api/` | The authenticated `api.aven.ceo` facade |
 | `services/platform-provisioner/` | Customer database creation and reconciliation |
 | `services/artifact-store/` | Customer-scoped artifact metadata and content |
-| `services/intent-service/` | Customer-scoped Intent and conversation history |
+| `services/intent-service/` | Customer-scoped Intent history and separately authorized task endpoints |
 | `services/actor-runner/` | Customer-scoped durable Actor execution |
 | `services/static-site-host/` | Verified managed static hosting |
 | `libs/` | Shared identity, customer-runtime, Actor, artifact, document, UI, and native libraries |
@@ -239,6 +239,10 @@ The execution design is split across a few focused references:
 - [Artifact-first semantic enrichment and affordance discovery](docs/artifact-first-semantic-enrichment.md)
   defines exhaustive non-effecting enrichment, understanding bundles, and the actions
   enabled by supported facts.
+- [Semantic collections, observations, and document intake](docs/semantic-artifact-collections.md)
+  distinguishes the implemented schema-first queries and explicit upload inbox from
+  planned property-based Skill triggers, document revisions, automatic routing, and
+  reusable supplier relationships with evidence-backed matching and backfill.
 - [Client-owned document ingestion](docs/client-document-ingest.md) describes the
   current document pipeline and its server migration boundary.
 - [Generic authenticated LLM gateway](docs/llm-gateway.md) defines model discovery,

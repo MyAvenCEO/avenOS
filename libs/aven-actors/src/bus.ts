@@ -1,4 +1,4 @@
-import type { MethodSpec } from './actor'
+import type { ActorCallContext, MethodSpec } from './actor'
 import { type Actor, functor, type HandlerResult, type Llm } from './actor'
 import { ActorRegistry } from './registry'
 import { singleton } from './singleton'
@@ -21,6 +21,7 @@ export interface Envelope {
 	method: string
 	payload: Record<string, unknown>
 	correlationId?: string
+	context?: ActorCallContext
 }
 
 let nextEnvelope = 0
@@ -41,6 +42,8 @@ export interface HeldMessage {
 	detail: string
 	/** The intent this gate belongs to; absent = it belongs to the conversation. */
 	context?: string
+	/** Background work belongs in the workspace review inbox, not every Intent. */
+	scope?: 'workspace'
 	/**
 	 * The thing being decided, carried WITH the gate so the human sees it
 	 * where they answer — a draft's text, a payment's figures, a proposed
@@ -84,16 +87,16 @@ export class MessageBus {
 	}
 
 	/**
-	 * The model lane, derived — never injected. The registered `llm` ACTOR is
+	 * The model lane, derived — never injected. The registered `llm-lane` ACTOR is
 	 * the only door to the model (abject: the LLM is a service actor); this
 	 * closure turns a message to it back into the plain Llm function the
 	 * execution engine consumes. No llm actor registered = no lane.
 	 */
 	llmLane(): Llm | undefined {
-		const actor = this.get('llm')
+		const actor = this.get('llm-lane')
 		if (!actor) return undefined
 		return async (system, question, settings) => {
-			const result = await actor.deliver('llm_complete', {
+			const result = await actor.deliver('complete', {
 				system,
 				question,
 				...(settings && { settings })
@@ -165,7 +168,7 @@ export class MessageBus {
 			const record = JSON.stringify({ ok: false, error: `no actor ${envelope.to}` })
 			return { record, wire: `no actor ${envelope.to}` }
 		}
-		return actor.deliver(envelope.method, envelope.payload)
+		return actor.deliver(envelope.method, envelope.payload, envelope.context)
 	}
 
 	/**
@@ -239,7 +242,12 @@ export class MessageBus {
 	/**
 	 * Tool-call bridge: a named method becomes an ordinary envelope.
 	 */
-	dispatch(from: string, method: string, payload: Record<string, unknown>): Promise<HandlerResult> {
+	dispatch(
+		from: string,
+		method: string,
+		payload: Record<string, unknown>,
+		context?: ActorCallContext
+	): Promise<HandlerResult> {
 		const owner = this.actors().find((a) => a.handles(method))
 		if (!owner) {
 			const record = JSON.stringify({ ok: false, error: `unknown tool ${method}` })
@@ -250,7 +258,8 @@ export class MessageBus {
 			from,
 			to: owner.uuid,
 			method,
-			payload
+			payload,
+			context
 		}
 		// The human gate (universal HITL): a declared `hitl` entry is HELD —
 		// the message exists, but only a physical button press releases it.
@@ -270,6 +279,7 @@ export class MessageBus {
 				actor: owner.instanceName,
 				method,
 				label: spec.hitl,
+				context: context?.intentId,
 				detail: JSON.stringify(envelope.payload)
 			})
 			return Promise.resolve({

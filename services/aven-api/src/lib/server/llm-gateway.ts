@@ -1,9 +1,29 @@
 import { createHash } from 'node:crypto'
 import { portableUsage } from '@avenos/llm-client'
+import {
+	feedbackDecisionSchema,
+	feedbackInstructions,
+	inputLocale,
+	parseFeedbackDecision,
+	parseInputReply,
+	parseInputRoute,
+	replyInstructions,
+	replySchema,
+	routeInstructions,
+	routeSchema
+} from '@avenos/llm-client/input-decision'
 import { z } from 'zod'
 import type { ServerConfig } from './config.js'
 import { AppError } from './errors.js'
 import { LlmPermits } from './llm-permits.js'
+import {
+	abortCategory,
+	type ModelLane,
+	ModelObservation,
+	type ModelTiming,
+	modelError,
+	providerFailure
+} from './model-observation.js'
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -205,6 +225,7 @@ export interface LlmModelDescriptor {
 }
 
 export interface LlmGatewayReceipt {
+	timing: ModelTiming
 	modelId: string
 	modelLabel: string
 	capabilities: string[]
@@ -332,7 +353,10 @@ function structuredContent(
 	return parseJsonObject(textContent(message))
 }
 
-async function boundedJson(response: Response): Promise<Record<string, unknown>> {
+async function boundedJson(
+	response: Response,
+	observation?: ModelObservation
+): Promise<Record<string, unknown>> {
 	const reader = response.body?.getReader()
 	if (!reader) throw new AppError(502, 'LLM_INVALID_RESPONSE', 'Model response was empty.')
 	const chunks: Uint8Array[] = []
@@ -340,6 +364,7 @@ async function boundedJson(response: Response): Promise<Record<string, unknown>>
 	while (true) {
 		const { done, value } = await reader.read()
 		if (done) break
+		observation?.bytes(value.length)
 		length += value.length
 		if (length > MAX_RESPONSE_BYTES) {
 			await reader.cancel()
@@ -437,11 +462,45 @@ function responseFormatType(value: unknown): string | null {
 
 function boundedStream(
 	body: ReadableStream<Uint8Array>,
-	onDone: () => void
+	onDone: () => void,
+	requestKey: string,
+	observation: ModelObservation
 ): ReadableStream<Uint8Array> {
 	const reader = body.getReader()
 	let length = 0
 	let finished = false
+	let finishedByConsumer = false
+	let frames = ''
+	let completionSeen = false
+	let incomplete = false
+	const decoder = new TextDecoder()
+	const started = performance.now()
+	const interrupted = (controller: ReadableStreamDefaultController<Uint8Array>) => {
+		// Headers are already sent. End the HTTP body normally with an explicit
+		// SSE failure instead of resetting chunked transfer and hiding the cause.
+		console.warn(
+			JSON.stringify({
+				event: 'llm-stream-interrupted',
+				requestKey,
+				receivedBytes: length,
+				elapsedMs: performance.now() - started
+			})
+		)
+		controller.enqueue(
+			new TextEncoder().encode(
+				'\n\ndata: ' +
+					JSON.stringify({
+						error: {
+							code: 'LLM_STREAM_INTERRUPTED',
+							message: 'The model connection ended before its response was complete.',
+							retryable: true
+						}
+					}) +
+					'\n\n'
+			)
+		)
+		controller.close()
+	}
 	const finish = () => {
 		if (finished) return
 		finished = true
@@ -452,24 +511,53 @@ function boundedStream(
 			try {
 				const { done, value } = await reader.read()
 				if (done) {
+					observation.finish(completionSeen && !incomplete ? 'ok' : 'incomplete')
 					finish()
 					controller.close()
 					return
 				}
 				length += value.length
+				observation.bytes(value.length)
+				// Inspect only protocol fields; never retain generated content in telemetry.
+				frames += decoder.decode(value, { stream: true })
+				const complete = frames.split(/\r?\n\r?\n/)
+				frames = complete.pop() ?? ''
+				if (frames.length > MAX_RESPONSE_BYTES) frames = ''
+				for (const frame of complete) {
+					try {
+						const data = frame
+							.split('\n')
+							.find((l) => l.startsWith('data:'))
+							?.slice(5)
+							.trim()
+						if (!data || data === '[DONE]') continue
+						const parsed = JSON.parse(data)
+						if (parsed.usage) observation.usage(parsed.usage)
+						const reason = parsed.choices?.[0]?.finish_reason
+						if (reason) completionSeen = true
+						if (parsed.error || (reason && !['stop', 'tool_calls'].includes(reason)))
+							incomplete = true
+					} catch {
+						incomplete = true
+					}
+				}
 				if (length > MAX_STREAM_BYTES) {
+					observation.finish('incomplete')
 					await reader.cancel()
 					finish()
 					controller.error(new Error('LLM stream exceeded its byte limit.'))
 					return
 				}
 				controller.enqueue(value)
-			} catch (error) {
+			} catch {
+				observation.finish(finishedByConsumer ? 'cancelled' : 'transport')
 				finish()
-				controller.error(error)
+				if (!finishedByConsumer) interrupted(controller)
 			}
 		},
 		cancel(reason) {
+			finishedByConsumer = true
+			observation.finish('cancelled')
 			finish()
 			return reader.cancel(reason)
 		}
@@ -490,6 +578,75 @@ function resolveEndpoint(baseUrl: string, allowInsecureHttp: boolean): URL {
 	if (!base.pathname.endsWith('/')) base.pathname += '/'
 	return new URL('chat/completions', base)
 }
+
+interface ModelRequestContext {
+	lane?: ModelLane
+	owner?: string
+	traceparent?: string | null
+}
+
+const inputIntentSchema = z
+	.object({
+		id: z.string().min(1).max(80),
+		title: z.string().min(1).max(160),
+		summary: z.string().max(400).optional(),
+		updatedAt: z.string().max(40).optional()
+	})
+	.strict()
+const inputBase = {
+	modelId: z.string().min(1).max(128).regex(MODEL_ID_PATTERN),
+	locale: z.string().max(80).transform(inputLocale),
+	text: z.string().trim().min(1).max(8000)
+}
+const inputRecentSchema = z
+	.array(
+		z
+			.object({
+				role: z.enum(['user', 'assistant']),
+				content: z.string().max(1200),
+				responseId: z.uuid().optional(),
+				pending: z.literal(true).optional(),
+				requestId: z.uuid().optional()
+			})
+			.strict()
+			.refine(
+				(e) =>
+					!e.pending || (e.role === 'assistant' && Boolean(e.responseId) && Boolean(e.requestId))
+			)
+			.refine((e) => !e.requestId || e.pending === true)
+	)
+	.max(6)
+const inputDecisionSchema = z.discriminatedUnion('kind', [
+	z
+		.object({
+			...inputBase,
+			kind: z.literal('route'),
+			correction: z.string().max(2000).optional(),
+			context: z
+				.object({
+					selectedId: z.string().max(80),
+					intents: z.array(inputIntentSchema).max(50),
+					recent: inputRecentSchema
+				})
+				.strict()
+		})
+		.strict(),
+	z
+		.object({
+			...inputBase,
+			kind: z.literal('reply'),
+			pending: z
+				.object({
+					text: z.string().max(8000),
+					current: z.string().max(160),
+					suggested: z.string().max(160),
+					canKeep: z.boolean()
+				})
+				.strict()
+		})
+		.strict(),
+	z.object({ ...inputBase, kind: z.literal('feedback'), recent: inputRecentSchema }).strict()
+])
 
 export class LlmGatewayService {
 	readonly #models: ResolvedModel[]
@@ -547,7 +704,85 @@ export class LlmGatewayService {
 			.map((model) => structuredClone(model.descriptor))
 	}
 
-	async openAiChatCompletion(input: unknown, signal?: AbortSignal): Promise<Response> {
+	/** Only routing/replies enter reserved interactive capacity. Delayed feedback
+	 * never competes with the next spoken contribution for that slot. */
+	async inputDecision(
+		input: unknown,
+		owner: string,
+		signal?: AbortSignal,
+		traceparent?: string | null
+	) {
+		const request = inputDecisionSchema.parse(input)
+		// Feedback recovery may wait behind foreground work, without extending a
+		// routing deadline or letting a background check live indefinitely.
+		const deadline = AbortSignal.timeout(request.kind === 'feedback' ? 20000 : 5000)
+		const inputSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
+		if (
+			request.kind === 'route' &&
+			new Set(request.context.intents.map((i) => i.id)).size !== request.context.intents.length
+		)
+			throw new AppError(400, 'INPUT_INVALID', 'Destination candidates must be unique.')
+		const response = await this.complete(
+			{
+				modelId: request.modelId,
+				requiredCapabilities: ['text-generation', 'structured-output'],
+				instructions:
+					request.kind === 'route'
+						? routeInstructions
+						: request.kind === 'reply'
+							? replyInstructions
+							: feedbackInstructions,
+				messages: [{ role: 'user', content: [{ type: 'text', text: JSON.stringify(request) }] }],
+				output: {
+					format: 'json',
+					name: 'input_decision',
+					schema:
+						request.kind === 'route'
+							? routeSchema
+							: request.kind === 'reply'
+								? replySchema
+								: feedbackDecisionSchema
+				},
+				temperature: 0,
+				maxOutputTokens: 512
+			},
+			inputSignal,
+			{ lane: request.kind === 'feedback' ? 'work' : 'interactive', owner, traceparent }
+		)
+		try {
+			if (response.output.format !== 'json') throw Error('Expected input decision')
+			if (
+				request.kind === 'feedback' &&
+				(!response.output.value ||
+					typeof response.output.value !== 'object' ||
+					Object.keys(response.output.value).join() !== 'feedback')
+			)
+				throw Error('Invalid feedback decision')
+			const decision =
+				request.kind === 'route'
+					? parseInputRoute(response.output.value, request.context, request.text)
+					: request.kind === 'reply'
+						? parseInputReply(response.output.value, request.pending.canKeep)
+						: parseFeedbackDecision(
+								(response.output.value as Record<string, unknown>).feedback,
+								request.recent,
+								request.text
+							)
+			return { decision, timing: response.receipt.timing }
+		} catch {
+			throw new AppError(
+				502,
+				'INPUT_DECISION_INVALID',
+				'Choose a destination or try the check again.'
+			)
+		}
+	}
+
+	async openAiChatCompletion(
+		input: unknown,
+		signal?: AbortSignal,
+		context: Omit<ModelRequestContext, 'lane'> = {}
+	): Promise<Response> {
 		const request = openAiChatCompletionSchema.parse(input)
 		const model = this.#modelsById.get(request.model)
 		if (!model) throw new AppError(404, 'LLM_MODEL_NOT_FOUND', 'The selected model does not exist.')
@@ -596,7 +831,23 @@ export class LlmGatewayService {
 			'idempotency-key': requestKey
 		}
 		if (model.credential) headers.authorization = `Bearer ${model.credential}`
-		const release = await this.#permits.acquire(signal)
+		const observation = new ModelObservation(
+			model.descriptor.id,
+			'work',
+			Buffer.byteLength(requestBody),
+			context.traceparent
+		)
+		// Include admission waiting in the deadline, not just provider execution.
+		// The HTTP server deliberately allows quiet authenticated model requests.
+		const deadline = AbortSignal.timeout(model.timeoutSeconds * 1000)
+		const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
+		const release = await this.#permits.acquire(requestSignal, 'work', context.owner).catch(() => {
+			throw modelError(
+				requestSignal.aborted ? abortCategory(requestSignal) : 'capacity',
+				observation
+			)
+		})
+		observation.acquired()
 		let streamed = false
 		try {
 			let upstream: Response
@@ -606,25 +857,20 @@ export class LlmGatewayService {
 					headers,
 					body: requestBody,
 					redirect: 'error',
-					signal: signal
-						? AbortSignal.any([signal, AbortSignal.timeout(model.timeoutSeconds * 1000)])
-						: AbortSignal.timeout(model.timeoutSeconds * 1000)
+					signal: requestSignal
 				})
 			} catch {
-				throw new AppError(503, 'LLM_UNAVAILABLE', 'The selected model is unavailable.')
+				throw modelError(abortCategory(requestSignal), observation)
 			}
 			if (!upstream.ok) {
-				throw new AppError(
-					upstream.status === 429 ? 429 : 502,
-					'LLM_UPSTREAM_ERROR',
-					`The selected model returned HTTP ${upstream.status}.`
-				)
+				throw modelError(await providerFailure(upstream), observation)
 			}
 			const responseHeaders = new Headers({
 				'x-aven-model-id': model.descriptor.id,
 				'x-aven-model-label': encodeURIComponent(model.descriptor.label),
 				'x-aven-model-capabilities': model.descriptor.capabilities.join(','),
-				'x-aven-request-key': requestKey
+				'x-aven-request-key': requestKey,
+				traceparent: observation.traceparent
 			})
 			const providerRequestId = upstream.headers.get('x-request-id')
 			if (providerRequestId) responseHeaders.set('x-aven-provider-request-id', providerRequestId)
@@ -636,14 +882,18 @@ export class LlmGatewayService {
 				responseHeaders.set('content-type', 'text/event-stream')
 				responseHeaders.set('cache-control', 'no-cache')
 				responseHeaders.set('connection', 'keep-alive')
-				const response = new Response(boundedStream(upstream.body, release), {
-					headers: responseHeaders
-				})
+				const response = new Response(
+					boundedStream(upstream.body, release, requestKey, observation),
+					{
+						headers: responseHeaders
+					}
+				)
 				streamed = true
 				return response
 			}
 
-			const raw = await boundedJson(upstream)
+			const raw = await boundedJson(upstream, observation)
+			observation.usage(raw.usage)
 			const providerReportedModel = typeof raw.model === 'string' ? raw.model : null
 			raw.model = model.descriptor.id
 			raw.aven = {
@@ -651,16 +901,26 @@ export class LlmGatewayService {
 				modelLabel: model.descriptor.label,
 				capabilities: [...model.descriptor.capabilities],
 				providerReportedModel,
-				requestKey
+				requestKey,
+				timing: observation.finish(
+					['stop', 'tool_calls'].includes(finishReason(raw) ?? '') ? 'ok' : 'incomplete'
+				)
 			}
 			responseHeaders.set('content-type', 'application/json')
 			return new Response(JSON.stringify(raw), { headers: responseHeaders })
+		} catch (error) {
+			observation.finish(requestSignal.aborted ? abortCategory(requestSignal) : 'provider-failure')
+			throw error
 		} finally {
 			if (!streamed) release()
 		}
 	}
 
-	async complete(input: unknown, signal?: AbortSignal): Promise<LlmGatewayResponse> {
+	async complete(
+		input: unknown,
+		signal?: AbortSignal,
+		context: ModelRequestContext = {}
+	): Promise<LlmGatewayResponse> {
 		const request = llmCompletionRequestSchema.parse(input)
 		const model = this.#modelsById.get(request.modelId)
 		if (!model) throw new AppError(404, 'LLM_MODEL_NOT_FOUND', 'The selected model does not exist.')
@@ -790,7 +1050,25 @@ export class LlmGatewayService {
 			'idempotency-key': requestKey
 		}
 		if (model.credential) headers.authorization = `Bearer ${model.credential}`
-		const release = await this.#permits.acquire(signal)
+		const observation = new ModelObservation(
+			model.descriptor.id,
+			context.lane ?? 'work',
+			Buffer.byteLength(requestBody),
+			context.traceparent
+		)
+		const deadline = AbortSignal.timeout(
+			context.lane === 'interactive' ? 5000 : model.timeoutSeconds * 1000
+		)
+		const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
+		const release = await this.#permits
+			.acquire(requestSignal, context.lane, context.owner)
+			.catch(() => {
+				throw modelError(
+					requestSignal.aborted ? abortCategory(requestSignal) : 'capacity',
+					observation
+				)
+			})
+		observation.acquired()
 		try {
 			let response: Response
 			try {
@@ -799,23 +1077,28 @@ export class LlmGatewayService {
 					headers,
 					body: requestBody,
 					redirect: 'error',
-					signal: signal
-						? AbortSignal.any([signal, AbortSignal.timeout(model.timeoutSeconds * 1000)])
-						: AbortSignal.timeout(model.timeoutSeconds * 1000)
+					signal: requestSignal
 				})
 			} catch {
-				throw new AppError(503, 'LLM_UNAVAILABLE', 'The selected model is unavailable.')
+				throw modelError(abortCategory(requestSignal), observation)
 			}
 			if (!response.ok) {
-				throw new AppError(
-					response.status === 429 ? 429 : 502,
-					'LLM_UPSTREAM_ERROR',
-					`The selected model returned HTTP ${response.status}.`
-				)
+				throw modelError(await providerFailure(response), observation)
 			}
-			const raw = await boundedJson(response)
+			const raw = await boundedJson(response, observation)
+			observation.usage(raw.usage)
+			if (!['stop', 'tool_calls'].includes(finishReason(raw) ?? ''))
+				throw modelError('incomplete', observation)
 			const message = responseMessage(raw)
+			const output: LlmGatewayResponse['output'] =
+				request.output.format === 'json'
+					? {
+							format: 'json',
+							value: structuredContent(model.configuration.profile, message, request.output.name)
+						}
+					: { format: 'text', text: textContent(message) }
 			const receipt: LlmGatewayReceipt = {
+				timing: observation.finish('ok'),
 				modelId: model.descriptor.id,
 				modelLabel: model.descriptor.label,
 				capabilities: [...model.descriptor.capabilities],
@@ -838,16 +1121,10 @@ export class LlmGatewayService {
 					`${model.descriptor.id}:${model.configuration.profile}:${model.configuration.upstreamModel}:${model.endpoint}`
 				)
 			}
-			if (request.output.format === 'json') {
-				return {
-					output: {
-						format: 'json',
-						value: structuredContent(model.configuration.profile, message, request.output.name)
-					},
-					receipt
-				}
-			}
-			return { output: { format: 'text', text: textContent(message) }, receipt }
+			return { output, receipt } as LlmGatewayResponse
+		} catch (error) {
+			observation.finish(requestSignal.aborted ? abortCategory(requestSignal) : 'provider-failure')
+			throw error
 		} finally {
 			release()
 		}

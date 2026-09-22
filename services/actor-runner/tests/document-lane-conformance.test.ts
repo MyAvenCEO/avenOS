@@ -120,13 +120,14 @@ class FakeArtifactStore {
 		return { storeEpoch: '44444444-4444-4444-8444-444444444444' }
 	}
 
-	async upload(
+	async stagePublicationBlob(
 		_scopeId: string,
-		_claimId: string,
+		_publicationId: string,
+		_localKey: string,
 		_declaration: unknown,
-		_bytes: Uint8Array
-	): Promise<ArtifactJson> {
-		return { staged: true }
+		_bytes: ArrayBuffer
+	): Promise<string> {
+		return uuid(++this.#ordinal)
 	}
 
 	async publish(
@@ -168,6 +169,11 @@ class FailingModel extends GoldenInvoiceModel {
 }
 
 class ParallelGoldenInvoiceModel extends GoldenInvoiceModel {
+	#release!: () => void
+	#firstWave = new Promise<void>((resolve) => {
+		this.#release = resolve
+	})
+	#watchdog = setTimeout(() => this.#release(), 10_000).unref()
 	active = 0
 	peak = 0
 	override async status() {
@@ -176,7 +182,11 @@ class ParallelGoldenInvoiceModel extends GoldenInvoiceModel {
 	override async complete(request: DocumentModelRequest) {
 		this.active++
 		this.peak = Math.max(this.peak, this.active)
-		await new Promise((resolve) => setTimeout(resolve, 12))
+		if (this.active === 5) {
+			clearTimeout(this.#watchdog)
+			this.#release()
+		}
+		await this.#firstWave
 		try {
 			return await super.complete(request)
 		} finally {
@@ -187,7 +197,9 @@ class ParallelGoldenInvoiceModel extends GoldenInvoiceModel {
 
 describe('document execution lane conformance', () => {
 	test('client and server keep the same five-page result while both fill five model slots', async () => {
-		const bytes = textPdf(Array.from({ length: 5 }, (_, index) => [`Invoice page ${index + 1}`]))
+		// Pages without native text require the visual lane. Text-only PDFs now
+		// correctly skip page OCR, so they cannot exercise five concurrent calls.
+		const bytes = textPdf(Array.from({ length: 5 }, () => ['']))
 		const source = {
 			artifactId: SOURCE_ID,
 			originalName: 'parallel-invoice.pdf',
@@ -583,11 +595,12 @@ function documentPlan(request: ReturnType<typeof documentRunStartRequest>) {
 }
 
 async function waitForRun(runner: MemoryPlanRunner, runId: string) {
-	for (let attempt = 0; attempt < 100; attempt += 1) {
+	const deadline = Date.now() + 30_000
+	while (Date.now() < deadline) {
 		const record = await runner.status(runId)
 		if (record?.state === 'succeeded') return
 		if (record?.state === 'failed') throw new Error(record.failure?.message)
-		await new Promise((resolve) => setTimeout(resolve, 1))
+		await new Promise((resolve) => setTimeout(resolve, 10))
 	}
 	throw new Error('run did not finish')
 }

@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { ACTOR_RUN_PROTOCOL, type PlanRunRecord, resourceId } from '@avenos/actors'
+import {
+	ACTOR_RUN_PROTOCOL,
+	type PlanRunExecutionContext,
+	type PlanRunRecord,
+	resourceId
+} from '@avenos/actors'
 import pg from 'pg'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest'
 import { executeAlreadySatisfied } from '../src/execution.js'
@@ -39,6 +44,9 @@ describeWithPostgres('SQL runner persistence', () => {
 				state text NOT NULL,
 				revision bigint NOT NULL,
 				record jsonb NOT NULL,
+				journal_engine text,
+				execution_owner uuid,
+				journal_resuming boolean NOT NULL DEFAULT false,
 				created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 				updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 				UNIQUE(subject_id,idempotency_key)
@@ -50,6 +58,52 @@ describeWithPostgres('SQL runner persistence', () => {
 		if (!admin) return
 		await admin.query(`DROP SCHEMA ${schema} CASCADE`)
 		await admin.end()
+	})
+
+	test('an admitted run waits for its durable binding and a same-key wakeup executes it once', async () => {
+		const pool = new pg.Pool({
+			connectionString: databaseUrl,
+			max: 3,
+			options: `-c search_path=${schema},pg_catalog`
+		})
+		let ready = false,
+			checked = () => {},
+			calls = 0
+		const inspected = new Promise<void>((resolve) => {
+			checked = resolve
+		})
+		const runner = tracked(
+			pool,
+			pool,
+			async (_request, context) => {
+				await context!.lease!.assertActive()
+				calls++
+				return { remainingGoals: [] }
+			},
+			false,
+			60_000,
+			5,
+			async () => {
+				checked()
+				return ready
+			}
+		)
+		try {
+			const request = deterministicRunRequest('server', randomUUID(), randomUUID())
+			const first = await runner.start(request)
+			await inspected
+			await runner.recoverAcceptedRuns()
+			expect((await runner.status(first.runId))?.state).toBe('accepted')
+			expect(calls).toBe(0)
+			ready = true
+			const wakes = await Promise.all(Array.from({ length: 6 }, () => runner.start(request)))
+			expect(wakes.every((wake) => wake.runId === first.runId)).toBe(true)
+			expect((await terminalRecord(runner, first.runId)).state).toBe('succeeded')
+			expect(calls).toBe(1)
+		} finally {
+			await runner.close()
+			await pool.end()
+		}
 	})
 
 	test('publishes progress before completion without adding a replay checkpoint', async () => {
@@ -157,7 +211,7 @@ describeWithPostgres('SQL runner persistence', () => {
 			const runner = tracked(secondProcess, secondProcess, executeAlreadySatisfied)
 			expect((await runner.status(runId))?.state).toBe('accepted')
 			expect(await runner.recoverAcceptedRuns()).toBe(1)
-			expect(await runner.status(runId)).toMatchObject({
+			expect(await terminalRecord(runner, runId)).toMatchObject({
 				runId,
 				state: 'succeeded',
 				revision: 3,
@@ -228,7 +282,7 @@ describeWithPostgres('SQL runner persistence', () => {
 			expect(executions).toBe(1)
 			releaseExecution()
 			expect((await recoveries).sort()).toEqual([0, 1])
-			expect(await first.status(runId)).toMatchObject({
+			expect(await terminalRecord(first, runId)).toMatchObject({
 				state: 'succeeded',
 				revision: 3,
 				checkpoints: [expect.objectContaining({ ordinal: 0 })]
@@ -417,6 +471,58 @@ describeWithPostgres('SQL runner persistence', () => {
 			await expect(runner.retry(runId, randomUUID())).rejects.toThrow('reconciliation')
 			expect(executions).toBe(0)
 		} finally {
+			await runner.close()
+			await pool.end()
+		}
+	})
+
+	test('a live executor cannot report progress or complete after its lease has expired', async () => {
+		const pool = new pg.Pool({
+			connectionString: databaseUrl,
+			max: 2,
+			options: `-c search_path=${schema},pg_catalog`
+		})
+		let release!: () => void, entered!: (context: PlanRunExecutionContext) => void
+		const pending = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const started = new Promise<PlanRunExecutionContext>((resolve) => {
+			entered = resolve
+		})
+		const runner = tracked(pool, pool, async (_request, context) => {
+			entered(context!)
+			await pending
+			return { remainingGoals: [] }
+		})
+		try {
+			const handle = await runner.start(
+				deterministicRunRequest('server', randomUUID(), randomUUID())
+			)
+			const context = await started
+			expect(context.lease?.runId).toBe(handle.runId)
+			await context.lease!.assertActive()
+			await pool.query(
+				`UPDATE runs SET record=jsonb_set(record,'{lease,expiresAt}',to_jsonb('2000-01-01T00:00:00Z'::text)) WHERE id=$1`,
+				[handle.runId]
+			)
+			await expect(context.lease!.assertActive()).rejects.toThrow('ownership ended')
+			await expect(context.reportProgress!({ phase: 'late' })).rejects.toThrow('no longer active')
+			release()
+			await runner.close()
+			const record = await runner.status(handle.runId)
+			expect(record?.state).toBe('running') // no stale terminal write; recovery owns the decision
+			expect(record?.progress).toBeUndefined()
+			const replacement = tracked(pool, pool, async () => {
+				throw Error('Must not replay an uncertain effect')
+			})
+			await replacement.recoverAcceptedRuns()
+			expect(await replacement.status(handle.runId)).toMatchObject({
+				state: 'failed',
+				failure: { code: 'EXECUTION_UNCERTAIN' }
+			})
+			await replacement.close()
+		} finally {
+			release()
 			await runner.close()
 			await pool.end()
 		}

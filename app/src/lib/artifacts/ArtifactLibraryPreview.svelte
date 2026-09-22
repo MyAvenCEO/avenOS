@@ -159,6 +159,7 @@ onMount(() => {
 				{/if}
 				{#if envelope}
 					<ArtifactSemanticViewer
+						artifactId={selectedId}
 						typeKey={String(envelope.typeKey ?? row.artifactType)}
 						payload={envelope.payload}
 						{evidence}

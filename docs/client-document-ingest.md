@@ -39,6 +39,20 @@ The host-neutral protocol and remote-server cutover are in
 
 ## Execution graph
 
+### Inspecting logical pages
+
+The Intent document view groups derived results underneath their exact source.
+Logical `docs.page` artifacts have no blob: the viewer follows their recorded
+supporting-evidence edge to the original PDF page, image region or text byte range.
+For text sources the group is called “Textabschnitte”, and opening a section shows
+that range, not another copy of the whole file. Missing or ambiguous source edges
+produce a recoverable error instead of guessing from the page ordinal. Invalid
+byte ranges and references to nonexistent PDF pages do not silently clamp to other
+content. Metadata remains available under technical details. This is not yet the
+full source → page → extraction relationship tree described in the semantic design.
+
+### Processing stages
+
 The model-backed path is:
 
 ```text
@@ -237,6 +251,21 @@ failures, temporary Artifact Store unavailability, and upload-admission backpres
 using delays of 1, 2, 4, 8, and 16 seconds.
 The presentation is currently an in-memory projection; Artifact Store production runs
 and stable publication IDs are the durable source of truth.
+
+### Inspect a document's derived data
+
+The Intent sidebar lists source documents and useful authored outputs, not processing
+artifacts or individual facts. Opening a document shows its original content. The
+**Erkannte Angaben** tab groups that document's derived artifacts by type, using
+readable labels and bounded factual previews. It loads at most six previews per group
+at first; more are available explicitly. Raw schemas, IDs and JSON stay behind a
+technical-details disclosure.
+
+Grouping uses exact source artifact IDs from the processing presentation and durable
+Intent projection. Matching titles, types or the containing Intent never establishes
+source ownership. A shared result can appear under each of its recorded sources;
+an artifact without a recorded association is not guessed into a document's group.
+This changes presentation, not the underlying artifacts or their availability to agents.
 
 ## Bounds and parity
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { loadMachine } from '../src/lib/actors/machine'
-import { todoConfig } from '../src/lib/actors/todo.config'
 import windowMachineSource from '../src/lib/actors/window-machine.pl?raw'
+import { todoConfig } from './fixtures/sandbox-tasks/config'
 
 /**
  * Machine-per-actor (0147): the `.pl` is a manifest field, and MORE than one

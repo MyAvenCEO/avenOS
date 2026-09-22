@@ -21,6 +21,7 @@ const overflow = $derived(Math.max(0, presentation.steps.length - 3))
 	type="button"
 	onclick={onselect}
 	aria-label={`Open Skill ${presentation.name}`}
+	data-artifact-id={presentation.artifactId}
 	aria-pressed={selected}
 	class="group flex min-h-48 flex-col overflow-hidden rounded-3xl border bg-surface-card p-4 text-left transition-colors hover:bg-surface-sunken focus:border-primary {selected ? 'border-primary' : 'border-border'}"
 >
@@ -32,7 +33,7 @@ const overflow = $derived(Math.max(0, presentation.steps.length - 3))
 		>
 		<span
 			class="rounded-full border border-border px-2 py-0.5 text-foreground/45 text-[length:var(--fs-micro)]"
-			>Skill · v{presentation.version ?? '?'}</span
+			>Saved Skill</span
 		>
 	</div>
 	<h2 class="mt-4 truncate font-semibold text-sm">{presentation.name}</h2>
@@ -76,9 +77,11 @@ const overflow = $derived(Math.max(0, presentation.steps.length - 3))
 			{/if}
 		</div>
 	{/if}
-	{#if committedAt}
-		<p class="mt-auto pt-3 text-foreground/35 text-[length:var(--fs-micro)]">
-			{new Date(committedAt).toLocaleDateString()}
-		</p>
-	{/if}
+	<p
+		class="mt-auto pt-3 text-foreground/35 text-[length:var(--fs-micro)]"
+		title={presentation.artifactId}
+	>
+		{committedAt ? new Date(committedAt).toLocaleString() : 'Saved revision'}
+		· {presentation.artifactId.slice(0,8)}
+	</p>
 </button>

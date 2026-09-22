@@ -20,6 +20,9 @@ import { DOCUMENT_PROCEDURES } from './provenance'
 // Initialization barrier: PDF.js evaluates DOMMatrix during module loading.
 import './server-pdf-canvas'
 
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
+
 import type { PlanRunExecutor, PlanRunStartRequest } from '@avenos/actors'
 import { ACTOR_RUN_PROTOCOL, portableRunClone } from '@avenos/actors'
 import type {
@@ -309,13 +312,17 @@ export class ArtifactStoreDocumentGateway implements ReconciliationGateway {
 				const bytes = base64ToBytes(output.blob.base64)
 				if (bytesToBase64(bytes) !== output.blob.base64)
 					throw new Error('non-canonical output blob')
-				const claimId = crypto.randomUUID()
 				const sha256 = await sha256Hex(bytes)
-				await this.route.client.upload(
+				const claimId = await this.route.client.stagePublicationBlob(
 					this.route.scopeId,
-					claimId,
-					{ sha256, length: bytes.length, declaredMediaType: output.blob.mediaType },
-					bytes
+					run.publicationId,
+					output.localKey,
+					{
+						sha256,
+						length: bytes.length,
+						declaredMediaType: output.blob.mediaType
+					},
+					Uint8Array.from(bytes).buffer
 				)
 				blob = { sha256, length: bytes.length }
 				blobAuthorities[output.localKey] = { kind: 'upload-claim', claimId }
@@ -465,7 +472,18 @@ async function decodePdf(
 	bytes: Uint8Array,
 	options: DocumentDecodeOptions
 ): Promise<DecodedDocument> {
-	const task = pdfjs.getDocument({ data: bytes.slice(), CanvasFactory: ServerPdfCanvasFactory })
+	const task = pdfjs.getDocument({
+		data: bytes.slice(),
+		CanvasFactory: ServerPdfCanvasFactory,
+		// Resolve the pinned dependency's assets in source and production bundles.
+		// Render glyph outlines so a minimal container needs no system fonts.
+		standardFontDataUrl: join(
+			dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')),
+			'standard_fonts/'
+		),
+		useSystemFonts: false,
+		disableFontFace: true
+	})
 	try {
 		const pdf = await task.promise
 		if (pdf.numPages > MAX_DOCUMENT_PAGES) return unsupportedPdf()
