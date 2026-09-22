@@ -97,7 +97,7 @@ interaction remain outside these connection proofs.
 
 ## Fast development checks
 
-The optional credential component and protected connection factories have isolated
+The default credential component and protected connection factories have isolated
 integration checks. Use a disposable local PostgreSQL maintenance database, never a
 customer database. Helpers create random test databases/roles and remove them. IMAP
 starts and removes a real Dovecot container with invented mail and temporary TLS keys.

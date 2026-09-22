@@ -11,12 +11,13 @@ trusted local network.
 
 ## Connection integration status
 
-The credential component is optional and is not added to customer environments by
-default. Provisioner support accepts five independent roots:
+The credential component is installed by default in customer environments. Remote
+access also requires the configured services and policy below. Provisioner support
+accepts five independent roots:
 `CREDENTIAL_SET_DB_CREDENTIAL_ROOT`, `CREDENTIAL_METADATA_DB_CREDENTIAL_ROOT`,
 `CREDENTIAL_MATCH_DB_CREDENTIAL_ROOT`, `CREDENTIAL_HTTP_DB_CREDENTIAL_ROOT` and
 `CREDENTIAL_IMAP_DB_CREDENTIAL_ROOT`. They derive role passwords, not encryption keys.
-An explicit installation requires all five; missing roots fail rather than reuse
+Provisioning requires all five; missing roots fail rather than reuse
 another service's root. The opt-in composition below supplies credential ingress,
 two protected executors and installed mail/HTTP Actors. It is qualified on an isolated
 local stack, not as a hosted release or an unattended mailbox synchronizer.
@@ -377,6 +378,13 @@ coverage and release status.
   [workstation setup](workstation-setup.md#linux).
 - **Passkey enrollment fails:** use the printed `http://localhost` URL, not another
   hostname or IP address.
+- **The local client tries to sign in at `aven.id`:** the native binary was built
+  with deployed endpoints. Identity, API, passkey origin and RP ID are compile-time
+  settings; changing environment variables only when launching an existing binary
+  does not change them. Rebuild through `bun run local:app -- linux` (or `mac`),
+  which sets all four local values before compiling. A separately packaged local
+  client needs those same values during its build. Its login should open
+  `http://localhost:13100`.
 - **The customer route is not ready:** wait for the provisioner; inspect the platform
   containers with `docker compose` only when debugging the disposable local stack.
 - **Ports are already in use:** stop the existing `aven-local` stack with

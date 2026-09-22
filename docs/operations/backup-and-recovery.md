@@ -389,7 +389,7 @@ recovery drill has passed.
 
 ## Connection credentials and operator keys
 
-The optional credential component stores encrypted envelopes, binding metadata,
+The credential component stores encrypted envelopes, binding metadata,
 versions and use claims in the customer database. A database dump does **not** contain
 the private wrapping keys. Restoring the database without the matching private
 unsealing ring cannot recover the stored passwords or tokens. Retain the original
@@ -422,7 +422,7 @@ and waits within its existing 60-second budget for live execution markers to cle
 A missing or expired lease with an unsettled marker stops movement for reconciliation;
 lease expiry alone does not establish that external work stopped.
 
-The optional credentials component also records a distinct execution marker per
+The credentials component also records a distinct execution marker per
 protected use. It remains through socket shutdown and result publication. The private
 host settles only a use whose first claim it won; duplicate requests cannot release
 another handler's marker. Connection markers currently stop movement for reconciliation
