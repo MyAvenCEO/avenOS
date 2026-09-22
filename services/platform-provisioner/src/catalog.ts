@@ -304,7 +304,7 @@ export async function loadCatalog(): Promise<Map<string, ComponentCatalogEntry>>
 export function catalogDigest(catalog: Map<string, ComponentCatalogEntry>): string {
 	return sha256(
 		[...catalog.values()]
-			.map((entry) => `${entry.manifest.componentRef}\0${entry.manifest.migrationSetDigest}`)
+			.map((entry) => `${entry.manifest.componentRef}\0${sha256(JSON.stringify(entry.manifest))}`)
 			.sort()
 			.join('\n')
 	)

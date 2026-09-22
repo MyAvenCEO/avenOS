@@ -43,7 +43,7 @@ export const customerComponentCatalog = [
 			}
 		],
 		dependencies: [],
-		requiredByDefault: false
+		requiredByDefault: true
 	}),
 	customerComponentManifestSchema.parse({
 		componentRef: 'ceo.aven:component:data:productivity@1',

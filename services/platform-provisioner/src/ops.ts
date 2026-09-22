@@ -62,7 +62,7 @@ if (process.argv[2] === 'catalog') {
 					environmentId,
 					config.CUSTOMER_RUNTIME_ID,
 					catalog,
-					'changed'
+					{ mode: 'changed', installMissingDefaults: true }
 				)
 				operationIds.push(...operations.map((operation) => operation.id))
 				await client.query('COMMIT')

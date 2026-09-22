@@ -173,34 +173,8 @@ try {
 		}
 		throw Error('Synthetic workspace provisioning timed out')
 	}
-	await ready()
-	const install = Bun.spawn(
-		[
-			'docker',
-			'compose',
-			'-p',
-			'aven-connections',
-			'-f',
-			`${configuration}/base.json`,
-			'-f',
-			`${configuration}/compose.json`,
-			'exec',
-			'-T',
-			'platform-provisioner',
-			'bun',
-			'build/ops.js',
-			'install-optional',
-			target.environmentId,
-			'ceo.aven:component:data:credentials@1'
-		],
-		{ stdout: 'pipe', stderr: 'pipe' }
-	)
-	const installCode = await install.exited
-	assert.equal(installCode, 0, await new Response(install.stderr).text())
 	await ready(true)
-	evidence.checks.push(
-		'Fresh account and optional component installed through the ordinary provisioner'
-	)
+	evidence.checks.push('Fresh account provisioned protected connections by default')
 	native = await TauriSession.launch(binary)
 	await native.waitForBodyText('GERÄTECODE', 45000)
 	const code = (await native.bodyText()).match(/\b([A-Z0-9]{4})-([A-Z0-9]{4})\b/)

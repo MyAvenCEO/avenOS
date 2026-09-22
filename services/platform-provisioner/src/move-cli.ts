@@ -238,7 +238,7 @@ async function main(): Promise<void> {
 						customer.id,
 						id,
 						catalog,
-						'all'
+						{ mode: 'all' }
 					)
 					await restoreProvisionerAuthority(
 						destination.recoveryDatabaseUrl,

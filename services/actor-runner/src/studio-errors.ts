@@ -14,6 +14,22 @@ export function studioFailure(error: unknown):
 			problem: Record<string, unknown> & { message: string }
 	  }
 	| undefined {
+	if (
+		error instanceof ArtifactStoreProblem &&
+		error.status === 503 &&
+		error.code === 'STORE_RECONCILIATION_REQUIRED'
+	)
+		return {
+			status: 503,
+			effect: 'not-applied',
+			problem: {
+				code: 'STUDIO_STORE_RECONCILIATION_REQUIRED',
+				message:
+					'This workspace is still installing its current artifact catalog. No Studio change was committed. Retry after workspace setup is ready.',
+				storeCode: error.code,
+				retryable: true
+			}
+		}
 	if (error instanceof ArtifactStoreProblem && error.status === 422)
 		return {
 			status: 422,

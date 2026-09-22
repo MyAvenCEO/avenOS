@@ -32,7 +32,12 @@ describe.skipIf(!url)('optional component admission on real PostgreSQL', () => {
 		CREATE TABLE customer_component_operations(id uuid PRIMARY KEY,environment_id uuid REFERENCES customer_environments(id),component_ref text,action text,status text,target_schema_version int,migration_set_digest text,routing_generation bigint,attempt int DEFAULT 0,lease_owner text,lease_expires_at timestamptz,last_error text,updated_at timestamptz DEFAULT now(),UNIQUE(environment_id,component_ref,action,routing_generation,target_schema_version,migration_set_digest));`)
 		const credentialEntry = (await loadCatalog()).get('ceo.aven:component:data:credentials@1')
 		if (!credentialEntry) throw new Error('Credential component fixture is missing.')
-		entry = credentialEntry
+		// Exercise the generic opt-in mechanism with a synthetic optional catalog
+		// entry. Protected connections themselves are a default component.
+		entry = {
+			...credentialEntry,
+			manifest: { ...credentialEntry.manifest, requiredByDefault: false }
+		}
 		await pool.query(
 			`INSERT INTO customer_runtimes VALUES('proof',NULL,$1),('wrong-release',NULL,'[]')`,
 			[JSON.stringify([entry.manifest])]
@@ -77,6 +82,40 @@ describe.skipIf(!url)('optional component admission on real PostgreSQL', () => {
 			).rows
 		).toEqual([{ observed_state: 'pending' }])
 	})
+	test('runtime upgrade installs newly required defaults but not optional capabilities', async () => {
+		const id = await workspace()
+		const required = {
+			...entry,
+			manifest: { ...entry.manifest, requiredByDefault: true }
+		}
+		const catalog = new Map([[required.manifest.componentRef, required]])
+		const client = await pool.connect()
+		try {
+			await client.query('BEGIN')
+			const result = await queueInstalledComponentReconciliation(client, id, 'proof', catalog, {
+				mode: 'changed',
+				installMissingDefaults: true
+			})
+			await client.query('COMMIT')
+			expect(result.operations.map((operation) => operation.componentRef)).toEqual([
+				required.manifest.componentRef
+			])
+		} finally {
+			client.release()
+		}
+		const installed = await pool.query(
+			`SELECT component_ref,desired_state,observed_state
+			 FROM customer_environment_components WHERE environment_id=$1`,
+			[id]
+		)
+		expect(installed.rows).toEqual([
+			{
+				component_ref: required.manifest.componentRef,
+				desired_state: 'ready',
+				observed_state: 'pending'
+			}
+		])
+	})
 	test('refuses moving, unavailable, wrong-runtime and unadvertised-release targets', async () => {
 		for (const [id, runtime] of [
 			[await workspace('proof', 'ready', randomUUID()), 'proof'],
@@ -97,7 +136,11 @@ describe.skipIf(!url)('optional component admission on real PostgreSQL', () => {
 	})
 	test('moves exactly the ready installed component set, not every advertised capability', async () => {
 		const catalog = await loadCatalog()
-		const required = [...catalog.values()].find((candidate) => candidate.manifest.requiredByDefault)
+		const required = [...catalog.values()].find(
+			(candidate) =>
+				candidate.manifest.requiredByDefault &&
+				candidate.manifest.componentRef !== entry.manifest.componentRef
+		)
 		if (!required) throw new Error('Default component fixture is missing.')
 		const id = await workspace()
 		await pool.query(
@@ -144,17 +187,19 @@ describe.skipIf(!url)('optional component admission on real PostgreSQL', () => {
 				.sort()
 		).toEqual([required.manifest.componentRef, entry.manifest.componentRef].sort())
 	})
-	test('upgrades only installed components and queues their current catalog version', async () => {
+	test('upgrades changed and externally provisioned installed components', async () => {
 		const catalog = await loadCatalog()
 		const actor = catalog.get('os.aven:component:actors:run-repository@1')
-		if (!actor) throw new Error('Actor component fixture is missing.')
+		const artifacts = catalog.get('ceo.aven:component:data:artifacts@1')
+		if (!actor || !artifacts) throw new Error('Component fixture is missing.')
 		const id = await workspace()
 		await pool.query(
 			`INSERT INTO customer_environment_components
 			 (environment_id,component_ref,desired_state,observed_state,target_schema_version,
 			  observed_schema_version,migration_set_digest,observed_migration_set_digest,routing_generation)
 			 VALUES($1,$2,'ready','ready',$3,$3,$4,$4,3),
-			       ($1,$5,'ready','ready',$6,$6,$7,$7,3)`,
+			       ($1,$5,'ready','ready',$6,$6,$7,$7,3),
+			       ($1,$8,'ready','ready',$9,$9,$10,$10,3)`,
 			[
 				id,
 				actor.manifest.componentRef,
@@ -162,23 +207,22 @@ describe.skipIf(!url)('optional component admission on real PostgreSQL', () => {
 				'0'.repeat(64),
 				entry.manifest.componentRef,
 				entry.manifest.targetSchemaVersion,
-				entry.manifest.migrationSetDigest
+				entry.manifest.migrationSetDigest,
+				artifacts.manifest.componentRef,
+				artifacts.manifest.targetSchemaVersion,
+				artifacts.manifest.migrationSetDigest
 			]
 		)
 		const client = await pool.connect()
 		try {
 			await client.query('BEGIN')
-			const result = await queueInstalledComponentReconciliation(
-				client,
-				id,
-				'proof',
-				catalog,
-				'changed'
-			)
+			const result = await queueInstalledComponentReconciliation(client, id, 'proof', catalog, {
+				mode: 'changed'
+			})
 			await client.query('COMMIT')
-			expect(result.operations.map((operation) => operation.componentRef)).toEqual([
-				actor.manifest.componentRef
-			])
+			expect(result.operations.map((operation) => operation.componentRef).sort()).toEqual(
+				[actor.manifest.componentRef, artifacts.manifest.componentRef].sort()
+			)
 		} finally {
 			client.release()
 		}
@@ -191,6 +235,12 @@ describe.skipIf(!url)('optional component admission on real PostgreSQL', () => {
 				)
 			).rows
 		).toEqual([
+			{
+				component_ref: artifacts.manifest.componentRef,
+				target_schema_version: artifacts.manifest.targetSchemaVersion,
+				migration_set_digest: artifacts.manifest.migrationSetDigest,
+				observed_state: 'pending'
+			},
 			{
 				component_ref: entry.manifest.componentRef,
 				target_schema_version: entry.manifest.targetSchemaVersion,

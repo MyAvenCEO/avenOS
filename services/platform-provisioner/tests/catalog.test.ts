@@ -10,7 +10,8 @@ describe('static customer component catalog', () => {
 			)
 			expect(manifest.targetSchemaVersion).toBeLessThanOrEqual(manifest.maximumRuntimeSchemaVersion)
 		}
-		expect(catalogDigest(catalog)).toMatch(/^[0-9a-f]{64}$/)
+		const digest = catalogDigest(catalog)
+		expect(digest).toMatch(/^[0-9a-f]{64}$/)
 		expect([...catalog.keys()].sort()).toEqual([
 			'ceo.aven:component:data:artifacts@1',
 			'ceo.aven:component:data:credentials@1',
@@ -19,7 +20,13 @@ describe('static customer component catalog', () => {
 			'os.aven:component:actors:run-repository@1'
 		])
 		const credentials = catalog.get('ceo.aven:component:data:credentials@1')!
-		expect(credentials.manifest.requiredByDefault).toBe(false)
+		expect(credentials.manifest.requiredByDefault).toBe(true)
+		const changed = new Map(catalog)
+		changed.set(credentials.manifest.componentRef, {
+			...credentials,
+			manifest: { ...credentials.manifest, requiredByDefault: false }
+		})
+		expect(catalogDigest(changed)).not.toBe(digest)
 		expect(credentials.manifest.functionRoles).toHaveLength(5)
 		for (const grant of Object.values(credentials.grants)) {
 			expect(grant.tables).toEqual([])

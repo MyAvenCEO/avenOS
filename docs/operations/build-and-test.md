@@ -37,7 +37,7 @@ decisions; rewriting a branch is not secure deletion of those surfaces.
 Connection qualification uses independently invented mail, API content and accounts.
 The real model must be Qwen. No customer database or running-container secrets are
 copied into the fixture. Build the six connection images described in
-[Local stack](local-stack.md#prepare-an-opt-in-local-composition) first, plus a current
+[Local stack](local-stack.md#prepare-a-protected-local-composition) first, plus a current
 Intent Service image (`aven-e2e-intent-service:local`, or the explicit
 `E2E_INTENT_SERVICE_IMAGE` override).
 
@@ -71,8 +71,8 @@ CREDENTIAL_TEST_DATABASE_URL=postgres://test-admin:test-password@127.0.0.1:5432/
 bun deploy/e2e/credential-backup-proof.ts
 ```
 
-The native proof creates a fresh account, enrolls a virtual passkey, authorizes the
-real desktop, installs the optional component through the actual provisioner, and
+The native proof creates a fresh account, verifies protected connections were installed
+as a standard component, enrolls a virtual passkey, authorizes the real desktop, and
 uses the settings controls for IMAP/HTTP destinations, rotation and revocation. It
 restarts only this stack's three credential services, checks retained metadata, and
 declines an exact-request review in the real Studio. Qwen receives redacted metadata

@@ -91,7 +91,7 @@ Neither image contains operator keys. Mount only the public sealing file into
 ingress and only the private unsealing ring into each protected executor. The API's
 separate policy signing key must not be mounted into either image.
 
-### Prepare an opt-in local composition
+### Prepare a protected local composition
 
 Use a resolved **local** Compose configuration that you already control and a JSON
 policy listing allowed HTTPS origins/path prefixes and IMAP origins. Do not reconstruct
@@ -109,7 +109,8 @@ Keep the directory together with the original base configuration. Reuse it acros
 restarts; generating a replacement is not key rotation. Follow the
 [connection recovery boundary](backup-and-recovery.md#connection-credentials-and-operator-keys)
 before saving real credentials. The generator starts no services and installs no
-customer component.
+customer component by itself. Protected connections are a standard component of every
+new workspace; the ordinary runtime upgrade adds them to older ready workspaces.
 
 The overlay expects locally built `aven-connection-api:local`,
 `aven-connection-provisioner:local`, `aven-connection-runner:local`,
@@ -118,19 +119,10 @@ The overlay expects locally built `aven-connection-api:local`,
 service Dockerfiles. Merge the original base and generated overlay when starting that
 local Compose project. Do not merge into a hosted installation.
 
-Once all services are healthy, the operator can enable the optional component in one
-ready, stationary customer environment through the existing provisioner:
-
-```sh
-docker compose -p LOCAL_PROJECT -f /private/local-base.json -f /private/generated/compose.json \
-  exec -T platform-provisioner bun build/ops.js install-optional ENVIRONMENT_UUID ceo.aven:component:data:credentials@1
-```
-
-This queues normal reconciliation; it does not run customer migrations inside the
-command. It checks runtime placement and the advertised component version. Repeating
-the command returns `queued: false` when the component already exists, including a
-failed/disabled installation; it does not silently repair or re-enable it. Wait for
-component readiness before opening **Settings → Verbindungen** in the desktop.
+Once all services are healthy, run the ordinary runtime upgrade. It idempotently adds
+newly required default components to older ready workspaces and always refreshes
+externally provisioned catalogs before the client is opened. Wait for component
+readiness before opening **Settings → Verbindungen** in the desktop.
 
 The first protected profile supports reviewed HTTPS GET/HEAD and read-only IMAP query
 and selected-message reads. Saved destinations do not grant authority on their own.
@@ -157,10 +149,11 @@ bun run local:up
 ```
 
 The command builds local service images, generates a disposable tenant signing key,
-starts the topology, waits for health, and updates only components already installed in
-each restored local customer environment to the running catalog. It does not install
-optional components. Startup waits for those migrations and fails instead of opening an
-incompatible workspace. It then prints these endpoints:
+starts the topology, waits for health, updates installed components, adds newly required
+default components to restored ready workspaces, and refreshes externally provisioned
+catalogs. It never installs optional capabilities merely because a runtime advertises
+them. Startup waits for those operations and fails instead of opening an incompatible
+workspace. It then prints these endpoints:
 
 | Surface | URL |
 | --- | --- |

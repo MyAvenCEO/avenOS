@@ -29,6 +29,11 @@ const safeProblems = new Set([
 	'STAGING_QUOTA_EXCEEDED'
 ])
 
+// The Store returns this only from its catalog precondition, before it parses or
+// commits a write. Unlike an unstructured 5xx or transport loss, this response is
+// positive evidence that the mutation was rejected and is safe to report as such.
+const definiteWriteRejections = new Set(['STORE_RECONCILIATION_REQUIRED'])
+
 interface ArtifactWorkHost {
 	baseUrl: string
 	serviceToken: string
@@ -196,21 +201,21 @@ function artifactWorkClient(
 				throw error
 			}
 			if (!response.ok) {
-				if (
-					writing &&
-					(response.status >= 500 || (response.status >= 300 && response.status < 400))
-				) {
-					await response.body?.cancel()
-					throw new ArtifactWorkOutcomeUncertain()
-				}
 				let code = writing ? 'ARTIFACT_WRITE_REJECTED' : 'ARTIFACT_READ_UNAVAILABLE'
 				try {
-					const body = JSON.parse(
+					const problem = JSON.parse(
 						new TextDecoder().decode(await readBoundedBytes(response, 4096, 5000))
 					)
-					if (safeProblems.has(body.code)) code = body.code
+					if (safeProblems.has(problem.code)) code = problem.code
 				} catch {
 					/* Never expose an arbitrary upstream error body. */
+				}
+				if (
+					writing &&
+					(response.status >= 500 || (response.status >= 300 && response.status < 400)) &&
+					!definiteWriteRejections.has(code)
+				) {
+					throw new ArtifactWorkOutcomeUncertain()
 				}
 				throw new ArtifactStoreProblem(
 					response.status,

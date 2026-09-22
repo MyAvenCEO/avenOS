@@ -41,23 +41,25 @@ export async function movementComponents(
 }
 
 /**
- * Align only components already installed on this customer with the running catalog.
- * A catalog entry is capability, not consent: this never installs an optional component.
+ * Align a customer's components with the running catalog. Runtime upgrades may add
+ * newly required defaults, but a catalog entry alone is never consent to install an
+ * optional component.
  */
 export async function queueInstalledComponentReconciliation(
 	client: Pick<pg.PoolClient, 'query'>,
 	environmentId: string,
 	runtimeId: string,
 	catalog: ReadonlyMap<string, ComponentCatalogEntry>,
-	mode: 'all' | 'changed' = 'all'
+	options: { mode?: 'all' | 'changed'; installMissingDefaults?: boolean } = {}
 ): Promise<{ entries: ComponentCatalogEntry[]; operations: QueuedComponentOperation[] }> {
 	const environment = (
 		await client.query<{
 			runtime_id: string
+			routing_generation: string
 			desired_state: string
 			movement_id: string | null
 		}>(
-			`SELECT runtime_id,desired_state,movement_id FROM customer_environments
+			`SELECT runtime_id,routing_generation,desired_state,movement_id FROM customer_environments
 			 WHERE id=$1 FOR UPDATE`,
 			[environmentId]
 		)
@@ -69,6 +71,25 @@ export async function queueInstalledComponentReconciliation(
 		environment.movement_id
 	)
 		throw new Error('Customer must be ready and stationary on this runtime.')
+	if (options.installMissingDefaults) {
+		for (const entry of catalog.values()) {
+			if (!entry.manifest.requiredByDefault) continue
+			await client.query(
+				`INSERT INTO customer_environment_components
+				 (environment_id,component_ref,desired_state,observed_state,target_schema_version,
+				  migration_set_digest,routing_generation)
+				 VALUES($1,$2,'ready','pending',$3,$4,$5)
+				 ON CONFLICT(environment_id,component_ref) DO NOTHING`,
+				[
+					environmentId,
+					entry.manifest.componentRef,
+					entry.manifest.targetSchemaVersion,
+					entry.manifest.migrationSetDigest,
+					environment.routing_generation
+				]
+			)
+		}
+	}
 
 	const entries = await installedComponents(client, environmentId, catalog)
 	const changed: string[] = []
@@ -105,7 +126,20 @@ export async function queueInstalledComponentReconciliation(
 		if (observed.rows[0]?.needs_reconciliation) changed.push(entry.manifest.componentRef)
 	}
 
-	const selected = mode === 'all' ? entries.map((entry) => entry.manifest.componentRef) : changed
+	// SQL schema/version metadata cannot describe state owned by an external
+	// provisioner. Re-run those idempotent provisioners during every explicit
+	// runtime upgrade so additions to (for example) the Artifact Store type
+	// catalog cannot leave an existing workspace falsely marked ready.
+	const selected =
+		(options.mode ?? 'all') === 'all'
+			? entries.map((entry) => entry.manifest.componentRef)
+			: entries
+					.filter(
+						(entry) =>
+							changed.includes(entry.manifest.componentRef) ||
+							entry.externalProvisioner !== undefined
+					)
+					.map((entry) => entry.manifest.componentRef)
 	const operations = await queueCustomerReconciliation(client, environmentId, selected)
 	if (operations.length) {
 		await client.query(
