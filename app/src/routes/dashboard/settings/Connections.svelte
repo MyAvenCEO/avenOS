@@ -42,6 +42,24 @@ function clearForm() {
 	rotation = null
 	revoke = null
 }
+function openCredential() {
+	clearForm()
+	label = ''
+	form = 'credential'
+}
+function openBinding(credential?: CredentialMetadata) {
+	clearForm()
+	const selected = credential ?? enabledCredentials[0]
+	credentialRef = selected?.credentialRef ?? ''
+	label = selected?.label ?? ''
+	protocol = 'imap'
+	host = ''
+	login = selected?.label.includes('@') ? selected.label : ''
+	mailbox = 'INBOX'
+	port = 993
+	purpose = 'mail-read'
+	form = 'binding'
+}
 async function refresh() {
 	if (!manager || disposed) return
 	const value = await manager.metadata()
@@ -85,7 +103,11 @@ onMount(() => {
 		manager?.close()
 	}
 })
-async function write(command: Record<string, unknown>) {
+async function write(
+	command: Record<string, unknown>,
+	afterSave?: () => void,
+	success = 'Gespeichert.'
+) {
 	if (!manager || busy || pending || disposed) return
 	busy = true
 	error = ''
@@ -94,8 +116,10 @@ async function write(command: Record<string, unknown>) {
 		await manager.command(command)
 		if (disposed) return
 		clearForm()
-		status = 'Gespeichert.'
 		await refresh()
+		if (disposed) return
+		status = success
+		afterSave?.()
 	} catch (cause) {
 		if (!disposed) {
 			pending = Boolean(manager.pendingCommand)
@@ -133,23 +157,30 @@ async function check() {
 function saveSecret(event: SubmitEvent) {
 	event.preventDefault()
 	const value = secret
+	const currentRotation = rotation
+	const newCredentialRef = currentRotation?.credentialRef ?? crypto.randomUUID()
+	const newLabel = currentRotation?.label ?? label.trim()
 	secret = ''
 	void write(
-		rotation
+		currentRotation
 			? {
 					action: 'rotate',
-					credentialRef: rotation.credentialRef,
-					expectedVersion: rotation.secretVersion,
+					credentialRef: currentRotation.credentialRef,
+					expectedVersion: currentRotation.secretVersion,
 					value
 				}
 			: {
 					action: 'create',
-					credentialRef: crypto.randomUUID(),
+					credentialRef: newCredentialRef,
 					expectedVersion: 0,
-					label: label.trim(),
+					label: newLabel,
 					kind,
 					value
-				}
+				},
+		currentRotation
+			? undefined
+			: () => openBinding(data.credentials.find((c) => c.credentialRef === newCredentialRef)),
+		currentRotation ? 'Zugang erneuert.' : 'Zugang gespeichert. Jetzt das erlaubte Ziel festlegen.'
 	)
 }
 function saveBinding(event: SubmitEvent) {
@@ -184,14 +215,18 @@ function saveBinding(event: SubmitEvent) {
 					purpose: purpose.trim(),
 					attachment: { kind: 'header', name: header, prefix }
 				}
-	void write({
-		action: 'binding-set',
-		credentialRef,
-		bindingRef: crypto.randomUUID(),
-		expectedVersion: 0,
-		protocol,
-		profile
-	})
+	void write(
+		{
+			action: 'binding-set',
+			credentialRef,
+			bindingRef: crypto.randomUUID(),
+			expectedVersion: 0,
+			protocol,
+			profile
+		},
+		undefined,
+		'Verbindung eingerichtet.'
+	)
 }
 function confirmRevoke() {
 	if (!revoke) return
@@ -239,19 +274,25 @@ function destination(binding: BindingMetadata) {
 			Noch kein automatischer Abruf: Eine Verbindung erlaubt keine Nutzung ohne Freigabe.
 		</p>
 		<div class="actions">
-			<button
-				disabled={busy || pending}
-				onclick={() => { clearForm(); label = ''; form = 'credential' }}
-			>
+			<button disabled={busy || pending} onclick={openCredential}>
 				+ Zugang
 			</button>
 			<button
 				disabled={busy || pending || !enabledCredentials.length}
-				onclick={() => { clearForm(); label = ''; credentialRef = enabledCredentials[0]?.credentialRef ?? ''; form = 'binding' }}
+				onclick={() => openBinding()}
 			>
 				+ Erlaubtes Ziel
 			</button>
 		</div>
+		{#if enabledCredentials.length && !data.bindings.length && form !== 'binding'}
+			<div class="next-step" role="status">
+				<div>
+					<strong>Zugang gespeichert – Ziel fehlt noch</strong>
+					<p>Lege Server und Postfach oder API fest, damit der Zugang verwendet werden kann.</p>
+				</div>
+				<button disabled={busy || pending} onclick={() => openBinding()}>Ziel einrichten</button>
+			</div>
+		{/if}
 		{#if form === 'credential'}
 			<form onsubmit={saveSecret}>
 				<strong>{rotation ? `Zugang erneuern · ${rotation.label}` : 'Neuer Zugang'}</strong>
@@ -405,6 +446,9 @@ function destination(binding: BindingMetadata) {
 					</p>
 				</div>
 				<div class="actions">
+					{#if c.enabled && !data.bindings.some((b) => b.credentialRef === c.credentialRef && b.enabled)}
+						<button disabled={busy || pending} onclick={() => openBinding(c)}>Ziel hinzufügen</button>
+					{/if}
 					<button
 						disabled={busy || pending || !c.enabled}
 						onclick={() => { clearForm(); rotation = c; form = 'credential' }}
@@ -454,6 +498,7 @@ small,
 }
 form,
 .confirmation,
+.next-step,
 article {
 	border: 1px solid var(--color-border, #ddd);
 	border-radius: 1rem;
@@ -463,6 +508,13 @@ form {
 	display: flex;
 	flex-direction: column;
 	gap: 0.8rem;
+}
+.next-step {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	background: color-mix(in srgb, var(--color-accent, #168aa0) 8%, transparent);
 }
 label {
 	display: flex;
