@@ -14,7 +14,7 @@
 		"@avenos/aven-identity": "workspace:*",
 		"@avenos/http-boundary": "workspace:*",
 		"@better-auth/passkey": "1.6.23",
-		"@myavenceo/aven-ceo": "0.13.2",
+		"@myavenceo/aven-ceo": "file:../../vendor/npm/myavenceo-aven-ceo-0.13.2.tgz",
 		"better-auth": "1.6.23",
 		"dotenv": "17.3.1",
 		"drizzle-orm": "0.45.2",

@@ -24,7 +24,7 @@
 	"dependencies": {
 		"@avenos/http-boundary": "workspace:*",
 		"@avenos/aven-identity": "workspace:*",
-		"@myavenceo/aven-ceo": "0.13.2",
+		"@myavenceo/aven-ceo": "file:../../vendor/npm/myavenceo-aven-ceo-0.13.2.tgz",
 		"@polar-sh/sdk": "^0.49.0",
 		"dotenv": "17.3.1",
 		"drizzle-orm": "0.45.2",

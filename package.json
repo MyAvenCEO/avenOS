@@ -81,8 +81,8 @@
 		"@biomejs/biome": "^2.4.14",
 		"@commitlint/cli": "^21.0.2",
 		"@commitlint/config-conventional": "^21.0.2",
-		"@myavenceo/aven-ceo": "0.13.2",
-		"@myavenceo/aven-vibes": "^0.9.5",
+		"@myavenceo/aven-ceo": "file:./vendor/npm/myavenceo-aven-ceo-0.13.2.tgz",
+		"@myavenceo/aven-vibes": "file:./vendor/npm/myavenceo-aven-vibes-0.9.5.tgz",
 		"@playwright/test": "^1.62.1",
 		"@polar-sh/sdk": "0.49.0",
 		"@types/pg": "8.15.6",
@@ -97,6 +97,7 @@
 		"terminal-kit": "3.1.4"
 	},
 	"overrides": {
+		"@myavenceo/aven-vibes": "file:./vendor/npm/myavenceo-aven-vibes-0.9.5.tgz",
 		"cookie": "0.7.2",
 		"decode-uri-component": "0.5.1",
 		"devalue": "5.9.4",
