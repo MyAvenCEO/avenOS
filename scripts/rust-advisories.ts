@@ -28,6 +28,10 @@ const inventory = await run([
 ])
 if (inventory.code || !inventory.text) throw new Error('Cannot inventory supported Rust lockfiles.')
 type Finding = { advisory: { id: string }; package: { name: string; version: string } }
+const unbuiltOptional = [
+	['RUSTSEC-2023-0071', 'rsa'],
+	['RUSTSEC-2026-0459', 'libsqlite3-sys']
+] as const
 let failures = 0
 let first = true
 for (const file of inventory.text.split('\n')) {
@@ -44,12 +48,14 @@ for (const file of inventory.text.split('\n')) {
 	if (![0, 1].includes(result.code) || !Array.isArray(report.vulnerabilities?.list))
 		throw new Error(`Could not audit ${file}.`)
 	for (const finding of report.vulnerabilities.list as Finding[]) {
-		// Cargo locks SQLx's optional MySQL graph even though this PostgreSQL-only service
-		// never builds it. Re-prove absence across every target/feature on each audit.
+		// Cargo locks SQLx's optional MySQL (rsa) and SQLite (libsqlite3-sys) graphs even though
+		// this PostgreSQL-only service never builds them. Re-prove absence across every
+		// target/feature on each audit.
 		if (
 			file === 'services/artifact-store/Cargo.lock' &&
-			finding.advisory.id === 'RUSTSEC-2023-0071' &&
-			finding.package.name === 'rsa'
+			unbuiltOptional.some(
+				([id, name]) => finding.advisory.id === id && finding.package.name === name
+			)
 		) {
 			const graph = await run([
 				'cargo',
@@ -61,7 +67,7 @@ for (const file of inventory.text.split('\n')) {
 				'all',
 				'--all-features',
 				'-i',
-				`rsa@${finding.package.version}`,
+				`${finding.package.name}@${finding.package.version}`,
 				'--prefix',
 				'none',
 				'--format',
@@ -79,10 +85,12 @@ for (const file of inventory.text.split('\n')) {
 			`${file}: ${finding.advisory.id} ${finding.package.name}@${finding.package.version}`
 		)
 	}
-	for (const [kind, findings] of Object.entries(report.warnings ?? {}) as [string, Finding[]][])
+	// A yanked crate is reported as a warning without an advisory.
+	type Warning = { advisory: { id: string } | null; package: Finding['package'] }
+	for (const [kind, findings] of Object.entries(report.warnings ?? {}) as [string, Warning[]][])
 		for (const finding of findings)
 			console.warn(
-				`${file}: ${kind}: ${finding.advisory.id} ${finding.package.name}@${finding.package.version}`
+				`${file}: ${kind}: ${finding.advisory?.id ?? 'no advisory'} ${finding.package.name}@${finding.package.version}`
 			)
 	console.info(`${file}: checked ${report.lockfile['dependency-count']} locked dependencies.`)
 }

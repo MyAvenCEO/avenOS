@@ -32,7 +32,7 @@ describe.skipIf(!adminUrl)('identity database security boundaries', () => {
 			'aven_identity_migrator'
 		])
 			await admin.query(
-				`DO $$ BEGIN CREATE ROLE ${role}; EXCEPTION WHEN duplicate_object THEN NULL; END $$`
+				`DO $$ BEGIN CREATE ROLE ${role}; EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$`
 			)
 		await admin.query(`CREATE DATABASE ${name}`)
 		const url = new URL(adminUrl!)

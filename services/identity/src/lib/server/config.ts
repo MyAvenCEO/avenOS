@@ -26,6 +26,50 @@ const provisioningSecrets = z.string().transform((value, context) => {
 	return secrets
 })
 
+// OpenID Connect relying parties are registered only here, never through dynamic registration.
+// Each is a public client (no secret) that must use PKCE S256; redirect URIs match exactly.
+const oidcClient = z.strictObject({
+	client_id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
+	name: z
+		.string()
+		.trim()
+		.min(1)
+		.max(128)
+		.refine((value) => !/\p{Cc}/u.test(value), 'must not contain control characters'),
+	redirect_uris: z.array(z.string().max(2048)).min(1).max(16)
+})
+export type OidcClientConfig = z.infer<typeof oidcClient>
+const oidcClients = z
+	.string()
+	.default('')
+	.transform((value, context) => {
+		if (!value.trim()) return []
+		try {
+			return JSON.parse(value) as unknown
+		} catch {
+			context.addIssue({ code: 'custom', message: 'must be a JSON array of clients' })
+			return z.NEVER
+		}
+	})
+	.pipe(z.array(oidcClient).max(32))
+
+export function oidcRedirectUriProblem(value: string, production: boolean): string | null {
+	let url: URL
+	try {
+		url = new URL(value)
+	} catch {
+		return 'must be an absolute URL'
+	}
+	const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+	if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback && !production))
+		return 'must use HTTPS (HTTP only for localhost outside production)'
+	if (url.username || url.password) return 'must not contain credentials'
+	if (url.hash || value.includes('#')) return 'must not contain a fragment'
+	// Exact string matching is only unambiguous for the canonical serialization.
+	if (url.href !== value) return 'must be written in canonical URL form'
+	return null
+}
+
 export const identityConfigSchema = z
 	.object({
 		NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -60,6 +104,7 @@ export const identityConfigSchema = z
 					.filter(Boolean)
 			),
 		REQUIRE_PASSKEY_PRF: bool.default(false),
+		OIDC_CLIENTS: oidcClients,
 		SESSION_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(43_200),
 		SESSION_UPDATE_AGE_SECONDS: z.coerce.number().int().positive().default(3_600),
 		ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
@@ -108,6 +153,31 @@ export const identityConfigSchema = z
 				})
 			}
 		}
+		const clientIds = new Set<string>()
+		config.OIDC_CLIENTS.forEach((client, index) => {
+			if (clientIds.has(client.client_id) || client.client_id === 'ceo.aven.os')
+				context.addIssue({
+					code: 'custom',
+					path: ['OIDC_CLIENTS', index, 'client_id'],
+					message: 'must be unique and distinct from the native device client'
+				})
+			clientIds.add(client.client_id)
+			if (new Set(client.redirect_uris).size !== client.redirect_uris.length)
+				context.addIssue({
+					code: 'custom',
+					path: ['OIDC_CLIENTS', index, 'redirect_uris'],
+					message: 'must not contain duplicates'
+				})
+			client.redirect_uris.forEach((uri, uriIndex) => {
+				const problem = oidcRedirectUriProblem(uri, config.NODE_ENV === 'production')
+				if (problem)
+					context.addIssue({
+						code: 'custom',
+						path: ['OIDC_CLIENTS', index, 'redirect_uris', uriIndex],
+						message: problem
+					})
+			})
+		})
 		const origin = new URL(config.PUBLIC_BASE_URL)
 		if (origin.pathname !== '/' || origin.search || origin.hash)
 			context.addIssue({ code: 'custom', path: ['PUBLIC_BASE_URL'], message: 'must be an origin' })

@@ -1,6 +1,8 @@
 <script lang="ts">
 import { goto } from '$app/navigation'
+import { page } from '$app/state'
 import { authClient } from '$lib/auth-client.js'
+import { LOGIN_RETURN_PARAM, safeReturnPath } from '$lib/return-path.js'
 
 let busy = $state(false)
 let message = $state('')
@@ -10,7 +12,11 @@ async function login() {
 	try {
 		const result = await authClient.signIn.passkey()
 		if (result?.error) throw new Error(result.error.message ?? 'Sign-in failed.')
-		await goto('/dashboard')
+		// A pending OIDC authorization resumes as a full navigation so the server can
+		// redirect onward to the registered client; everything else goes to the dashboard.
+		const target = safeReturnPath(page.url.searchParams.get(LOGIN_RETURN_PARAM), page.url.origin)
+		if (target) window.location.assign(target)
+		else await goto('/dashboard')
 	} catch (error) {
 		message = error instanceof Error ? error.message : 'Sign-in failed.'
 	} finally {

@@ -13,25 +13,26 @@
 	"dependencies": {
 		"@avenos/aven-identity": "workspace:*",
 		"@avenos/http-boundary": "workspace:*",
-		"@better-auth/passkey": "1.6.23",
-		"@myavenceo/aven-ceo": "0.13.2",
-		"better-auth": "1.6.23",
+		"@better-auth/oauth-provider": "1.7.25",
+		"@better-auth/passkey": "1.7.25",
+		"@myavenceo/aven-ceo": "file:../../vendor/npm/myavenceo-aven-ceo-0.13.2.tgz",
+		"better-auth": "1.7.25",
 		"dotenv": "17.3.1",
 		"drizzle-orm": "0.45.2",
 		"pg": "8.16.3",
 		"pino": "10.3.1",
-		"zod": "4.4.3"
+		"zod": "4.6.7"
 	},
 	"devDependencies": {
-		"@sveltejs/adapter-node": "^5.5.0",
-		"@sveltejs/kit": "2.70.3",
+		"@sveltejs/adapter-node": "^5.5.8",
+		"@sveltejs/kit": "2.70.4",
 		"@sveltejs/vite-plugin-svelte": "7.0.0",
 		"@types/node": "24.10.13",
 		"@types/pg": "8.15.6",
 		"svelte": "5.56.5",
 		"svelte-check": "4.4.6",
 		"typescript": "6.0.3",
-		"vite": "8.1.4",
-		"vitest": "4.1.11"
+		"vite": "8.1.7",
+		"vitest": "4.1.12"
 	}
 }

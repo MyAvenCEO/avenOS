@@ -41,7 +41,7 @@ jobs:
         with:
           bun-version: 1.3.13
       - name: Audit the locked dependencies before building installers
-        run: bun audit
+        run: bun run check:js-advisories
       - id: plan
         name: Require protected source and identify every installer
         run: |

@@ -299,13 +299,18 @@ Format and lint changed files before committing:
 ```sh
 bun run check:docs
 bun run check:secrets
-bun audit
+bun run check:js-advisories
 cargo install cargo-audit --version 0.22.2 --locked
 bun run check:rust-advisories
 bun run lint
 ```
 
 Use `bun run lint:fix` only when you intend to accept its edits.
+
+`check:js-advisories` runs `bun audit` and fails on every advisory except the documented
+exceptions in `scripts/lib/js-advisories.ts`: low-severity advisories with no fixed release in
+the major versions in use. Each exception gives its reason. An exception that stops matching
+fails the check too, so remove it once the fix arrives.
 
 CI validates commit messages on pull requests and pushes to `main`. Before a squash
 merge, also pipe the planned merge message into `bunx commitlint`; GitHub's final

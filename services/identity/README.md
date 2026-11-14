@@ -10,7 +10,9 @@ Public verification is deliberately small:
 - `GET /api/auth/jwks` publishes rotating Ed25519 verification keys.
 - `GET /api/auth/token` exchanges an authenticated identity session for a
   five-minute `aven-services` JWT.
-- `GET /.well-known/openid-configuration` advertises those endpoints.
+- `GET /.well-known/openid-configuration` advertises those endpoints and the OpenID
+  Connect login below (`token_endpoint` is the OIDC one; the service-token exchange is
+  `aven_service_token_endpoint`).
 
 The authenticated `/dashboard` lists the account's credentials and allows the
 holder to add and rename passkeys. Registration suggests `aven.id-<email>-<device>-<browser>`;
@@ -26,6 +28,66 @@ Names are trimmed, limited to 128 characters, and cannot contain control charact
 The existing identity plugin owns registration and ownership-checked renaming; changing
 the label does not change credential material or rename the password-manager entry.
 Device/browser names are coarse suggestions, not hardware identification.
+
+## OpenID Connect sign-in for other web apps
+
+A separate web app (for example a self-hosted coordinator UI) can sign people in with the
+standard authorization-code flow with PKCE, using Better Auth's `@better-auth/oauth-provider`
+plugin:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/auth/oauth2/authorize` | Authorization request; returns `code` + `state` to the registered redirect URI |
+| `POST /api/auth/oauth2/token` | Form-encoded code exchange (public client, `code_verifier`); returns `id_token` and a short access token |
+| `GET /api/auth/oauth2/userinfo` | Claims for that access token (`Authorization: Bearer`) |
+| `GET /api/auth/jwks` | The same Ed25519 keys that sign service JWTs |
+
+Relying parties exist only in configuration. Every other plugin endpoint returns 404:
+dynamic registration, client, consent and resource management (including
+`/api/auth/admin/oauth2/*`), introspection, revocation, RP logout, the continue/consent
+steps and the plugin's own discovery documents. Register a client with `OIDC_CLIENTS`, a
+JSON array:
+
+```sh
+OIDC_CLIENTS='[{"client_id":"coordinator","name":"Coordinator","redirect_uris":["https://coordinator.example.com/auth/callback"]}]'
+```
+
+The plugin looks clients up through its client-discovery extension, which reads them from
+this variable; the `oauth_client` table stays empty and the runtime database role can only
+read it. Clients are public (no secret; Basic auth, `client_secret` and client assertions
+are refused) and must send `code_challenge_method=S256`; `plain` and missing PKCE are
+refused. Redirect URIs match
+exactly, must be canonical HTTPS URLs without credentials or fragments (HTTP only for
+`localhost`/`127.0.0.1` outside production) and are also the only origins allowed to call
+token, userinfo, JWKS and discovery from a browser (CORS, no credentials). There is no
+consent screen for configured clients. Requests must carry `state`; scopes are `openid`
+plus optionally `profile` and `email`. There are no refresh tokens: `offline_access` and
+the refresh grant are refused. The plugin receives only the standard code-flow parameters;
+`claims`, `resource`, `request`/`request_uri`, DPoP and the other extensions it supports
+are dropped or refused by the gate.
+
+Only a real passkey session gets a code: the same rule as the service JWT `amr`
+(no `setup_token_hash`, and the account holds a passkey). Without a session, or for
+`prompt=login` / an exceeded `max_age`, the browser goes to `/login?returnTo=…` and comes
+back to the same authorization request after the passkey ceremony; `returnTo` only
+accepts the same-origin authorize path. A setup-link session or passkey-less account is
+sent to `/dashboard` (or receives `login_required` for `prompt=none`).
+
+The ID token is EdDSA-signed with `iss` = `PUBLIC_BASE_URL`, `aud` = `client_id`,
+`sub` = the stable account id (the service JWT `sub`), `amr: ["passkey"]`, `auth_time`
+(the passkey sign-in), the request `nonce`, `at_hash`, `email`/`email_verified` with the
+`email` scope, and `name` with `profile`. The plugin reserves `amr`, so identity re-signs
+the ID token it issued with the same key to add it. The ID token and the opaque access
+token live `ACCESS_TOKEN_TTL_SECONDS` (five minutes by default). Codes live two minutes
+and are single use: a wrong `code_verifier` does not consume the code, a replayed code is
+refused and revokes the tokens it issued. Signing out revokes the access tokens issued
+for that session.
+
+The plugin can resume a pending authorization from a signed `oauth_query` request field
+after any response that sets a session cookie, including setup-link sign-in. The gate
+never lets the plugin produce one (it handles sign-in, `prompt` and `max_age` itself),
+and Better Auth's first `before` hook refuses every request that carries the field, so
+the policy gate in `src/lib/server/oidc.ts` is the only path to a code.
 
 The provisioning endpoint under
 `/internal/v1/accounts` is service-authenticated and is the only signup ingress;

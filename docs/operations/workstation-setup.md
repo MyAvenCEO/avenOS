@@ -103,8 +103,8 @@ sudo dnf install \
   gcc-c++
 ```
 
-For the complete E2E release gate, also install `webkit2gtk-driver`, Xvfb, and the
-Tauri WebDriver bridge:
+For the complete E2E release gate, also install `webkit2gtk-driver` (`webkitgtk-webdriver` on
+Ubuntu 26.04 and later), Xvfb, and the Tauri WebDriver bridge:
 
 ```sh
 sudo apt install -y webkit2gtk-driver xvfb libxdo-dev patchelf

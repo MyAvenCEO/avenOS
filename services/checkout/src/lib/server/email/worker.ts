@@ -97,7 +97,7 @@ export function classifySmtpFailure(error: unknown): SmtpFailureKind {
 }
 
 export function createTransport(config: Pick<EmailWorkerConfig, 'SMTP_URL'>): Transporter {
-	return nodemailer.createTransport(config.SMTP_URL as never, { pool: true, maxConnections: 2 })
+	return nodemailer.createTransport(config.SMTP_URL as never)
 }
 
 export class EmailWorker {

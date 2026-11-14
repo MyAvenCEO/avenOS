@@ -1,10 +1,23 @@
+import { oauthProvider } from '@better-auth/oauth-provider'
 import { passkey } from '@better-auth/passkey'
 import { betterAuth } from 'better-auth'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { bearer, deviceAuthorization, jwt } from 'better-auth/plugins'
 import type { IdentityConfig } from './config.js'
 import { trustedOrigins } from './config.js'
 import type { DatabaseContext } from './db.js'
 import { enrollmentAdapter, enrollmentContext, registrationPrfEnabled } from './enrollment.js'
+import {
+	carriesPluginResume,
+	idTokenClaims,
+	isPasskeySession,
+	isRegisteredInsecureRedirect,
+	OIDC_CODE_SECONDS,
+	OIDC_SCOPES,
+	oidcAuthenticationMethod,
+	oidcClientDiscovery,
+	userInfoClaims
+} from './oidc.js'
 import { setupSignIn } from './setup-sign-in.js'
 
 export const AVENOS_DEVICE_CLIENT_ID = 'ceo.aven.os'
@@ -52,6 +65,17 @@ export function createAuth(
 			}
 		},
 		advanced: { useSecureCookies: config.NODE_ENV === 'production' },
+		hooks: {
+			// Runs before every plugin hook: the oauth-provider plugin would otherwise resume a
+			// signed authorization request from this field after any sign-in (see oidc.ts).
+			before: createAuthMiddleware(async (ctx) => {
+				if (carriesPluginResume(ctx.body))
+					throw new APIError('BAD_REQUEST', {
+						code: 'OAUTH_QUERY_NOT_ACCEPTED',
+						message: 'Authorization requests resume only through /api/auth/oauth2/authorize.'
+					})
+			})
+		},
 		rateLimit: {
 			enabled: true,
 			window: 60,
@@ -64,7 +88,10 @@ export function createAuth(
 				'/passkey/verify-authentication': { window: 60, max: 10 },
 				'/passkey/generate-register-options': { window: 3600, max: 10 },
 				'/passkey/verify-registration': { window: 3600, max: 10 },
-				'/token': { window: 60, max: 60 }
+				'/token': { window: 60, max: 60 },
+				'/oauth2/authorize': { window: 60, max: 30 },
+				'/oauth2/token': { window: 60, max: 20 },
+				'/oauth2/userinfo': { window: 60, max: 60 }
 			}
 		},
 		plugins: [
@@ -116,16 +143,7 @@ export function createAuth(
 					audience: 'aven-services',
 					expirationTime: accessTokenExpiration(config.ACCESS_TOKEN_TTL_SECONDS),
 					definePayload: async ({ user, session }) => {
-						const hasPasskey = Boolean(
-							(
-								await database.pool.query(
-									`SELECT 1 FROM session s JOIN passkey p ON p.user_id=s.user_id
-							 WHERE s.id=$1 AND s.user_id=$2 AND s.expires_at > now()
-							 AND s.setup_token_hash IS NULL LIMIT 1`,
-									[session.id, user.id]
-								)
-							).rows.length
-						)
+						const hasPasskey = await isPasskeySession(database.pool, session.id, user.id)
 						return {
 							sub: user.id,
 							sid: session.id,
@@ -140,6 +158,32 @@ export function createAuth(
 					}
 				}
 			}),
+			// ID tokens reuse the jwt plugin's EdDSA keys; the plugin owns iss/aud/sub/exp/nonce
+			// and builds them without the jwt plugin's definePayload, so service-JWT claims never
+			// leak into an ID token. Identity policy (passkey-only, S256, scopes, closed
+			// registration) is oidcGate; clients come only from OIDC_CLIENTS.
+			oauthProvider({
+				loginPage: '/login',
+				// Configured clients skip consent and the gate never forwards prompt=consent, so
+				// the plugin never redirects here; the consent endpoints are closed.
+				consentPage: '/login',
+				scopes: [...OIDC_SCOPES],
+				grantTypes: ['authorization_code'],
+				allowDynamicClientRegistration: false,
+				allowUnauthenticatedClientRegistration: false,
+				allowPublicClientPrelogin: false,
+				allowClientKeyRotation: false,
+				enforcePerClientResources: true,
+				extensions: [oidcClientDiscovery(config)],
+				allowInsecureRedirectUri: (url) => isRegisteredInsecureRedirect(config, url),
+				codeExpiresIn: OIDC_CODE_SECONDS,
+				accessTokenExpiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+				idTokenExpiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+				refreshTokenExpiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+				customIdTokenClaims: ({ user, scopes }) => idTokenClaims(user, scopes),
+				customUserInfoClaims: ({ user, scopes }) => userInfoClaims(user, scopes)
+			}),
+			oidcAuthenticationMethod(),
 			setupSignIn(verifySetup)
 		]
 	})
