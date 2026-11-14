@@ -89,17 +89,28 @@
 		"conventional-changelog-cli": "^5.0.0",
 		"fake-indexeddb": "^6.2.5",
 		"jose": "6.2.9",
-		"nodemailer": "9.1.1",
+		"nodemailer": "10.5.0",
 		"pg": "8.16.3",
 		"semver": "^7.8.4",
-		"sharp": "^0.35.4",
+		"sharp": "^0.35.5",
 		"terminal-kit": "3.1.4"
 	},
 	"overrides": {
 		"cookie": "0.7.2",
+		"decode-uri-component": "0.5.1",
+		"devalue": "5.9.4",
+		"dompurify": "3.4.18",
 		"esbuild": "0.28.1",
-		"dompurify": "3.4.14",
-		"fast-uri": "3.1.7",
-		"nanoid": "3.3.18"
+		"fast-uri": "3.1.9",
+		"handlebars": "4.7.10",
+		"markdown-it": "14.3.3",
+		"nanoid": "3.3.18",
+		"nodemailer": "10.5.0",
+		"postcss-selector-parser": "7.2.1",
+		"source-map-js": "1.2.2",
+		"tinypool": "2.2.0",
+		"undici": "7.30.2",
+		"vite": "8.1.7",
+		"zod": "4.6.7"
 	}
 }
