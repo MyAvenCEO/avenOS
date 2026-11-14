@@ -4,6 +4,7 @@ import { svelteKitHandler } from 'better-auth/svelte-kit'
 import { building } from '$app/environment'
 import { namePasskeyRegistration, passkeyNameSchema } from '$lib/passkey-name.js'
 import { enrollmentContext, setupAllowedPaths } from '$lib/server/enrollment.js'
+import { isOidcCorsPath, OIDC_PATHS, oidcCorsOrigins, oidcGate } from '$lib/server/oidc.js'
 import { ProofOfWorkError, protectedAuthPaths } from '$lib/server/proof-of-work.js'
 import { runtime } from '$lib/server/runtime.js'
 
@@ -19,7 +20,7 @@ export const handle = async ({ event, resolve }) => {
 					? 4096
 					: path === '/internal/v1/authorizations/roles'
 						? 32768
-						: path.startsWith('/api/auth/device/')
+						: path.startsWith('/api/auth/device/') || path.startsWith('/api/auth/oauth2/')
 							? 16384
 							: 128 * 1024
 			const bytes = await readBoundedBytes(event.request, limit)
@@ -65,11 +66,29 @@ export const handle = async ({ event, resolve }) => {
 				{ status: 400 }
 			)
 	}
-	const publicDeviceExchange =
-		normalizedPath === '/api/auth/device/code' || normalizedPath === '/api/auth/device/token'
+	// Cookie-free public exchanges: native device flow and the OIDC public-client token
+	// endpoint (called by relying-party servers without Origin, or their browsers with one).
+	const publicExchange =
+		normalizedPath === '/api/auth/device/code' ||
+		normalizedPath === '/api/auth/device/token' ||
+		normalizedPath === OIDC_PATHS.token
+	const oidcOrigins = oidcCorsOrigins(config)
+	const oidcCors = isOidcCorsPath(normalizedPath) && !!origin && oidcOrigins.has(origin)
+	if (event.request.method === 'OPTIONS' && oidcCors) {
+		return new Response(null, {
+			status: 204,
+			headers: {
+				'access-control-allow-origin': origin,
+				'access-control-allow-methods': 'GET,POST,OPTIONS',
+				'access-control-allow-headers': 'authorization,content-type',
+				'access-control-max-age': '600',
+				vary: 'Origin'
+			}
+		})
+	}
 	if (
 		event.url.pathname.startsWith('/api/') &&
-		!publicDeviceExchange &&
+		!publicExchange &&
 		!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) &&
 		(!origin || !allowedOrigins.has(origin))
 	)
@@ -97,6 +116,14 @@ export const handle = async ({ event, resolve }) => {
 			throw error
 		}
 	}
+	const oidc = await oidcGate({
+		request: event.request,
+		config,
+		pool: database.pool,
+		getSession: (headers) => auth.api.getSession({ headers })
+	})
+	if (oidc instanceof Response) return secure(oidc, event.url.pathname, origin, oidcCors, false)
+	event.request = oidc
 	if (event.url.pathname.startsWith('/api/')) {
 		const session = await auth.api.getSession({ headers: event.request.headers })
 		if (session) {
@@ -124,13 +151,30 @@ export const handle = async ({ event, resolve }) => {
 			headers
 		})
 	}
+	return secure(
+		response,
+		event.url.pathname,
+		origin,
+		oidcCors,
+		Boolean(origin && allowedOrigins.has(origin))
+	)
+}
+
+function secure(
+	response: Response,
+	pathname: string,
+	origin: string | null,
+	oidcCors: boolean,
+	credentialed: boolean
+) {
 	response.headers.set('x-content-type-options', 'nosniff')
 	response.headers.set('referrer-policy', 'no-referrer')
 	response.headers.set('x-frame-options', 'DENY')
-	if (event.url.pathname.startsWith('/api/')) response.headers.set('cache-control', 'no-store')
-	if (origin && allowedOrigins.has(origin)) {
+	if (pathname.startsWith('/api/')) response.headers.set('cache-control', 'no-store')
+	if (origin && (oidcCors || credentialed)) {
 		response.headers.set('access-control-allow-origin', origin)
-		response.headers.set('access-control-allow-credentials', 'true')
+		// Relying parties read token, userinfo, JWKS and discovery without credentials.
+		if (!oidcCors) response.headers.set('access-control-allow-credentials', 'true')
 		response.headers.append('vary', 'Origin')
 	}
 	return response

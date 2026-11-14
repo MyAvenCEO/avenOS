@@ -4,6 +4,7 @@ import { createAuth, type IdentityAuth } from './auth.js'
 import { IdentityCapabilities } from './capabilities.js'
 import { type IdentityConfig, loadIdentityConfig } from './config.js'
 import { type DatabaseContext, openDatabase } from './db.js'
+import { cleanupOidcTokens } from './oidc.js'
 import { PasskeyService } from './passkeys.js'
 import { ProofOfWorkService } from './proof-of-work.js'
 import { IdentitySecurityMailer } from './security-mail.js'
@@ -64,6 +65,11 @@ async function create(): Promise<IdentityRuntime> {
 	}
 	setInterval(cleanup, 60_000).unref()
 	void cleanup()
+	setInterval(() => {
+		cleanupOidcTokens(database.pool).catch(() =>
+			logger.error({ event: 'identity.oidc_cleanup_failed' }, 'OIDC token cleanup failed')
+		)
+	}, 600_000).unref()
 	const capabilities = new IdentityCapabilities(database.pool, config.BACKUP_HEALTH_FILE)
 	capabilities.start()
 	const securityMailer = new IdentitySecurityMailer(database.pool, config)

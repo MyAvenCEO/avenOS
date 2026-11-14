@@ -1,10 +1,12 @@
 import { passkey } from '@better-auth/passkey'
 import { betterAuth } from 'better-auth'
 import { bearer, deviceAuthorization, jwt } from 'better-auth/plugins'
+import { oidcProvider } from 'better-auth/plugins/oidc-provider'
 import type { IdentityConfig } from './config.js'
 import { trustedOrigins } from './config.js'
 import type { DatabaseContext } from './db.js'
 import { enrollmentAdapter, enrollmentContext, registrationPrfEnabled } from './enrollment.js'
+import { isPasskeySession, OIDC_CODE_SECONDS, OIDC_SCOPES, trustedOidcClients } from './oidc.js'
 import { setupSignIn } from './setup-sign-in.js'
 
 export const AVENOS_DEVICE_CLIENT_ID = 'ceo.aven.os'
@@ -64,7 +66,10 @@ export function createAuth(
 				'/passkey/verify-authentication': { window: 60, max: 10 },
 				'/passkey/generate-register-options': { window: 3600, max: 10 },
 				'/passkey/verify-registration': { window: 3600, max: 10 },
-				'/token': { window: 60, max: 60 }
+				'/token': { window: 60, max: 60 },
+				'/oauth2/authorize': { window: 60, max: 30 },
+				'/oauth2/token': { window: 60, max: 20 },
+				'/oauth2/userinfo': { window: 60, max: 60 }
 			}
 		},
 		plugins: [
@@ -116,16 +121,7 @@ export function createAuth(
 					audience: 'aven-services',
 					expirationTime: accessTokenExpiration(config.ACCESS_TOKEN_TTL_SECONDS),
 					definePayload: async ({ user, session }) => {
-						const hasPasskey = Boolean(
-							(
-								await database.pool.query(
-									`SELECT 1 FROM session s JOIN passkey p ON p.user_id=s.user_id
-							 WHERE s.id=$1 AND s.user_id=$2 AND s.expires_at > now()
-							 AND s.setup_token_hash IS NULL LIMIT 1`,
-									[session.id, user.id]
-								)
-							).rows.length
-						)
+						const hasPasskey = await isPasskeySession(database.pool, session.id, user.id)
 						return {
 							sub: user.id,
 							sid: session.id,
@@ -139,6 +135,39 @@ export function createAuth(
 						}
 					}
 				}
+			}),
+			// ID tokens reuse the jwt plugin's EdDSA keys; the plugin overrides iss/aud/sub/exp
+			// and the payload for them, so service-JWT claims never leak into an ID token.
+			// Identity policy (passkey-only, S256, scopes, closed registration) is oidcGate.
+			oidcProvider({
+				loginPage: '/login',
+				useJWTPlugin: true,
+				requirePKCE: true,
+				allowPlainCodeChallengeMethod: false,
+				allowDynamicClientRegistration: false,
+				trustedClients: trustedOidcClients(config),
+				scopes: [...OIDC_SCOPES],
+				codeExpiresIn: OIDC_CODE_SECONDS,
+				accessTokenExpiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+				// The plugin always stores a refresh token; it is never returned (offline_access
+				// is refused) and the refresh grant is closed, so keep its row lifetime minimal.
+				refreshTokenExpiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+				// Only passkey sessions reach a code, so the ID token states it. auth_time is
+				// dropped because the plugin has no session at the token endpoint; acr is unused.
+				// The plugin's profile claims put the avatar in `profile` and an ISO updated_at;
+				// OIDC defines `picture` and seconds.
+				getAdditionalUserInfoClaim: (user, scopes) => ({
+					amr: ['passkey'],
+					auth_time: undefined,
+					acr: undefined,
+					...(scopes.includes('profile')
+						? {
+								profile: undefined,
+								picture: user.image ?? undefined,
+								updated_at: Math.floor(new Date(user.updatedAt).getTime() / 1000)
+							}
+						: {})
+				})
 			}),
 			setupSignIn(verifySetup)
 		]

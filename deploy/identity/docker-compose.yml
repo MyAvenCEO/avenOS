@@ -153,6 +153,7 @@ services:
       IDENTITY_PROVISIONING_SECRETS: ${IDENTITY_PROVISIONING_SECRETS?required}
       IDENTITY_ALLOW_NO_PLATFORMS: ${IDENTITY_ALLOW_NO_PLATFORMS:-false}
       IDENTITY_MAIL_ORIGINS: ${IDENTITY_MAIL_ORIGINS-}
+      OIDC_CLIENTS: ${OIDC_CLIENTS-}
       REQUIRE_PASSKEY_PRF: "false"
     networks: [identity-private]
     security_opt: [no-new-privileges:true]

@@ -56,9 +56,17 @@ or the signing key.
 | `/api/auth/device/*` | RFC 8628-style native app authorization | Public code/token exchange; approval requires a session |
 | `GET /api/auth/token` | Mint a short-lived service access token | Identity session cookie |
 | `GET /api/auth/jwks` | Publish rotating Ed25519 public keys | Public and cacheable by verifiers |
-| `GET /.well-known/openid-configuration` | Publish issuer, token, and JWKS locations | Public |
+| `GET /.well-known/openid-configuration` | Publish issuer, OIDC endpoints, service-token, and JWKS locations | Public |
+| `GET /api/auth/oauth2/authorize` | OpenID Connect authorization code for a client registered in `OIDC_CLIENTS` | Passkey session only (setup-link sessions are sent to the dashboard; no session goes through `/login` and back) |
+| `POST /api/auth/oauth2/token` | Exchange the code for an `aud=<client_id>` EdDSA ID token; no refresh tokens | Public client with PKCE S256 (no secret, no `plain`) |
+| `GET /api/auth/oauth2/userinfo` | Claims for the short-lived OIDC access token | OIDC access token |
 | `GET /api/passkeys` | List the current account's passkeys | Identity session cookie |
 | `POST /api/passkeys` | Finalize PRF metadata after Better Auth registration | Identity session cookie plus same-origin check |
+
+OIDC relying parties are configuration only: `OIDC_CLIENTS` lists public clients with
+exact-match redirect URIs, dynamic registration and consent endpoints are closed, and
+there is no consent screen. The ID token proves a passkey sign-in at `aven.id`
+(`amr=passkey`); it is not a service token and carries no role or scope.
 
 Passkey registration logic appears only in `services/identity`. The user
 dashboard deliberately exposes “Add another passkey”; registering a second or
