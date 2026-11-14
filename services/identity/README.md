@@ -32,7 +32,8 @@ Device/browser names are coarse suggestions, not hardware identification.
 ## OpenID Connect sign-in for other web apps
 
 A separate web app (for example a self-hosted coordinator UI) can sign people in with the
-standard authorization-code flow with PKCE, using Better Auth's `oidc-provider` plugin:
+standard authorization-code flow with PKCE, using Better Auth's `@better-auth/oauth-provider`
+plugin:
 
 | Endpoint | Purpose |
 | --- | --- |
@@ -41,22 +42,29 @@ standard authorization-code flow with PKCE, using Better Auth's `oidc-provider` 
 | `GET /api/auth/oauth2/userinfo` | Claims for that access token (`Authorization: Bearer`) |
 | `GET /api/auth/jwks` | The same Ed25519 keys that sign service JWTs |
 
-Relying parties exist only in configuration; dynamic registration, the consent endpoint,
-client lookup, RP logout and the plugin's own discovery document return 404. Register a
-client with `OIDC_CLIENTS`, a JSON array:
+Relying parties exist only in configuration. Every other plugin endpoint returns 404:
+dynamic registration, client, consent and resource management (including
+`/api/auth/admin/oauth2/*`), introspection, revocation, RP logout, the continue/consent
+steps and the plugin's own discovery documents. Register a client with `OIDC_CLIENTS`, a
+JSON array:
 
 ```sh
 OIDC_CLIENTS='[{"client_id":"coordinator","name":"Coordinator","redirect_uris":["https://coordinator.example.com/auth/callback"]}]'
 ```
 
-Clients are public (no secret; Basic auth and `client_secret` are refused) and must send
-`code_challenge_method=S256`; `plain` and missing PKCE are refused. Redirect URIs match
+The plugin looks clients up through its client-discovery extension, which reads them from
+this variable; the `oauth_client` table stays empty and the runtime database role can only
+read it. Clients are public (no secret; Basic auth, `client_secret` and client assertions
+are refused) and must send `code_challenge_method=S256`; `plain` and missing PKCE are
+refused. Redirect URIs match
 exactly, must be canonical HTTPS URLs without credentials or fragments (HTTP only for
 `localhost`/`127.0.0.1` outside production) and are also the only origins allowed to call
 token, userinfo, JWKS and discovery from a browser (CORS, no credentials). There is no
 consent screen for configured clients. Requests must carry `state`; scopes are `openid`
 plus optionally `profile` and `email`. There are no refresh tokens: `offline_access` and
-the refresh grant are refused.
+the refresh grant are refused. The plugin receives only the standard code-flow parameters;
+`claims`, `resource`, `request`/`request_uri`, DPoP and the other extensions it supports
+are dropped or refused by the gate.
 
 Only a real passkey session gets a code: the same rule as the service JWT `amr`
 (no `setup_token_hash`, and the account holds a passkey). Without a session, or for
@@ -66,15 +74,20 @@ accepts the same-origin authorize path. A setup-link session or passkey-less acc
 sent to `/dashboard` (or receives `login_required` for `prompt=none`).
 
 The ID token is EdDSA-signed with `iss` = `PUBLIC_BASE_URL`, `aud` = `client_id`,
-`sub` = the stable account id (the service JWT `sub`), `amr: ["passkey"]`, the request
-`nonce`, `email`/`email_verified` with the `email` scope, and `name` with `profile`. It
-and the access token live `ACCESS_TOKEN_TTL_SECONDS` (five minutes by default); codes
-live two minutes and are single use.
+`sub` = the stable account id (the service JWT `sub`), `amr: ["passkey"]`, `auth_time`
+(the passkey sign-in), the request `nonce`, `at_hash`, `email`/`email_verified` with the
+`email` scope, and `name` with `profile`. The plugin reserves `amr`, so identity re-signs
+the ID token it issued with the same key to add it. The ID token and the opaque access
+token live `ACCESS_TOKEN_TTL_SECONDS` (five minutes by default). Codes live two minutes
+and are single use: a wrong `code_verifier` does not consume the code, a replayed code is
+refused and revokes the tokens it issued. Signing out revokes the access tokens issued
+for that session.
 
-The plugin resumes pending authorizations from its own `oidc_login_prompt` cookie after
-any sign-in, including setup-link sign-in. Identity never lets it set that cookie and
-strips it from requests, so the policy gate in `src/lib/server/oidc.ts` is the only
-path to a code.
+The plugin can resume a pending authorization from a signed `oauth_query` request field
+after any response that sets a session cookie, including setup-link sign-in. The gate
+never lets the plugin produce one (it handles sign-in, `prompt` and `max_age` itself),
+and Better Auth's first `before` hook refuses every request that carries the field, so
+the policy gate in `src/lib/server/oidc.ts` is the only path to a code.
 
 The provisioning endpoint under
 `/internal/v1/accounts` is service-authenticated and is the only signup ingress;

@@ -1,5 +1,6 @@
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
 import { resolve } from 'node:path'
+import { verifyOAuthQueryParams } from '@better-auth/oauth-provider'
 import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 import { createAuth } from '../src/lib/server/auth.js'
@@ -20,6 +21,7 @@ const ISSUER = 'http://localhost:3100'
 const CLIENT_ID = 'coordinator'
 const REDIRECT_URI = 'http://localhost:4000/auth/callback'
 const CLIENT_ORIGIN = 'http://localhost:4000'
+const SECRET = 'identity-oidc-test-secret-32-bytes!!'
 
 describe.skipIf(!adminUrl)('OpenID Connect authorization code + PKCE', () => {
 	const name = `identity_oidc_${randomUUID().replaceAll('-', '')}`
@@ -28,6 +30,7 @@ describe.skipIf(!adminUrl)('OpenID Connect authorization code + PKCE', () => {
 	let passkeys: PasskeyService
 	let adapter: ReturnType<ReturnType<typeof enrollmentAdapter>>
 	let handle: typeof import('../src/hooks.server.js').handle
+	let auth: ReturnType<typeof createAuth>
 	beforeAll(async () => {
 		admin = new pg.Pool({ connectionString: adminUrl })
 		for (const role of [
@@ -48,15 +51,16 @@ describe.skipIf(!adminUrl)('OpenID Connect authorization code + PKCE', () => {
 		const config = identityConfigSchema.parse({
 			PUBLIC_BASE_URL: ISSUER,
 			DATABASE_URL: url.href,
-			BETTER_AUTH_SECRET: 'identity-oidc-test-secret-32-bytes!!',
+			BETTER_AUTH_SECRET: SECRET,
 			IDENTITY_PROVISIONING_SECRETS: 'identity-oidc-test-provisioning-32-bytes',
 			OIDC_CLIENTS: JSON.stringify([
 				{ client_id: CLIENT_ID, name: 'Coordinator', redirect_uris: [REDIRECT_URI] }
 			])
 		})
-		const auth = createAuth(config, database, (token) => passkeys.verifySetupLink(token))
+		auth = createAuth(config, database, (token) => passkeys.verifySetupLink(token))
 		adapter = enrollmentAdapter(database)((await auth.$context).options)
-		state.runtime = { auth, config, database, proofOfWork: {} }
+		// Proof of work is covered elsewhere; here it lets passkey sign-in requests through.
+		state.runtime = { auth, config, database, proofOfWork: { verifyAndConsume: async () => {} } }
 		handle = (await import('../src/hooks.server.js')).handle
 	})
 	afterAll(async () => {
@@ -163,7 +167,9 @@ describe.skipIf(!adminUrl)('OpenID Connect authorization code + PKCE', () => {
 		const location = new URL(response.headers.get('location')!, ISSUER)
 		expect(location.pathname).toBe('/login')
 		expect(location.searchParams.get('returnTo')).toBe(authorizePath(challenge))
-		expect(response.headers.get('set-cookie') ?? '').not.toContain('oidc_login_prompt')
+		// The gate, not the plugin, sends the browser to sign in: no signed, resumable query.
+		expect(location.searchParams.get('returnTo')).not.toContain('sig=')
+		expect(response.headers.get('set-cookie')).toBeNull()
 	})
 
 	test('a setup-link session and a passkey-less account get no code', async () => {
@@ -185,7 +191,13 @@ describe.skipIf(!adminUrl)('OpenID Connect authorization code + PKCE', () => {
 		const plain = await send(authorizePath(challenge), { headers: await session(bare.id) })
 		expect(plain.headers.get('location')).toBe('/dashboard')
 		expect(
-			(await database.pool.query("SELECT 1 FROM verification WHERE value LIKE '%clientId%'")).rows
+			(
+				await database.pool.query(
+					`SELECT 1 FROM verification WHERE value LIKE '%"authorization_code"%'
+					 AND (value LIKE $1 OR value LIKE $2)`,
+					[`%${pending.id}%`, `%${bare.id}%`]
+				)
+			).rows
 		).toHaveLength(0)
 	})
 
@@ -228,8 +240,19 @@ describe.skipIf(!adminUrl)('OpenID Connect authorization code + PKCE', () => {
 		const callback = new URL(response.headers.get('location')!)
 		expect(`${callback.origin}${callback.pathname}`).toBe(REDIRECT_URI)
 		expect(callback.searchParams.get('state')).toBe('opaque-state')
+		expect(callback.searchParams.get('iss')).toBe(ISSUER)
 		const code = callback.searchParams.get('code')!
 		expect(code).toMatch(/^[A-Za-z0-9]{32}$/)
+		const stored = (
+			await database.pool.query<{ expires_at: Date; created_at: Date; identifier: string }>(
+				`SELECT expires_at, created_at, identifier FROM verification
+				 WHERE value LIKE '%"authorization_code"%' AND value LIKE $1`,
+				[`%${user.id}%`]
+			)
+		).rows
+		expect(stored).toHaveLength(1)
+		expect(stored[0].identifier).not.toBe(code)
+		expect(stored[0].expires_at.getTime() - stored[0].created_at.getTime()).toBe(120_000)
 
 		const wrong = await exchange({
 			grant_type: 'authorization_code',
@@ -238,15 +261,21 @@ describe.skipIf(!adminUrl)('OpenID Connect authorization code + PKCE', () => {
 			redirect_uri: REDIRECT_URI,
 			code_verifier: pkce().verifier
 		})
-		expect(wrong.status).toBe(401)
-		// A failed verifier burns the code; authorize again for the real exchange.
-		const again = await send(authorizePath(challenge), { headers })
-		const freshCode = new URL(again.headers.get('location')!).searchParams.get('code')!
+		expect(wrong.status).toBe(400)
+		expect((await wrong.json()).error).toBe('invalid_grant')
+		const foreignRedirect = await exchange({
+			grant_type: 'authorization_code',
+			client_id: CLIENT_ID,
+			code,
+			redirect_uri: 'http://localhost:4000/other',
+			code_verifier: verifier
+		})
+		expect(foreignRedirect.status).toBe(400)
 		const tokens = await exchange(
 			{
 				grant_type: 'authorization_code',
 				client_id: CLIENT_ID,
-				code: freshCode,
+				code,
 				redirect_uri: REDIRECT_URI,
 				code_verifier: verifier
 			},
@@ -255,10 +284,19 @@ describe.skipIf(!adminUrl)('OpenID Connect authorization code + PKCE', () => {
 		expect(tokens.status).toBe(200)
 		expect(tokens.headers.get('access-control-allow-origin')).toBe(CLIENT_ORIGIN)
 		expect(tokens.headers.get('access-control-allow-credentials')).toBeNull()
+		expect(tokens.headers.get('cache-control')).toBe('no-store')
 		const body = await tokens.json()
 		expect(body.refresh_token).toBeUndefined()
 		expect(body.token_type).toBe('Bearer')
+		expect(body.expires_in).toBe(300)
+		expect(body.scope).toBe('openid profile email')
 		const claims = await verifyIdToken(body.id_token)
+		const created = (
+			await database.pool.query<{ created_at: Date }>(
+				'SELECT s.created_at FROM session s WHERE s.token=$1',
+				[headers.authorization.slice('Bearer '.length)]
+			)
+		).rows[0].created_at
 		expect(claims).toMatchObject({
 			iss: ISSUER,
 			aud: CLIENT_ID,
@@ -267,27 +305,182 @@ describe.skipIf(!adminUrl)('OpenID Connect authorization code + PKCE', () => {
 			email_verified: true,
 			nonce: 'nonce-123',
 			amr: ['passkey'],
-			name: 'Ada Lovelace'
+			name: 'Ada Lovelace',
+			given_name: 'Ada',
+			family_name: 'Lovelace',
+			auth_time: Math.floor(created.getTime() / 1000)
 		})
-		expect(claims).not.toHaveProperty('role')
-		expect(claims).not.toHaveProperty('scope')
-		expect(claims).not.toHaveProperty('auth_time')
+		for (const claim of ['role', 'scope', 'sid', 'acr', 'client_id', 'azp'])
+			expect(claims, claim).not.toHaveProperty(claim)
 		expect(Number(claims.exp) - Number(claims.iat)).toBe(300)
-
-		const replay = await exchange({
-			grant_type: 'authorization_code',
-			client_id: CLIENT_ID,
-			code: freshCode,
-			redirect_uri: REDIRECT_URI,
-			code_verifier: verifier
-		})
-		expect(replay.status).toBe(401)
+		// Re-signing for `amr` keeps the plugin's at_hash binding to this access token.
+		const digest = createHash('sha512').update(body.access_token).digest()
+		expect(claims.at_hash).toBe(digest.subarray(0, 32).toString('base64url'))
 
 		const userinfo = await send('/api/auth/oauth2/userinfo', {
 			headers: { authorization: `Bearer ${body.access_token}`, origin: CLIENT_ORIGIN }
 		})
 		expect(userinfo.status).toBe(200)
-		expect(await userinfo.json()).toMatchObject({ sub: user.id, email: user.email })
+		expect(userinfo.headers.get('access-control-allow-origin')).toBe(CLIENT_ORIGIN)
+		const info = await userinfo.json()
+		expect(info).toMatchObject({
+			sub: user.id,
+			email: user.email,
+			email_verified: true,
+			name: 'Ada Lovelace'
+		})
+		expect(typeof info.updated_at).toBe('number')
+
+		// A redeemed code is single-use, and replaying it revokes what it issued.
+		const replay = await exchange({
+			grant_type: 'authorization_code',
+			client_id: CLIENT_ID,
+			code,
+			redirect_uri: REDIRECT_URI,
+			code_verifier: verifier
+		})
+		expect(replay.status).toBe(400)
+		expect((await replay.json()).error).toBe('invalid_grant')
+		const revoked = await send('/api/auth/oauth2/userinfo', {
+			headers: { authorization: `Bearer ${body.access_token}` }
+		})
+		expect(revoked.status).toBe(401)
+	})
+
+	test('an unredeemed code expires and signing out revokes issued access tokens', async () => {
+		const user = await account()
+		await addPasskey(user.id)
+		const headers = await session(user.id)
+		const { verifier, challenge } = pkce()
+		const first = new URL(
+			(await send(authorizePath(challenge), { headers })).headers.get('location')!
+		)
+		await database.pool.query(
+			`UPDATE verification SET expires_at = now() - interval '1 second'
+			 WHERE value LIKE '%"authorization_code"%' AND value LIKE $1`,
+			[`%${user.id}%`]
+		)
+		const expired = await exchange({
+			grant_type: 'authorization_code',
+			client_id: CLIENT_ID,
+			code: first.searchParams.get('code')!,
+			redirect_uri: REDIRECT_URI,
+			code_verifier: verifier
+		})
+		expect(expired.status).toBe(400)
+		const second = new URL(
+			(await send(authorizePath(challenge), { headers })).headers.get('location')!
+		)
+		const tokens = await exchange({
+			grant_type: 'authorization_code',
+			client_id: CLIENT_ID,
+			code: second.searchParams.get('code')!,
+			redirect_uri: REDIRECT_URI,
+			code_verifier: verifier
+		})
+		expect(tokens.status).toBe(200)
+		const { access_token } = await tokens.json()
+		const out = await send('/api/auth/sign-out', {
+			method: 'POST',
+			headers: { ...headers, origin: ISSUER, 'content-type': 'application/json' },
+			body: '{}'
+		})
+		expect(out.status).toBe(200)
+		const userinfo = await send('/api/auth/oauth2/userinfo', {
+			headers: { authorization: `Bearer ${access_token}` }
+		})
+		expect(userinfo.status).toBe(401)
+	})
+
+	test('only the gate leads to a code: signed oauth_query bodies are refused everywhere', async () => {
+		// Ask the plugin directly (bypassing the gate) to sign a resumable query, as it does
+		// when it redirects a signed-out browser to its login page.
+		const { challenge } = pkce()
+		const direct = await auth.handler(new Request(`${ISSUER}${authorizePath(challenge)}`))
+		const loginRedirect = new URL(direct.headers.get('location')!, ISSUER)
+		expect(loginRedirect.pathname).toBe('/login')
+		const signed = loginRedirect.search.slice(1)
+		expect(await verifyOAuthQueryParams(signed, SECRET)).toBe(true)
+		const user = await account()
+		await addPasskey(user.id)
+		const headers = await session(user.id)
+		for (const path of [
+			'/api/auth/passkey/verify-authentication',
+			'/api/auth/passkey/verify-registration',
+			'/api/auth/revoke-sessions',
+			'/api/auth/sign-out',
+			'/api/auth/device/approve',
+			'/api/auth/update-user'
+		]) {
+			for (const body of [
+				{ type: 'application/json', value: JSON.stringify({ oauth_query: signed }) },
+				{
+					type: 'application/x-www-form-urlencoded',
+					value: new URLSearchParams({ oauth_query: signed }).toString()
+				}
+			]) {
+				const response = await send(path, {
+					method: 'POST',
+					headers: { ...headers, origin: ISSUER, 'content-type': body.type },
+					body: body.value
+				})
+				// JSON endpoints refuse form bodies before any hook (415); parsed bodies hit the hook.
+				if (body.type === 'application/json') {
+					expect(response.status, path).toBe(400)
+					expect((await response.json()).code).toBe('OAUTH_QUERY_NOT_ACCEPTED')
+				} else expect([400, 415], path).toContain(response.status)
+			}
+		}
+		for (const path of ['/api/auth/oauth2/continue', '/api/auth/oauth2/consent'])
+			expect(
+				(
+					await send(path, {
+						method: 'POST',
+						headers: { ...headers, origin: ISSUER, 'content-type': 'application/json' },
+						body: JSON.stringify({ oauth_query: signed, accept: true, selected: true })
+					})
+				).status
+			).toBe(404)
+		expect(
+			(
+				await database.pool.query(
+					`SELECT 1 FROM verification WHERE value LIKE '%"authorization_code"%' AND value LIKE $1`,
+					[`%${user.id}%`]
+				)
+			).rows
+		).toHaveLength(0)
+	})
+
+	test('every oauth-provider endpoint except authorize, token and userinfo answers 404', async () => {
+		const plugin = ((await auth.$context).options.plugins ?? []).find(
+			(candidate) => candidate.id === 'oauth-provider'
+		) as { endpoints?: Record<string, unknown> } | undefined
+		const endpoints = Object.values(plugin?.endpoints ?? {}) as Array<{
+			path?: string
+			options?: { method?: string | string[]; metadata?: { SERVER_ONLY?: boolean } }
+		}>
+		expect(endpoints.length).toBeGreaterThan(30)
+		const user = await account()
+		await addPasskey(user.id)
+		const headers = await session(user.id)
+		const open = ['/oauth2/authorize', '/oauth2/token', '/oauth2/userinfo']
+		for (const endpoint of endpoints) {
+			if (!endpoint.path || open.includes(endpoint.path)) continue
+			const path = `/api/auth${endpoint.path.replaceAll(/:[A-Za-z_]+/g, 'x')}`
+			const methods = [endpoint.options?.method ?? 'GET'].flat()
+			for (const method of methods) {
+				const response = await send(path, {
+					method,
+					headers: {
+						...headers,
+						origin: ISSUER,
+						...(method === 'GET' ? {} : { 'content-type': 'application/json' })
+					},
+					...(method === 'GET' ? {} : { body: '{}' })
+				})
+				expect(response.status, `${method} ${path}`).toBe(404)
+			}
+		}
 	})
 
 	test('the token endpoint refuses the refresh grant and missing PKCE', async () => {
@@ -326,27 +519,97 @@ describe.skipIf(!adminUrl)('OpenID Connect authorization code + PKCE', () => {
 		})
 		expect(response.status).toBe(404)
 		expect(
-			(await database.pool.query('SELECT count(*)::int AS n FROM oauth_application')).rows[0].n
+			(await database.pool.query('SELECT count(*)::int AS n FROM oauth_client')).rows[0].n
 		).toBe(0)
 	})
 
-	test('the runtime role cannot register clients or consents in the database', async () => {
+	test('the runtime role cannot register clients, consents or refresh tokens', async () => {
 		const client = await database.pool.connect()
 		try {
 			await client.query('SET ROLE aven_identity_auth')
-			await client.query('SELECT 1 FROM oauth_application')
-			await client.query('SELECT 1 FROM oauth_access_token')
-			for (const statement of [
-				`INSERT INTO oauth_application(id,name,client_id,redirect_urls,type,created_at,updated_at)
-				 VALUES('x','x','x','https://evil.example/cb','public',now(),now())`,
-				`INSERT INTO oauth_consent(id,client_id,user_id,scopes,consent_given,created_at,updated_at)
-				 VALUES('x','x','x','openid',true,now(),now())`
+			for (const table of [
+				'oauth_client',
+				'oauth_access_token',
+				'oauth_refresh_token',
+				'oauth_consent',
+				'oauth_resource',
+				'oauth_client_resource'
 			])
-				await expect(client.query(statement)).rejects.toThrow(/permission denied/)
+				await client.query(`SELECT 1 FROM ${table}`)
+			for (const statement of [
+				`INSERT INTO oauth_client(id,client_id,redirect_uris) VALUES('x','x','{https://evil.example/cb}')`,
+				`UPDATE oauth_client SET redirect_uris='{https://evil.example/cb}'`,
+				`INSERT INTO oauth_consent(id,client_id,scopes) VALUES('x','x','{openid}')`,
+				`INSERT INTO oauth_refresh_token(id,token,client_id,user_id,expires_at,created_at,scopes)
+				 VALUES('x','x','x','x',now(),now(),'{openid,offline_access}')`,
+				`UPDATE oauth_refresh_token SET revoked=NULL`,
+				`INSERT INTO oauth_resource(id,identifier,name) VALUES('x','https://evil.example','x')`,
+				`INSERT INTO oauth_client_resource(id,client_id,resource_id) VALUES('x','x','x')`,
+				'SELECT 1 FROM oauth_client_assertion'
+			])
+				await expect(client.query(statement), statement).rejects.toThrow(/permission denied/)
 		} finally {
 			await client.query('RESET ROLE').catch(() => {})
 			client.release()
 		}
+	})
+
+	test('the Drizzle schema covers every table and column Better Auth writes', async () => {
+		const context = await auth.$context
+		expect(context.checkSchema).toBeTypeOf('function')
+		await expect(Promise.resolve(context.checkSchema?.())).resolves.toBeUndefined()
+	})
+
+	test('the native device flow shows its client only to the claiming account', async () => {
+		// The avenOS app sends JSON to both public device endpoints (app/src-tauri/src/auth.rs).
+		const post = (body: Record<string, string>) => ({
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(body)
+		})
+		expect(
+			(await send('/api/auth/device/code', post({ client_id: CLIENT_ID, scope: 'openid' }))).status
+		).toBe(400)
+		const issued = await send(
+			'/api/auth/device/code',
+			post({ client_id: 'ceo.aven.os', scope: 'openid' })
+		)
+		expect(issued.status).toBe(200)
+		const { device_code, user_code } = await issued.json()
+		const owner = await account()
+		await addPasskey(owner.id)
+		const ownerHeaders = await session(owner.id)
+		const other = await account()
+		await addPasskey(other.id)
+		const otherHeaders = await session(other.id)
+		const claim = await send(`/api/auth/device?user_code=${user_code}`, { headers: ownerHeaders })
+		expect(await claim.json()).toMatchObject({ status: 'pending', client_id: 'ceo.aven.os' })
+		const peek = await (
+			await send(`/api/auth/device?user_code=${user_code}`, { headers: otherHeaders })
+		).json()
+		expect(peek).not.toHaveProperty('client_id')
+		const approve = (headers: Record<string, string>) =>
+			send('/api/auth/device/approve', {
+				method: 'POST',
+				headers: { ...headers, origin: ISSUER, 'content-type': 'application/json' },
+				body: JSON.stringify({ userCode: user_code })
+			})
+		expect((await approve(otherHeaders)).status).toBe(403)
+		expect((await approve(ownerHeaders)).status).toBe(200)
+		const token = await send(
+			'/api/auth/device/token',
+			post({
+				grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+				device_code,
+				client_id: 'ceo.aven.os'
+			})
+		)
+		expect(token.status).toBe(200)
+		const { access_token } = await token.json()
+		const me = await send('/api/auth/get-session', {
+			headers: { authorization: `Bearer ${access_token}` }
+		})
+		expect((await me.json()).user.id).toBe(owner.id)
 	})
 
 	test('the existing service token endpoint is unchanged', async () => {

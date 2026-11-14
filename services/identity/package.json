@@ -13,9 +13,10 @@
 	"dependencies": {
 		"@avenos/aven-identity": "workspace:*",
 		"@avenos/http-boundary": "workspace:*",
-		"@better-auth/passkey": "1.6.23",
+		"@better-auth/oauth-provider": "1.7.25",
+		"@better-auth/passkey": "1.7.25",
 		"@myavenceo/aven-ceo": "file:../../vendor/npm/myavenceo-aven-ceo-0.13.2.tgz",
-		"better-auth": "1.6.23",
+		"better-auth": "1.7.25",
 		"dotenv": "17.3.1",
 		"drizzle-orm": "0.45.2",
 		"pg": "8.16.3",
