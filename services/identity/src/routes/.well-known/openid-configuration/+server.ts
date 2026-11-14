@@ -26,6 +26,7 @@ export const GET = () => {
 			'sub',
 			'exp',
 			'iat',
+			'auth_time',
 			'nonce',
 			'amr',
 			'email',
@@ -33,8 +34,10 @@ export const GET = () => {
 			'name',
 			'given_name',
 			'family_name',
+			'picture',
 			'updated_at'
 		],
+		authorization_response_iss_parameter_supported: true,
 		request_parameter_supported: false,
 		request_uri_parameter_supported: false
 	})

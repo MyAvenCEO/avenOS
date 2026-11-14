@@ -2,6 +2,7 @@
 import { page } from '$app/state'
 import { authClient } from '$lib/auth-client.js'
 
+const AVENOS_CLIENT_ID = 'ceo.aven.os'
 let busy = $state(false)
 let approved = $state(false)
 let message = $state('')
@@ -41,10 +42,17 @@ async function approve() {
 		const claim = await fetch(`/api/auth/device?user_code=${encodeURIComponent(cleanCode)}`, {
 			credentials: 'same-origin'
 		})
-		if (!claim.ok) {
-			const body = (await claim.json().catch(() => null)) as { error_description?: string } | null
-			throw new Error(body?.error_description ?? 'Could not claim this device code.')
-		}
+		const claimed = (await claim.json().catch(() => null)) as {
+			error_description?: string
+			status?: string
+			client_id?: string
+		} | null
+		if (!claim.ok)
+			throw new Error(claimed?.error_description ?? 'Could not claim this device code.')
+		// Better Auth returns the requesting client only to the account that claimed the code.
+		// This page approves avenOS only; any other client or state is refused here too.
+		if (claimed?.client_id !== AVENOS_CLIENT_ID || claimed.status !== 'pending')
+			throw new Error('This code does not belong to a pending avenOS sign-in.')
 		const response = await fetch('/api/auth/device/approve', {
 			method: 'POST',
 			credentials: 'same-origin',

@@ -36,6 +36,7 @@ export function enrollmentAdapter(database: DatabaseContext) {
 	const factory = drizzleAdapter(database.db, { provider: 'pg', schema })
 	return ((options) => {
 		const adapter = factory(options)
+		const createBase = adapter.create
 		const create: typeof adapter.create = async <T extends Record<string, unknown>, R = T>(input: {
 			model: string
 			data: Omit<T, 'id'>
@@ -43,7 +44,7 @@ export function enrollmentAdapter(database: DatabaseContext) {
 			forceAllowId?: boolean
 		}): Promise<R> => {
 			const setupHash = input.model === 'session' ? input.data.setupTokenHash : undefined
-			if (input.model !== 'passkey' && !setupHash) return adapter.create<T, R>(input)
+			if (input.model !== 'passkey' && !setupHash) return createBase<T, R>(input)
 			const registration = enrollmentContext.getStore()?.registration
 			const userId = input.data.userId
 			if (typeof userId !== 'string') throw new Error('Enrollment account is required')
@@ -96,6 +97,8 @@ export function enrollmentAdapter(database: DatabaseContext) {
 				return result
 			})
 		}
-		return { ...adapter, create }
+		// Patch in place: Better Auth registers its Drizzle schema check on this adapter object.
+		adapter.create = create
+		return adapter
 	}) satisfies typeof factory
 }

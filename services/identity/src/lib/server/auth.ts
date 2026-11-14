@@ -1,12 +1,23 @@
+import { oauthProvider } from '@better-auth/oauth-provider'
 import { passkey } from '@better-auth/passkey'
 import { betterAuth } from 'better-auth'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { bearer, deviceAuthorization, jwt } from 'better-auth/plugins'
-import { oidcProvider } from 'better-auth/plugins/oidc-provider'
 import type { IdentityConfig } from './config.js'
 import { trustedOrigins } from './config.js'
 import type { DatabaseContext } from './db.js'
 import { enrollmentAdapter, enrollmentContext, registrationPrfEnabled } from './enrollment.js'
-import { isPasskeySession, OIDC_CODE_SECONDS, OIDC_SCOPES, trustedOidcClients } from './oidc.js'
+import {
+	carriesPluginResume,
+	idTokenClaims,
+	isPasskeySession,
+	isRegisteredInsecureRedirect,
+	OIDC_CODE_SECONDS,
+	OIDC_SCOPES,
+	oidcAuthenticationMethod,
+	oidcClientDiscovery,
+	userInfoClaims
+} from './oidc.js'
 import { setupSignIn } from './setup-sign-in.js'
 
 export const AVENOS_DEVICE_CLIENT_ID = 'ceo.aven.os'
@@ -54,6 +65,17 @@ export function createAuth(
 			}
 		},
 		advanced: { useSecureCookies: config.NODE_ENV === 'production' },
+		hooks: {
+			// Runs before every plugin hook: the oauth-provider plugin would otherwise resume a
+			// signed authorization request from this field after any sign-in (see oidc.ts).
+			before: createAuthMiddleware(async (ctx) => {
+				if (carriesPluginResume(ctx.body))
+					throw new APIError('BAD_REQUEST', {
+						code: 'OAUTH_QUERY_NOT_ACCEPTED',
+						message: 'Authorization requests resume only through /api/auth/oauth2/authorize.'
+					})
+			})
+		},
 		rateLimit: {
 			enabled: true,
 			window: 60,
@@ -136,39 +158,32 @@ export function createAuth(
 					}
 				}
 			}),
-			// ID tokens reuse the jwt plugin's EdDSA keys; the plugin overrides iss/aud/sub/exp
-			// and the payload for them, so service-JWT claims never leak into an ID token.
-			// Identity policy (passkey-only, S256, scopes, closed registration) is oidcGate.
-			oidcProvider({
+			// ID tokens reuse the jwt plugin's EdDSA keys; the plugin owns iss/aud/sub/exp/nonce
+			// and builds them without the jwt plugin's definePayload, so service-JWT claims never
+			// leak into an ID token. Identity policy (passkey-only, S256, scopes, closed
+			// registration) is oidcGate; clients come only from OIDC_CLIENTS.
+			oauthProvider({
 				loginPage: '/login',
-				useJWTPlugin: true,
-				requirePKCE: true,
-				allowPlainCodeChallengeMethod: false,
-				allowDynamicClientRegistration: false,
-				trustedClients: trustedOidcClients(config),
+				// Configured clients skip consent and the gate never forwards prompt=consent, so
+				// the plugin never redirects here; the consent endpoints are closed.
+				consentPage: '/login',
 				scopes: [...OIDC_SCOPES],
+				grantTypes: ['authorization_code'],
+				allowDynamicClientRegistration: false,
+				allowUnauthenticatedClientRegistration: false,
+				allowPublicClientPrelogin: false,
+				allowClientKeyRotation: false,
+				enforcePerClientResources: true,
+				extensions: [oidcClientDiscovery(config)],
+				allowInsecureRedirectUri: (url) => isRegisteredInsecureRedirect(config, url),
 				codeExpiresIn: OIDC_CODE_SECONDS,
 				accessTokenExpiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
-				// The plugin always stores a refresh token; it is never returned (offline_access
-				// is refused) and the refresh grant is closed, so keep its row lifetime minimal.
+				idTokenExpiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
 				refreshTokenExpiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
-				// Only passkey sessions reach a code, so the ID token states it. auth_time is
-				// dropped because the plugin has no session at the token endpoint; acr is unused.
-				// The plugin's profile claims put the avatar in `profile` and an ISO updated_at;
-				// OIDC defines `picture` and seconds.
-				getAdditionalUserInfoClaim: (user, scopes) => ({
-					amr: ['passkey'],
-					auth_time: undefined,
-					acr: undefined,
-					...(scopes.includes('profile')
-						? {
-								profile: undefined,
-								picture: user.image ?? undefined,
-								updated_at: Math.floor(new Date(user.updatedAt).getTime() / 1000)
-							}
-						: {})
-				})
+				customIdTokenClaims: ({ user, scopes }) => idTokenClaims(user, scopes),
+				customUserInfoClaims: ({ user, scopes }) => userInfoClaims(user, scopes)
 			}),
+			oidcAuthenticationMethod(),
 			setupSignIn(verifySetup)
 		]
 	})
