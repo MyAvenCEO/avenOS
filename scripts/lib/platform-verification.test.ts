@@ -71,7 +71,7 @@ test('CI and release require the same full verification without deployment crede
 		'bun scripts/build-client-release.ts linux-x64',
 		'bash scripts/verify-client-linux.sh',
 		'bun run check:secrets',
-		'bun audit',
+		'bun run check:js-advisories',
 		'bun run check:rust-advisories',
 		'bun run test:identity',
 		'bun run test:api',

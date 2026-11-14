@@ -15,6 +15,7 @@
 		"test:runtime-install": "python3 deploy/runtime/test-start.py",
 		"check:secrets": "bash scripts/security-scan.sh",
 		"check:rust-advisories": "bun scripts/rust-advisories.ts",
+		"check:js-advisories": "bun scripts/js-advisories.ts",
 		"dev:app": "bun --env-file=.env run --cwd app dev",
 		"dev:api": "bun --env-file=.env run --cwd services/aven-api dev",
 		"dev:identity": "bun --env-file=.env run --cwd services/identity dev",
